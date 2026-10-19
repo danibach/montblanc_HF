@@ -10,8 +10,12 @@ Rules implemented (draft, see the Notion pages):
 * HF / BHF badge condition: the final exit from the summit cylinder must be by flight.
 * Ranking only needs the chrono plus a flight somewhere in the track.
 
-NOT implemented yet: the proof that the whole approach was on foot (no tramway or lift). Results
-are therefore marked provisional.
+Approach on foot: ``transport.analyse_transport`` looks for tram and lift rides before the summit.
+A ride flags the track (no ranking, no badge until a human decides). Without line geometry the
+check is not performed and the result stays marked provisional.
+
+Hiking up by any other route than Nid d'Aigle is authorised: such a track has no climbing chrono
+(no ranking) but can still earn the HF / BHF badge.
 
 Crossing times are linearly interpolated between the two fixes around the boundary, so they
 are not tied to the sampling rate; ``uncertainty_s`` reports the time between those fixes.
@@ -28,6 +32,7 @@ from .geo import EARTH_RADIUS_M, haversine_m
 from .models import Point, Track
 from .rules import Cylinder, RuleSet
 from .segment import SegmentationResult
+from .transport import LineSet, Schedule, TransportReport, analyse_transport, load_lines, load_schedule, transport_to_dict
 
 FOOT = 1      # state index of the ascent on foot
 FLIGHT = 2    # state index of the flight
@@ -141,18 +146,24 @@ class Chrono:
     uncertainty_s: float = 0.0
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    transport: Optional[TransportReport] = None
+    flagged: bool = False
 
 
-def compute_chrono(track: Track, result: SegmentationResult, rules: RuleSet) -> Chrono:
+def compute_chrono(
+    track: Track,
+    result: SegmentationResult,
+    rules: RuleSet,
+    lines: Optional[LineSet] = None,
+    schedule: Optional[Schedule] = None,
+) -> Chrono:
     pts, labels = track.points, result.labels
     out = Chrono(ruleset=rules.version)
     out.has_flight = any(s.mode == "flight" for s in result.segments)
-    out.notes.append(
-        "provisional: the check that the whole approach was on foot (no tramway or lift) "
-        "is not implemented yet"
-    )
     if any(p.alt is None for p in pts):
         out.notes.append("some fixes have no altitude and cannot be tested against the altitude bands")
+    lines = load_lines() if lines is None else lines
+    schedule = load_schedule() if schedule is None else schedule
 
     na = find_crossings(pts, labels, rules.nid_d_aigle)
     su = find_crossings(pts, labels, rules.summit)
@@ -160,6 +171,28 @@ def compute_chrono(track: Track, result: SegmentationResult, rules: RuleSet) -> 
     # --- summit: first entry, on foot
     entries = [c for c in su if c.kind == "enter"]
     foot_entries = [c for c in entries if c.label == FOOT]
+
+    # --- approach on foot: tram / lift check, up to the summit entry (or the take-off)
+    if foot_entries:
+        limit = foot_entries[0].index
+    else:
+        takeoff = [s.i_start for s in result.segments if s.mode == "flight"]
+        limit = takeoff[0] if takeoff else len(pts)
+    out.transport = analyse_transport(track, labels, limit, lines, schedule)
+    out.notes.extend(out.transport.notes)
+    for st in out.transport.stretches:
+        if st.verdict in ("tram", "lift", "review"):
+            out.notes.append(f"{st.verdict}: {st.kind} {st.t_start.isoformat()[:19]}Z - {st.reason}")
+    if out.transport.flagged:
+        out.flagged = True
+        what = "the Mont-Blanc tramway" if out.transport.verdict == "tram" else "a lift"
+        out.problems.append(
+            f"FLAGGED: the approach seems to use {what} (not authorised): no ranking and no badge "
+            "until reviewed"
+        )
+    elif out.transport.verdict == "review":
+        out.problems.append("the approach has a stretch to review for a possible tram or lift ride")
+
     if not foot_entries:
         reason = "the track never enters the summit cylinder on foot"
         within = [p for p in pts if haversine_m(p.lat, p.lon, rules.summit.lat, rules.summit.lon) <= rules.summit.radius_m]
@@ -194,6 +227,9 @@ def compute_chrono(track: Track, result: SegmentationResult, rules: RuleSet) -> 
     else:
         out.problems.append("the track never leaves the summit cylinder")
 
+    # HF / BHF: summit reached on foot, left by flight. The route does not matter.
+    out.hf_conditions_met = out.summit_exit_by_flight and out.has_flight and not out.flagged
+
     # --- Nid d'Aigle: last exit before the summit entry, after being there on foot
     was_there_on_foot = any(
         inside(p, rules.nid_d_aigle) and labels[k] == FOOT and p.t <= s_enter.t for k, p in enumerate(pts)
@@ -201,7 +237,8 @@ def compute_chrono(track: Track, result: SegmentationResult, rules: RuleSet) -> 
     exits_before = [c for c in na if c.kind == "exit" and c.t <= s_enter.t]
     if not was_there_on_foot or not exits_before:
         out.problems.append(
-            "the track does not pass through the Nid d'Aigle cylinder on foot before the summit"
+            "the track does not pass through the Nid d'Aigle cylinder on foot before the summit: "
+            "no climbing chrono and no ranking (the HF/BHF badge does not need it)"
         )
         return out
     n_exit = exits_before[-1]
@@ -218,10 +255,9 @@ def compute_chrono(track: Track, result: SegmentationResult, rules: RuleSet) -> 
         out.seconds = None
         return out
 
-    out.ranking_eligible = out.has_flight
+    out.ranking_eligible = out.has_flight and not out.flagged
     if not out.has_flight:
         out.problems.append("no flight part in the track: it would not be registered in the ranking")
-    out.hf_conditions_met = out.ranking_eligible and out.summit_exit_by_flight
     return out
 
 
@@ -231,7 +267,7 @@ def chrono_to_dict(c: Chrono) -> dict:
 
     return {
         "ruleset": c.ruleset,
-        "provisional": True,
+        "provisional": not (c.transport is not None and c.transport.performed),
         "climb_seconds": None if c.seconds is None else round(c.seconds, 1),
         "climb_hms": None if c.seconds is None else _hms(c.seconds),
         "nid_d_aigle_last_exit": iso(c.nid_exit),
@@ -242,6 +278,8 @@ def chrono_to_dict(c: Chrono) -> dict:
         "ranking_eligible": c.ranking_eligible,
         "hf_conditions_met": c.hf_conditions_met,
         "uncertainty_s": round(c.uncertainty_s, 1),
+        "flagged": c.flagged,
+        "transport": None if c.transport is None else transport_to_dict(c.transport),
         "problems": c.problems,
         "notes": c.notes,
     }

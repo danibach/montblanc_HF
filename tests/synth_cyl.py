@@ -42,11 +42,11 @@ class GeoGen(Gen):
         self.line(name, at, at, dur, dt)
 
 
-def cyl_day(flight: bool = True, seed: int = 1) -> GeoGen:
+def cyl_day(flight: bool = True, seed: int = 1, ascent_a_s: float = 4 * 3600) -> GeoGen:
     g = GeoGen(seed=seed)
     g.line("bike_out", (45.90, 6.65, 600.0), TRAILHEAD, 20 * 60, 5)
     g.hold(None, TRAILHEAD, 60, 5)
-    g.line("ascent_a", TRAILHEAD, (NA[0], NA[1], NA_ALT), 4 * 3600, 10)
+    g.line("ascent_a", TRAILHEAD, (NA[0], NA[1], NA_ALT), ascent_a_s, 10)
     g.line("ascent_b", (NA[0], NA[1], NA_ALT), (SU[0], SU[1], SU_ALT), LEG_B_S, 10)
     g.hold("summit_hold", (SU[0], SU[1], SU_ALT), 10 * 60, 10)
     if flight:

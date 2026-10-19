@@ -48,7 +48,24 @@ After segmenting, `mbhf segment` also computes the chrono from leaving the Nid d
 * Summit: the clock stops at the first entry, which must be **on foot**. The final exit must be **by flight** for the HF/BHF conditions; a flight from a lower point still counts for the ranking.
 * Crossing times are interpolated between fixes, and the result carries its uncertainty (time between the fixes around each crossing).
 
-The result is marked provisional until the check that the whole approach was on foot (no tramway or lift) exists.
+Hiking up by **any other route** than Nid d'Aigle is authorised: such a track has no climbing chrono and no ranking, but can still earn the HF/BHF badge (on foot to the summit, take-off from it).
+
+### Was the approach on foot? Tram and lifts
+
+Before the summit is entered, `mbhf.transport` looks for rides on the Mont-Blanc tramway and on lifts. A ride **flags** the track: no ranking and no badge until a human decides (the flag is evidence, not a final verdict).
+
+* **Tramway**: a ride is a stretch that (1) follows the rail line (within 30 m for 500 m or more), (2) is at a time the tram runs, and (3) climbs at 1 200 m/h or more over a window of up to 10 min. Walking along the rails is fine: it is slow (best hikers measured so far: 600 to 800 m/h). Fast on the rails while the tram is *not* running is only reported for review.
+* **Other lifts** (cable cars, gondolas, chairlifts, funiculars): a stretch following the lift line for 400 m or more at 8 km/h or more. No timetable needed. Slow lifts (fixed-grip chairlifts, drag lifts) cannot be told from walking and are **not** detected.
+* **Recording gaps** (phone off in the cabin): the climb or speed implied between the last and next fix is tested the same way.
+* A stretch the segmenter labelled as *bike* is ambiguous (a tram ride looks like a bike ride to it, and a cyclist beside the rails looks like a tram). It counts as a ride only if its median distance to the line is 12 m or less; otherwise it is a review item.
+
+Line geometry comes from OpenStreetMap (© OpenStreetMap contributors, ODbL). Export the tram line and the lifts from [overpass-turbo](https://overpass-turbo.eu) (GeoJSON) and import them:
+
+```bash
+mbhf import-osm export.geojson --out src/mbhf/data/transport-osm.json
+```
+
+**Until that file is filled, the check is not performed and every result says so** ("provisional"). The tram timetable (`data/tmb-schedule.json`) is also incomplete and must be checked with the operator for each season; a date without data counts as "tram possibly running".
 
 The JSON output lists each part, its confidence (how sharply the evidence flips at its start; `low` means "check this transition") and the transition times in the form the options above accept.
 
@@ -57,7 +74,8 @@ The JSON output lists each part, its confidence (how sharply the evidence flips 
 * The thresholds are first guesses. The tests use **synthetic** tracks (invented but realistic numbers); they show the code does what it is designed to do, **not** that it works on real tracks. Real tracks still have to be tried and the thresholds tuned.
 * The FIT reader has no test file yet.
 * The cylinder coordinates are provisional (read from Google Maps links) and the altitude bands were tuned on a single real track.
-* Not built yet: the speed-based detection of the tramway on the approach, GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
+* The tram and lift thresholds (1 200 m/h, 8 km/h, 12 m, 30 m) were set from two hiking tracks and the tram's published average; they have never seen a real tram or lift ride. The lift line geometry and the tram timetable are not loaded yet.
+* Not built yet: GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
 * Transitions can currently be fixed by time only, not by place.
 
 ## Privacy

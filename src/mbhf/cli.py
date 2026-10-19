@@ -32,6 +32,7 @@ from .parsers import load_track
 from .parsers.common import parse_iso_time
 from .rules import load_ruleset
 from .segment import Cuts, SegmentationError, SegmentationResult, segment_track
+from .transport import import_osm, load_lines, load_schedule
 
 
 def _split_hint(arg: str) -> tuple[Optional[str], str]:
@@ -122,18 +123,19 @@ def print_summary(data: dict, out=sys.stdout) -> None:
         )
     ch = data.get("chrono")
     if ch:
-        print(f"\nClimb chrono, Nid d'Aigle -> summit (ruleset {ch['ruleset']}, provisional):", file=out)
+        state = "provisional: tram/lift check not performed" if ch["provisional"] else "tram/lift check performed"
+        print(f"\nClimb chrono, Nid d'Aigle -> summit (ruleset {ch['ruleset']}; {state}):", file=out)
         if ch["climb_hms"]:
             print(
                 f"  {ch['climb_hms']}   (last exit Nid d'Aigle {ch['nid_d_aigle_last_exit'][:19]}, "
                 f"summit entry {ch['summit_first_entry_on_foot'][:19]} UTC, +-{ch['uncertainty_s']:.0f} s)",
                 file=out,
             )
-            print(
-                f"  ranking: {'yes' if ch['ranking_eligible'] else 'no'}   "
-                f"HF/BHF conditions (take-off from the summit): {'yes' if ch['hf_conditions_met'] else 'no'}",
-                file=out,
-            )
+        print(
+            f"  ranking: {'yes' if ch['ranking_eligible'] else 'no'}   "
+            f"HF/BHF conditions (on foot to the summit, take-off from it): {'yes' if ch['hf_conditions_met'] else 'no'}",
+            file=out,
+        )
         for msg in ch["problems"]:
             print(f"  ! {msg}", file=out)
         for msg in ch["notes"]:
@@ -195,7 +197,7 @@ def cmd_segment(args: argparse.Namespace) -> int:
     )
     res = segment_track(track, cuts)
     rules = load_ruleset(args.rules)
-    chrono = compute_chrono(track, res, rules)
+    chrono = compute_chrono(track, res, rules, load_lines(args.lines), load_schedule(args.schedule))
     data = result_to_dict(track, res, [t.source for t in tracks], chrono)
     print_summary(data)
     if args.json:
@@ -205,6 +207,18 @@ def cmd_segment(args: argparse.Namespace) -> int:
     if args.plot:
         make_plot(track, res, args.plot)
         print(f"Plot written to {args.plot}")
+    return 0
+
+
+def cmd_import_osm(args: argparse.Namespace) -> int:
+    data = import_osm(args.file, args.tram_match)
+    with open(args.out, "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    kinds: dict[str, int] = {}
+    for ln in data["lines"]:
+        kinds[ln["kind"]] = kinds.get(ln["kind"], 0) + 1
+    print(f"{data['note']}: " + ", ".join(f"{n} {k} way(s)" for k, n in sorted(kinds.items())))
+    print(f"written to {args.out}")
     return 0
 
 
@@ -220,6 +234,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="track file (IGC, GPX, KML, FIT); prefix with bike=, walk=, flight= to pin it to a mode",
     )
     s.add_argument("--rules", help="ruleset JSON file (default: the packaged draft ruleset)")
+    s.add_argument("--lines", help="tram and lift geometry JSON (default: the packaged OpenStreetMap extract)")
+    s.add_argument("--schedule", help="tram timetable JSON (default: the packaged draft timetable)")
     s.add_argument("--json", help="write the result as JSON")
     s.add_argument("--plot", help="write a diagnostic plot (PNG)")
     s.add_argument("--walk-start", help="fix the start of the ascent on foot (ISO 8601 time)")
@@ -227,6 +243,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--landing", help="fix the landing instant (ISO 8601 time)")
     s.add_argument("--bike-return-start", help="fix the start of the ride back (ISO 8601 time)")
     s.set_defaults(func=cmd_segment)
+    o = sub.add_parser("import-osm", help="turn an OpenStreetMap export (Overpass JSON or GeoJSON) into the line file")
+    o.add_argument("file", help="export from overpass-turbo (GeoJSON) or Overpass 'out geom' JSON")
+    o.add_argument("--out", required=True, help="output JSON (e.g. src/mbhf/data/transport-osm.json)")
+    o.add_argument("--tram-match", default="tramway du mont", help="text identifying the tram line in name/ref/operator")
+    o.set_defaults(func=cmd_import_osm)
     return p
 
 
@@ -234,7 +255,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (TrackError, SegmentationError) as exc:
+    except (TrackError, SegmentationError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
