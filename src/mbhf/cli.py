@@ -25,10 +25,12 @@ import sys
 from typing import Optional
 
 from . import __version__
+from .chrono import Chrono, chrono_to_dict, compute_chrono
 from .merge import merge_tracks
 from .models import MODES, Track, TrackError
 from .parsers import load_track
 from .parsers.common import parse_iso_time
+from .rules import load_ruleset
 from .segment import Cuts, SegmentationError, SegmentationResult, segment_track
 
 
@@ -71,13 +73,14 @@ def _transitions(res: SegmentationResult) -> dict[str, Optional[str]]:
     return out
 
 
-def result_to_dict(track: Track, res: SegmentationResult, files: list[str]) -> dict:
+def result_to_dict(track: Track, res: SegmentationResult, files: list[str], chrono: Optional[Chrono] = None) -> dict:
     return {
         "mbhf_version": __version__,
         "files": files,
         "fixes": len(track.points),
         "warnings": track.warnings + res.warnings,
         "transitions": _transitions(res),
+        "chrono": None if chrono is None else chrono_to_dict(chrono),
         "segments": [
             {
                 "role": s.role,
@@ -117,6 +120,24 @@ def print_summary(data: dict, out=sys.stdout) -> None:
             f"{'' if s['descent_m'] is None else s['descent_m']:>7}  {s['confidence']}{flag}",
             file=out,
         )
+    ch = data.get("chrono")
+    if ch:
+        print(f"\nClimb chrono, Nid d'Aigle -> summit (ruleset {ch['ruleset']}, provisional):", file=out)
+        if ch["climb_hms"]:
+            print(
+                f"  {ch['climb_hms']}   (last exit Nid d'Aigle {ch['nid_d_aigle_last_exit'][:19]}, "
+                f"summit entry {ch['summit_first_entry_on_foot'][:19]} UTC, +-{ch['uncertainty_s']:.0f} s)",
+                file=out,
+            )
+            print(
+                f"  ranking: {'yes' if ch['ranking_eligible'] else 'no'}   "
+                f"HF/BHF conditions (take-off from the summit): {'yes' if ch['hf_conditions_met'] else 'no'}",
+                file=out,
+            )
+        for msg in ch["problems"]:
+            print(f"  ! {msg}", file=out)
+        for msg in ch["notes"]:
+            print(f"  note: {msg}", file=out)
     if data["warnings"]:
         print("\nWarnings:", file=out)
         for w in data["warnings"]:
@@ -173,7 +194,9 @@ def cmd_segment(args: argparse.Namespace) -> int:
         bike_return_start=_time_arg(args.bike_return_start, "bike-return-start") if args.bike_return_start else None,
     )
     res = segment_track(track, cuts)
-    data = result_to_dict(track, res, [t.source for t in tracks])
+    rules = load_ruleset(args.rules)
+    chrono = compute_chrono(track, res, rules)
+    data = result_to_dict(track, res, [t.source for t in tracks], chrono)
     print_summary(data)
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fh:
@@ -196,6 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="track file (IGC, GPX, KML, FIT); prefix with bike=, walk=, flight= to pin it to a mode",
     )
+    s.add_argument("--rules", help="ruleset JSON file (default: the packaged draft ruleset)")
     s.add_argument("--json", help="write the result as JSON")
     s.add_argument("--plot", help="write a diagnostic plot (PNG)")
     s.add_argument("--walk-start", help="fix the start of the ascent on foot (ISO 8601 time)")

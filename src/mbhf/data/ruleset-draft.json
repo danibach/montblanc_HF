@@ -1,0 +1,26 @@
+{
+  "ruleset": "v0.3-draft",
+  "accepted_formats": ["igc", "gpx", "kml", "fit"],
+  "timestamps_required": true,
+  "cylinders": {
+    "nid_d_aigle": {
+      "lat": 45.85748,
+      "lon": 6.79938,
+      "radius_m": 200,
+      "alt_min_m": 2350,
+      "alt_max_m": 2450
+    },
+    "summit": {
+      "lat": 45.83262,
+      "lon": 6.86517,
+      "radius_m": 100,
+      "alt_min_m": 4700,
+      "alt_max_m": 4850
+    }
+  },
+  "_notes": [
+    "Draft values to be validated on real tracks; the rules in Notion are the source of truth.",
+    "Coordinates are provisional (read from Google Maps links) and must be confirmed on a reference map.",
+    "Summit lower altitude limit is 4700 m because devices were seen reading 30-50 m low at the top."
+  ]
+}

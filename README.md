@@ -40,13 +40,24 @@ mbhf segment day.gpx --takeoff 2026-09-12T09:41:10Z
 # also: --walk-start  --landing  --bike-return-start
 ```
 
+### The climbing chrono
+
+After segmenting, `mbhf segment` also computes the chrono from leaving the Nid d'Aigle cylinder to entering the summit cylinder, with the cylinders taken from the ruleset (`src/mbhf/data/ruleset-draft.json`, or `--rules file.json`):
+
+* Nid d'Aigle: the clock starts at the **last exit** before the summit cylinder is entered (sideways or upward), so GPS jitter on the edge cannot restart it.
+* Summit: the clock stops at the first entry, which must be **on foot**. The final exit must be **by flight** for the HF/BHF conditions; a flight from a lower point still counts for the ranking.
+* Crossing times are interpolated between fixes, and the result carries its uncertainty (time between the fixes around each crossing).
+
+The result is marked provisional until the check that the whole approach was on foot (no tramway or lift) exists.
+
 The JSON output lists each part, its confidence (how sharply the evidence flips at its start; `low` means "check this transition") and the transition times in the form the options above accept.
 
 ## Honest limits
 
 * The thresholds are first guesses. The tests use **synthetic** tracks (invented but realistic numbers); they show the code does what it is designed to do, **not** that it works on real tracks. Real tracks still have to be tried and the thresholds tuned.
 * The FIT reader has no test file yet.
-* Not built yet: the Nid d'Aigle and summit cylinders, the speed-based detection of the tramway on the approach, GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
+* The cylinder coordinates are provisional (read from Google Maps links) and the altitude bands were tuned on a single real track.
+* Not built yet: the speed-based detection of the tramway on the approach, GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
 * Transitions can currently be fixed by time only, not by place.
 
 ## Privacy
