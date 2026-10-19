@@ -1,0 +1,16 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+
+# Real tracks reveal where people live: never commit them by accident.
+tracks/
+*.gpx
+*.igc
+*.kml
+*.fit
+!tests/data/*.gpx
+!tests/data/*.igc
+!tests/data/*.kml
