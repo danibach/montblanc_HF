@@ -233,3 +233,23 @@ def test_import_refuses_an_export_without_the_tram_line(tmp_path):
                          "geometry": [{"lat": 45.89, "lon": 6.8}, {"lat": 45.87, "lon": 6.82}]}]}
     with pytest.raises(ValueError, match="no tram line"):
         import_osm(_write(tmp_path, raw))
+
+
+# --- a track that starts at Nid d'Aigle (the tram ride is not in the track) ---------------------
+def _starts_at_nid_d_aigle(wait_s=60):
+    from synth_cyl import GeoGen, LEG_B_S, NA_ALT, SU, SU_ALT
+
+    g = GeoGen(seed=3)
+    g.hold(None, (NA[0], NA[1], NA_ALT), wait_s, 10)                      # recording starts at the station
+    g.line("ascent_b", (NA[0], NA[1], NA_ALT), (SU[0], SU[1], SU_ALT), LEG_B_S, 10)
+    g.hold("summit_hold", (SU[0], SU[1], SU_ALT), 10 * 60, 10)
+    g.line("flight", (SU[0], SU[1], SU_ALT), (45.93, 6.70, 900.0), 25 * 60, 2)
+    g.line("landing_walk", (45.93, 6.70, 900.0), (45.9305, 6.7022, 895.0), 10 * 60, 5)
+    return g
+
+
+@pytest.mark.parametrize("wait_s", [60, 0])
+def test_a_track_starting_at_nid_d_aigle_gets_the_rank_and_the_badge(wait_s):
+    ch = _run(_starts_at_nid_d_aigle(wait_s), OPEN)
+    assert ch.seconds is not None and ch.ranking_eligible and ch.hf_conditions_met
+    assert not ch.flagged and ch.transport.verdict == "clear"

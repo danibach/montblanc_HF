@@ -48,6 +48,8 @@ After segmenting, `mbhf segment` also computes the chrono from leaving the Nid d
 * Summit: the clock stops at the first entry, which must be **on foot**. The final exit must be **by flight** for the HF/BHF conditions; a flight from a lower point still counts for the ranking.
 * Crossing times are interpolated between fixes, and the result carries its uncertainty (time between the fixes around each crossing).
 
+Only what the track contains is judged. A track that **starts at Nid d'Aigle** (the tram ride is not in it) is valid: HF badge and the Nid d'Aigle to summit rank. A track that contains a tram or lift section is not. (An unrecorded tram ride cannot be detected: that is accepted.) Later the origin of the climb (Nid d'Aigle, Bionnassay, Passy, Aiguille du Midi, Courmayeur...) can be used to filter or label results; it is not computed yet.
+
 Hiking up by **any other route** than Nid d'Aigle is authorised: such a track has no climbing chrono and no ranking, but can still earn the HF/BHF badge (on foot to the summit, take-off from it).
 
 ### Was the approach on foot? Tram and lifts
