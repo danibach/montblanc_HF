@@ -71,13 +71,29 @@ mbhf import-osm export.geojson --out src/mbhf/data/transport-osm.json
 
 The JSON output lists each part, its confidence (how sharply the evidence flips at its start; `low` means "check this transition") and the transition times in the form the options above accept.
 
+## The web app
+
+Participants upload a track and get the climbing time, the places detected (start, transitions, Nid d'Aigle exit, summit entry and exit, each with position and altitude), the parts of the day, the checks, and the graphs.
+
+```bash
+pip install -e ".[web]"
+flask --app mbhf.web:create_app run          # http://127.0.0.1:5000
+# production: gunicorn "mbhf.web:create_app()"   (see the Dockerfile)
+docker build -t mbhf-web . && docker run -p 8000:8000 mbhf-web
+```
+
+* **Nothing is stored.** Uploads are analysed in memory and in a temporary directory that is deleted before the page is sent. The app has no database, no cookies and no accounts, and logs neither file names nor contents. Put it behind HTTPS and make sure your proxy does not log request bodies.
+* The analysis takes one to two seconds of CPU, so rate-limit uploads at the proxy. The app itself limits a request to 60 MB and a track to 200 000 points.
+* Strict content security policy (no inline scripts or styles, no external requests); the page loads nothing from third parties. The only outgoing links are the "open on a map" links, which the participant clicks.
+* The result is marked provisional until the tram and lift geometry is loaded (see above). It is an automatic check: the organisers still review every submission.
+
 ## Honest limits
 
 * The thresholds are first guesses. The tests use **synthetic** tracks (invented but realistic numbers); they show the code does what it is designed to do, **not** that it works on real tracks. Real tracks still have to be tried and the thresholds tuned.
 * The FIT reader has no test file yet.
 * The cylinder coordinates are provisional (read from Google Maps links) and the altitude bands were tuned on a single real track.
 * The tram and lift thresholds (1 200 m/h, 8 km/h, 12 m, 30 m) were set from two hiking tracks and the tram's published average; they have never seen a real tram or lift ride. The lift line geometry and the tram timetable are not loaded yet.
-* Not built yet: GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
+* Not built yet: storing submissions (the web app is stateless), a French interface, GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
 * Transitions can currently be fixed by time only, not by place.
 
 ## Privacy

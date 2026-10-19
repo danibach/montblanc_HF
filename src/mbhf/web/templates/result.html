@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{% if c.climb_hms %}{{ c.climb_hms }} Nid d'Aigle to summit{% else %}Your track{% endif %}{% endblock %}
+{% macro coord(p) %}{{ '%.5f'|format(p.lat) }}, {{ '%.5f'|format(p.lon) }}{% endmacro %}
+
+{% block main %}
+<section class="headline">
+  {% if c.climb_hms %}
+    <p class="big-time" aria-label="Climbing time {{ c.climb_hms }}">{{ c.climb_hms }}</p>
+    <p class="big-caption">from leaving Nid d'Aigle to entering the summit cylinder on foot, give or take {{ c.uncertainty_s|round|int }}&nbsp;s</p>
+  {% else %}
+    <h1>No climbing time for this track</h1>
+    <p class="big-caption">The track does not show a walk from Nid d'Aigle to the summit. The reasons are listed below.</p>
+  {% endif %}
+  <ul class="verdicts">
+    <li class="{{ 'ok' if c.ranking_eligible else 'no' }}">Ranking: <strong>{{ 'eligible' if c.ranking_eligible else 'not eligible' }}</strong></li>
+    <li class="{{ 'ok' if c.hf_conditions_met else 'no' }}">HF / BHF conditions: <strong>{{ 'met' if c.hf_conditions_met else 'not met' }}</strong></li>
+    <li class="{{ 'ok' if c.transport and c.transport.performed and c.transport.verdict == 'clear' else ('no' if c.flagged else 'unknown') }}">Tram and lift check:
+      <strong>{% if not c.transport or not c.transport.performed %}not active yet{% elif c.flagged %}flagged{% elif c.transport.verdict == 'review' %}to review{% else %}clear{% endif %}</strong></li>
+  </ul>
+  {% if c.provisional %}
+  <p class="notice notice-info">Provisional result. The tram and lift check is not active yet, so this result cannot rule out a ride on the tramway or a cable car.</p>
+  {% endif %}
+  {% if c.flagged %}
+  <p class="notice notice-error" role="alert">This track is flagged: it seems to use the Mont-Blanc tramway or a lift. It gets no rank and no badge until the organisers have reviewed it.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="day">
+  <h2 id="day">Your day in parts</h2>
+  {% set ns = namespace(x=0) %}
+  <svg class="ribbon" viewBox="0 0 1000 44" role="img" aria-label="Your day split into parts: {% for p in r.parts %}{{ p.title }} {{ p.duration_s|dur }}{{ ', ' if not loop.last }}{% endfor %}">
+    {% for p in r.parts %}
+      {% set w = [p.share * 1000, 3]|max %}
+      <rect class="part part-{{ p.mode }}" x="{{ ns.x|round(1) }}" y="0" width="{{ w|round(1) }}" height="44"><title>{{ p.title }}: {{ p.duration_s|dur }}</title></rect>
+      {% if not loop.first %}<line class="cut" x1="{{ ns.x|round(1) }}" x2="{{ ns.x|round(1) }}" y1="0" y2="44"/>{% endif %}
+      {% set ns.x = ns.x + w %}
+    {% endfor %}
+  </svg>
+  <ul class="legend">
+    {% for p in r.parts %}
+    <li><span class="swatch part-{{ p.mode }}" aria-hidden="true"></span>{{ p.title }}<span class="muted"> {{ p.duration_s|dur }}, {{ p.distance_km }} km</span></li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section aria-labelledby="graphs">
+  <h2 id="graphs">Graphs</h2>
+  <p class="hint swipe">Swipe sideways to see the whole graph.</p>
+  <figure class="figure-wrap" tabindex="0"><img class="figure" src="{{ figure }}" alt="Altitude against time, ground speed against time, and the route on a map. The parts of the day are coloured, and the start, the transitions, the Nid d'Aigle exit and the summit entry are marked."></figure>
+</section>
+
+<section aria-labelledby="places">
+  <h2 id="places">Places detected</h2>
+  <p class="hint">Times are in Paris time, on {{ r.track.start.local_date }} unless a date is shown. Altitudes are the ones your device recorded.</p>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Places detected, scroll sideways on small screens">
+  <table>
+    <thead><tr><th scope="col">What</th><th scope="col">Time</th><th scope="col">Position</th><th scope="col" class="num">Altitude</th><th scope="col">Detection</th></tr></thead>
+    <tbody>
+    {% for e in r.places %}
+      <tr>
+        <th scope="row">{{ e.label }}{% if e.near %}<span class="muted block">at {{ e.near }}</span>{% endif %}{% if e.note %}<span class="muted block">{{ e.note }}</span>{% endif %}</th>
+        <td>{{ e.local_hms }}{% if e.local_date != r.track.start.local_date %}<span class="muted block">{{ e.local_date }}</span>{% endif %}</td>
+        <td>{% if e.lat is defined %}{{ coord(e) }}<span class="block"><a href="{{ e.map_url }}" rel="noopener noreferrer" target="_blank">open on a map</a></span>{% else %}<span class="muted">unknown</span>{% endif %}</td>
+        <td class="num">{% if e.alt_m is defined and e.alt_m is not none %}{{ e.alt_m }} m{% else %}<span class="muted">unknown</span>{% endif %}</td>
+        <td>
+          {% if e.confidence %}
+            {% if e.user_fixed %}set by you{% else %}{{ e.confidence }} confidence{% endif %}
+            {% if e.gap_s and e.gap_s >= 60 %}<span class="muted block">{{ e.gap_s|dur }} without recording here</span>{% endif %}
+          {% else %}<span class="muted">from the track</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if r.track.highest %}<p class="hint">Highest point recorded: {{ r.track.highest.alt_m }} m at {{ r.track.highest.local_hms }}, {{ '%.5f'|format(r.track.highest.lat) }}, {{ '%.5f'|format(r.track.highest.lon) }}.</p>{% endif %}
+</section>
+
+<section aria-labelledby="parts">
+  <h2 id="parts">Each part</h2>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Each part of the day, scroll sideways on small screens">
+  <table>
+    <thead><tr><th scope="col">Part</th><th scope="col">From</th><th scope="col">To</th><th scope="col" class="num">Duration</th><th scope="col" class="num">Distance</th><th scope="col" class="num">Up</th><th scope="col" class="num">Down</th><th scope="col" class="num">Average speed</th></tr></thead>
+    <tbody>
+    {% for p in r.parts %}
+      <tr>
+        <th scope="row"><span class="swatch part-{{ p.mode }}" aria-hidden="true"></span>{{ p.title }}</th>
+        <td>{{ p.start.local_hms }}</td><td>{{ p.end.local_hms }}</td>
+        <td class="num">{{ p.duration_s|hms }}</td>
+        <td class="num">{{ p.distance_km }} km</td>
+        <td class="num">{% if p.ascent_m is not none %}{{ p.ascent_m }} m{% endif %}</td>
+        <td class="num">{% if p.descent_m is not none %}{{ p.descent_m }} m{% endif %}</td>
+        <td class="num">{{ p.mean_speed_kmh }} km/h</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{% set issues = c.problems + d.warnings %}
+{% if issues or c.notes %}
+<section aria-labelledby="checks">
+  <h2 id="checks">Checks and notes</h2>
+  {% if issues %}
+  <ul class="messages">{% for m in issues %}<li>{{ m }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if c.notes %}
+  <ul class="messages muted-list">{% for m in c.notes %}<li>{{ m }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if c.transport and c.transport.stretches %}
+<section aria-labelledby="transport">
+  <h2 id="transport">Rails and lifts on the way up</h2>
+  <ul class="messages">
+  {% for s in c.transport.stretches %}
+    <li><strong>{{ s.verdict|replace('_', ' ') }}</strong>, {{ s.kind }} {{ s.line }}: {{ s.reason }}</li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div class="actions">
+  <a class="primary button" href="{{ url_for('index') }}">Analyse another track</a>
+  <button type="button" class="link-button" id="download-json">Download the result (JSON)</button>
+</div>
+<script type="application/json" id="result-json">{{ json_text|safe }}</script>
+{% endblock %}

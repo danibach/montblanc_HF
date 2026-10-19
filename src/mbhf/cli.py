@@ -146,41 +146,17 @@ def print_summary(data: dict, out=sys.stdout) -> None:
             print(f"  - {w}", file=out)
 
 
-def make_plot(track: Track, res: SegmentationResult, path: str) -> None:
+def make_plot(track: Track, res: SegmentationResult, path: str, chrono: Optional[Chrono] = None) -> None:
     try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        from .report import render_figure
     except ImportError as exc:  # pragma: no cover
         raise SystemExit("plotting needs matplotlib (pip install matplotlib)") from exc
-    from .segment import compute_features, SegmenterConfig
+    from .chrono import Chrono as _Chrono
 
-    colours = {"bike": "#1f77b4", "walk": "#2ca02c", "flight": "#d62728"}
-    pts = track.points
-    feats = compute_features(pts, SegmenterConfig())
-    t = [p.t for p in pts]
-    fig, (ax_alt, ax_spd, ax_map) = plt.subplots(3, 1, figsize=(11, 12), gridspec_kw={"height_ratios": [2, 2, 3]})
-    for s in res.segments:
-        sl = slice(s.i_start, s.i_end + 1)
-        c = colours[s.mode]
-        ax_alt.plot(t[sl], [p.alt for p in pts[sl]], color=c, lw=1.2, label=s.role)
-        ax_spd.plot(t[sl], [f.v for f in feats[sl]], color=c, lw=0.8)
-        ax_map.plot([p.lon for p in pts[sl]], [p.lat for p in pts[sl]], color=c, lw=1.2)
-        if s.i_start > 0:
-            for ax in (ax_alt, ax_spd):
-                ax.axvline(s.t_start, color="grey", ls="--", lw=0.8)
-    ax_alt.set_ylabel("altitude (m)")
-    ax_spd.set_ylabel("ground speed (km/h)")
-    ax_map.set_xlabel("longitude")
-    ax_map.set_ylabel("latitude")
-    ax_map.set_aspect(1 / max(0.2, math.cos(math.radians(pts[0].lat))))
-    handles, labels = ax_alt.get_legend_handles_labels()
-    ax_alt.legend(handles, labels, loc="upper left", fontsize=8)
-    fig.autofmt_xdate()
-    fig.tight_layout()
-    fig.savefig(path, dpi=110)
-    plt.close(fig)
+    try:
+        render_figure(track, res, chrono or _Chrono(ruleset="")).savefig(path)
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise SystemExit("plotting needs matplotlib (pip install matplotlib)") from exc
 
 
 def cmd_segment(args: argparse.Namespace) -> int:
@@ -205,7 +181,7 @@ def cmd_segment(args: argparse.Namespace) -> int:
             json.dump(data, fh, indent=2)
         print(f"\nJSON written to {args.json}")
     if args.plot:
-        make_plot(track, res, args.plot)
+        make_plot(track, res, args.plot, chrono)
         print(f"Plot written to {args.plot}")
     return 0
 

@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 plot = ["matplotlib>=3.7"]
+web = ["flask>=3", "matplotlib>=3.7", "gunicorn>=22"]
 dev = ["pytest>=8"]
 
 [project.scripts]
@@ -24,7 +25,7 @@ mbhf = "mbhf.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mbhf = ["data/*.json"]
+mbhf = ["data/*.json", "web/templates/*.html", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
