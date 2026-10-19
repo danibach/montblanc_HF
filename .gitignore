@@ -14,3 +14,8 @@ tracks/
 !tests/data/*.gpx
 !tests/data/*.igc
 !tests/data/*.kml
+
+# Built website (scripts/build_site.py)
+_site/
+site-check/
+node_modules/

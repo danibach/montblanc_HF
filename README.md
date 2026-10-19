@@ -83,11 +83,28 @@ docker build -t mbhf-web . && docker run -p 8000:8000 mbhf-web
 ```
 
 * **Language.** The analysis code (command line, JSON, tests) writes English; `mbhf.i18n` turns every message a participant reads into French (the web app, the figure labels, dates and number formats included). A new English message needs a French rule there: `tests/test_i18n.py` fails on any known message without one.
-* **Hosting.** GitHub itself cannot run this app: GitHub Pages only serves static files, and this app runs Python on a server. Any host that runs a Docker image or a gunicorn process works (the repository has a Dockerfile); several have free tiers, check their current terms.
+* **Hosting.** GitHub Pages cannot run this Flask app (it needs a Python server); the browser version below can. For the Flask app, any host that runs a Docker image or a gunicorn process works (the repository has a Dockerfile); several have free tiers, check their current terms.
 * **Nothing is stored.** Uploads are analysed in memory and in a temporary directory that is deleted before the page is sent. The app has no database, no cookies and no accounts, and logs neither file names nor contents. Put it behind HTTPS and make sure your proxy does not log request bodies.
 * The analysis takes one to two seconds of CPU, so rate-limit uploads at the proxy. The app itself limits a request to 60 MB and a track to 200 000 points.
 * Strict content security policy (no inline scripts or styles, no external requests); the page loads nothing from third parties. The only outgoing links are the "open on a map" links, which the participant clicks.
 * The result is marked provisional until the tram and lift geometry is loaded (see above). It is an automatic check: the organisers still review every submission.
+
+## The website (analysis in the browser)
+
+The public page runs this same Python package **in the participant's browser** (Pyodide, Python compiled to WebAssembly), so it is a static site that GitHub Pages can host for free. The file never leaves the participant's device.
+
+* The participant gets the climbing time, the verdicts, the track drawn from above and its altitude profile (numbered places, coloured parts), the places and parts tables, and the checks. The result is marked **provisional, awaiting validation**: sending it for validation is not built yet.
+* **Fixing transitions.** If a part of the day is wrongly cut, the participant places the start of the walk up, the take-off, the landing or the start of the ride back by clicking on the profile or the track (or typing the Paris time), then recomputes. These are the same `Cuts` as the command-line options.
+* Code: `site/` (page, worker, styles added to the web app's `style.css`), `src/mbhf/browser.py` (the one entry point the page calls; tested in `tests/test_browser.py`), `scripts/build_site.py` (assembles `_site/`: the page, Pyodide 314.0.7 from npm, the pure-Python wheels `defusedxml`, `fitdecode`, `tzdata`, and `src/mbhf` without the Flask app), `scripts/check_site.py` (opens the built site in Chromium, analyses a synthetic track, places a transition, checks the result equals normal Python and that no request leaves the site).
+* The workflow `.github/workflows/site.yml` runs the tests, builds, checks and publishes on every push to `main`. One-time setting: **Settings > Pages > Source: GitHub Actions**.
+* First visit downloads about 6 MB (compressed), kept by the browser afterwards; the analysis itself takes about a second.
+* Content security policy in the page: nothing is loaded from other sites; WebAssembly needs `'wasm-unsafe-eval'`.
+
+```bash
+python scripts/build_site.py --out _site          # needs npm and pip to reach their registries
+python -m http.server -d _site 8000               # http://127.0.0.1:8000
+python scripts/check_site.py _site                # needs: pip install playwright; playwright install chromium
+```
 
 ## Honest limits
 
@@ -95,7 +112,8 @@ docker build -t mbhf-web . && docker run -p 8000:8000 mbhf-web
 * The FIT reader has no test file yet.
 * The cylinder coordinates are provisional (read from Google Maps links) and the altitude bands were tuned on a single real track.
 * The tram and lift thresholds (1 200 m/h, 8 km/h, 12 m, 30 m) were set from two hiking tracks and the tram's published average; they have never seen a real tram or lift ride. The lift line geometry and the tram timetable are not loaded yet.
-* Not built yet: storing submissions (the web app is stateless), a French interface, GNSS altitude bias correction, the IGC signature check, biplace comparison, the website and storage.
+* Not built yet: sending a track for validation and storing submissions (planned: Supabase storage, then a scheduled re-analysis by this package), a real map under the drawn track, GNSS altitude bias correction, the IGC signature check, biplace comparison.
+* The in-browser page has only been checked with synthetic tracks, in Chromium.
 * Transitions can currently be fixed by time only, not by place.
 
 ## Privacy

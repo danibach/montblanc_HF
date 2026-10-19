@@ -20,7 +20,7 @@ from .merge import merge_tracks
 from .models import MODES, TrackError
 from .parsers import load_track
 from .parsers.common import parse_iso_time
-from .report import build_report, render_figure
+from .report import build_report, build_trace, render_figure
 from .rules import load_ruleset
 from .segment import Cuts, SegmentationError, segment_track
 from .transport import LineSet, Schedule, load_lines, load_schedule
@@ -68,8 +68,15 @@ def analyse_uploads(
     schedule: Optional[Schedule] = None,
     max_fixes: int = MAX_FIXES,
     lang: str = "en",
+    figure: bool = True,
+    trace: bool = False,
 ) -> Analysis:
-    """Analyse the uploads. ``lang`` ("en" or "fr") is the language of every message and label."""
+    """Analyse the uploads. ``lang`` ("en" or "fr") is the language of every message and label.
+
+    ``figure=False`` skips the matplotlib figure (``png`` is then empty): the in-browser page draws
+    its own graphs and does not ship matplotlib. ``trace=True`` adds ``data["trace"]``, compact
+    arrays of the track (see ``build_trace``) for such a page.
+    """
     if not uploads:
         raise AnalysisError(msg(lang, "no_file"))
     cuts = cuts or {}
@@ -116,6 +123,10 @@ def analyse_uploads(
     data["report"] = build_report(track, res, chrono, rules, lang)
     if lang == "fr":
         _translate_data(data, lang)
+    if trace:
+        data["trace"] = build_trace(track)
+    if not figure:
+        return Analysis(data=data, png=b"")
     fig = render_figure(track, res, chrono, lang=lang)
     buf = io.BytesIO()
     fig.savefig(buf, format="png")

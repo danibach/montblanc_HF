@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>Vérifiez votre trace du Mont-Blanc</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="page.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="site">
+    <a class="site-name" href="./">Mont-Blanc Hike &amp; Fly</a>
+    <span class="site-note">Vérification de trace, règlement en projet</span>
+  </header>
+
+  <main>
+    <section class="intro" id="intro">
+      <h1>Envoyez votre trace, découvrez votre montée</h1>
+      <p>Déposez l'enregistrement de votre journée au Mont-Blanc. Vous obtenez le temps entre le Nid d'Aigle et le sommet, l'endroit où commence et finit chaque partie de la journée, et votre trace dessinée.</p>
+      <p class="hint">L'analyse se fait dans votre navigateur : votre fichier ne quitte pas votre appareil.</p>
+    </section>
+
+    <form id="upload-form" novalidate>
+      <fieldset class="files">
+        <legend>Fichiers de trace</legend>
+        <p class="hint">IGC, GPX, KML ou FIT, avec horodatage (un fichier sans heures ne peut pas être chronométré). 60 Mo au total au maximum.</p>
+        <div id="file-rows">
+          <div class="file-row">
+            <div class="field">
+              <label for="track-0">Fichier</label>
+              <input id="track-0" type="file" accept=".igc,.gpx,.kml,.fit">
+            </div>
+            <div class="field">
+              <label for="mode-0">Ce qu'il contient</label>
+              <select id="mode-0">
+                <option value="">Toute la journée, parties détectées automatiquement</option>
+                <option value="bike">Trajet à vélo seulement</option>
+                <option value="walk">Marche seulement</option>
+                <option value="flight">Vol seulement</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="link-button" id="add-file">Ajouter un autre fichier</button>
+        <p class="hint">Envoyez plusieurs fichiers si le trajet à vélo, la marche et le vol ont été enregistrés séparément, ou si un variomètre a enregistré le vol. Indiquez ce que contient chacun.</p>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" class="primary" id="submit">Analyser ma trace</button>
+        <span class="busy" id="engine-status" role="status">Préparation de l'outil d'analyse…</span>
+      </div>
+      <div class="notice notice-error" id="form-error" role="alert" hidden><p></p></div>
+    </form>
+
+    <div id="result" hidden></div>
+  </main>
+
+  <footer class="site">
+    <p>Votre trace est analysée dans votre navigateur. Elle n'est envoyée nulle part et rien n'est conservé quand vous fermez la page.</p>
+    <p>Le résultat est automatique et provisoire. L'équipe examine chaque dossier avant d'attribuer un badge ou un rang.</p>
+  </footer>
+</body>
+</html>

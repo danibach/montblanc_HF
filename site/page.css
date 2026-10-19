@@ -1,0 +1,96 @@
+/* Additions for the in-browser page; style.css is the web app's own stylesheet, shared as is. */
+
+[hidden] { display: none !important; }
+
+.busy[data-state="ready"] { color: var(--ok); }
+
+.notice-pending { border-left-color: var(--focus); }
+
+/* --- the track, drawn on white ----------------------------------------------------------- */
+.trace-panel {
+  margin: 0;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.trace-panel svg { display: block; cursor: crosshair; }
+.plan-wrap { width: 100%; }
+.plan-wrap svg { margin-inline: auto; }
+.profile-wrap { overflow-x: auto; border-top: 1px solid #d3dde2; }
+.trace-panel.is-picking { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.pick-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--info-bg);
+  border-left: 4px solid var(--focus);
+  border-radius: 0 4px 4px 0;
+  font-weight: 600;
+}
+
+.readout { min-height: 1.55em; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
+
+.marker-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  margin-right: 0.5rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  vertical-align: 0.05em;
+}
+
+/* --- transitions ------------------------------------------------------------------------ */
+.cut-list { display: grid; gap: 0.5rem; }
+.cut-row {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1.2fr) 10rem minmax(8rem, 1fr) 15rem;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 4px;
+}
+.cut-row.is-pinned { border-left-color: var(--focus); }
+.cut-label { font-size: 1rem; }
+.cut-row input[type="time"] {
+  font: inherit;
+  color: inherit;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.cut-state { font-size: 0.9375rem; }
+.cut-buttons { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: center; justify-content: flex-end; }
+.small-button {
+  font: 600 0.9375rem/1 var(--sans);
+  min-height: 2.5rem;
+  padding: 0.55rem 0.85rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.small-button[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); }
+.cut-status { min-height: 1.55em; margin-top: 0.75rem; }
+.cut-status.is-error { color: var(--no); font-weight: 600; }
+
+@media (max-width: 44rem) {
+  .cut-row { grid-template-columns: 1fr auto; }
+  .cut-label { grid-column: 1 / -1; }
+  .cut-buttons { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+@media print {
+  .pick-banner, .cut-buttons, #cuts-section .actions { display: none; }
+}

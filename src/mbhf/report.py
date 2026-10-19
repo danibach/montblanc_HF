@@ -80,6 +80,31 @@ def _event(key: str, label: str, t: datetime, pos, rules: RuleSet, lang: str = "
     return ev
 
 
+def build_trace(track: Track, max_points: int = 1500) -> dict:
+    """Compact arrays to draw the track and to let a participant pick a transition on it.
+
+    At most ``max_points`` fixes, evenly spaced and always including the first and the last.
+    ``idx`` gives each kept fix's index in the full track, so the segments' ``first_fix`` and
+    ``last_fix`` still say which part each one belongs to. Times are seconds after ``t0`` (UTC).
+    """
+    pts = track.points
+    n = len(pts)
+    if n <= max_points:
+        idx = list(range(n))
+    else:
+        step = (n - 1) / (max_points - 1)
+        idx = sorted({round(i * step) for i in range(max_points)})
+    t0 = pts[0].t
+    return {
+        "t0": t0.astimezone(ZoneInfo("UTC")).isoformat(),
+        "idx": idx,
+        "t": [round((pts[i].t - t0).total_seconds(), 1) for i in idx],
+        "lat": [round(pts[i].lat, 5) for i in idx],
+        "lon": [round(pts[i].lon, 5) for i in idx],
+        "alt": [None if pts[i].alt is None else round(pts[i].alt) for i in idx],
+    }
+
+
 def build_report(track: Track, res: SegmentationResult, chrono: Chrono, rules: RuleSet, lang: str = "en") -> dict:
     pts = track.points
     first, last = pts[0], pts[-1]
