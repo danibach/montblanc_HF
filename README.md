@@ -73,7 +73,7 @@ The JSON output lists each part, its confidence (how sharply the evidence flips 
 
 ## The web app
 
-Participants upload a track and get the climbing time, the places detected (start, transitions, Nid d'Aigle exit, summit entry and exit, each with position and altitude), the parts of the day, the checks, and the graphs.
+The page is in French. Participants upload a track and get the climbing time, the places detected (start, transitions, Nid d'Aigle exit, summit entry and exit, each with position and altitude), the parts of the day, the checks, and the graphs.
 
 ```bash
 pip install -e ".[web]"
@@ -82,6 +82,8 @@ flask --app mbhf.web:create_app run          # http://127.0.0.1:5000
 docker build -t mbhf-web . && docker run -p 8000:8000 mbhf-web
 ```
 
+* **Language.** The analysis code (command line, JSON, tests) writes English; `mbhf.i18n` turns every message a participant reads into French (the web app, the figure labels, dates and number formats included). A new English message needs a French rule there: `tests/test_i18n.py` fails on any known message without one.
+* **Hosting.** GitHub itself cannot run this app: GitHub Pages only serves static files, and this app runs Python on a server. Any host that runs a Docker image or a gunicorn process works (the repository has a Dockerfile); several have free tiers, check their current terms.
 * **Nothing is stored.** Uploads are analysed in memory and in a temporary directory that is deleted before the page is sent. The app has no database, no cookies and no accounts, and logs neither file names nor contents. Put it behind HTTPS and make sure your proxy does not log request bodies.
 * The analysis takes one to two seconds of CPU, so rate-limit uploads at the proxy. The app itself limits a request to 60 MB and a track to 200 000 points.
 * Strict content security policy (no inline scripts or styles, no external requests); the page loads nothing from third parties. The only outgoing links are the "open on a map" links, which the participant clicks.

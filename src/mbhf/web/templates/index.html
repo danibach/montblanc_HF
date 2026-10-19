@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block main %}
 <section class="intro">
-  <h1>Send your track, see your climb</h1>
-  <p>Upload the recording of your Mont-Blanc day. You get the time from Nid d'Aigle to the summit, where each part of the day starts and ends, and the graphs of the route.</p>
+  <h1>Envoyez votre trace, découvrez votre montée</h1>
+  <p>Déposez l'enregistrement de votre journée au Mont-Blanc. Vous obtenez le temps entre le Nid d'Aigle et le sommet, l'endroit où commence et finit chaque partie de la journée, et les graphiques du parcours.</p>
 </section>
 
 {% if error %}
@@ -13,40 +13,40 @@
 
 <form method="post" action="{{ url_for('analyse') }}" enctype="multipart/form-data" id="upload-form">
   <fieldset class="files">
-    <legend>Track files</legend>
-    <p class="hint">IGC, GPX, KML or FIT, with timestamps (a file without times cannot be timed). Up to {{ max_mb }} MB in total.</p>
+    <legend>Fichiers de trace</legend>
+    <p class="hint">IGC, GPX, KML ou FIT, avec horodatage (un fichier sans heures ne peut pas être chronométré). {{ max_mb }} Mo au total au maximum.</p>
     <div id="file-rows">
       <div class="file-row">
         <div class="field">
-          <label for="track-0">File</label>
+          <label for="track-0">Fichier</label>
           <input id="track-0" type="file" name="track" accept=".igc,.gpx,.kml,.fit" required>
         </div>
         <div class="field">
-          <label for="mode-0">What it contains</label>
+          <label for="mode-0">Ce qu'il contient</label>
           <select id="mode-0" name="mode">
             {% for value, label in modes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
           </select>
         </div>
       </div>
     </div>
-    <button type="button" class="link-button" id="add-file" hidden>Add another file</button>
-    <p class="hint">Send several files if the bike ride, the walk and the flight were recorded separately, or if a vario recorded the flight. Tell us what each one contains.</p>
+    <button type="button" class="link-button" id="add-file" hidden>Ajouter un autre fichier</button>
+    <p class="hint">Envoyez plusieurs fichiers si le trajet à vélo, la marche et le vol ont été enregistrés séparément, ou si un variomètre a enregistré le vol. Indiquez ce que contient chacun.</p>
   </fieldset>
 
   <details class="advanced"{% if cuts.values()|select|list %} open{% endif %}>
-    <summary>Set the transitions yourself</summary>
-    <p class="hint">Leave these empty to let the program detect them. Use a time like 2026-09-12T09:41:10Z (Z means UTC) or 2026-09-12T11:41:10+02:00.</p>
+    <summary>Indiquer vous-même les transitions</summary>
+    <p class="hint">Laissez ces champs vides pour que le programme les détecte. Saisissez un horaire comme 2026-09-12T09:41:10Z (Z signifie UTC) ou 2026-09-12T11:41:10+02:00.</p>
     <div class="cuts">
-      <div class="field"><label for="walk_start">Start of the walk</label><input id="walk_start" name="walk_start" type="text" inputmode="text" autocomplete="off" value="{{ cuts.walk_start or '' }}"></div>
-      <div class="field"><label for="takeoff">Take-off</label><input id="takeoff" name="takeoff" type="text" autocomplete="off" value="{{ cuts.takeoff or '' }}"></div>
-      <div class="field"><label for="landing">Landing</label><input id="landing" name="landing" type="text" autocomplete="off" value="{{ cuts.landing or '' }}"></div>
-      <div class="field"><label for="bike_return_start">Start of the ride back</label><input id="bike_return_start" name="bike_return_start" type="text" autocomplete="off" value="{{ cuts.bike_return_start or '' }}"></div>
+      <div class="field"><label for="walk_start">Début de la montée à pied</label><input id="walk_start" name="walk_start" type="text" autocomplete="off" value="{{ cuts.walk_start or '' }}"></div>
+      <div class="field"><label for="takeoff">Décollage</label><input id="takeoff" name="takeoff" type="text" autocomplete="off" value="{{ cuts.takeoff or '' }}"></div>
+      <div class="field"><label for="landing">Atterrissage</label><input id="landing" name="landing" type="text" autocomplete="off" value="{{ cuts.landing or '' }}"></div>
+      <div class="field"><label for="bike_return_start">Début du retour à vélo</label><input id="bike_return_start" name="bike_return_start" type="text" autocomplete="off" value="{{ cuts.bike_return_start or '' }}"></div>
     </div>
   </details>
 
   <div class="actions">
-    <button type="submit" class="primary" id="submit">Analyse my track</button>
-    <span class="busy" id="busy" role="status" hidden>Analysing, this takes a few seconds.</span>
+    <button type="submit" class="primary" id="submit">Analyser ma trace</button>
+    <span class="busy" id="busy" role="status" hidden>Analyse en cours, quelques secondes.</span>
   </div>
 </form>
 {% endblock %}

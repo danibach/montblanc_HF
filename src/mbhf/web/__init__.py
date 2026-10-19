@@ -1,4 +1,4 @@
-"""The participant-facing web app: upload tracks, get the climbing time, places and graphs.
+"""The participant-facing web app (in French): upload tracks, get the climbing time, places and graphs.
 
 Run locally::
 
@@ -18,15 +18,17 @@ from typing import Optional
 
 from flask import Flask, Response, render_template, request
 
+from ..i18n import CONFIDENCE_FR, KIND_FR, VERDICT_FR
 from ..service import AnalysisError, Upload, analyse_uploads
 from ..transport import LineSet, Schedule, load_lines, load_schedule
 
 MAX_UPLOAD_BYTES = 60 * 1024 * 1024
+LANG = "fr"
 MODE_CHOICES = (
-    ("", "Whole day, parts detected automatically"),
-    ("bike", "Bike ride only"),
-    ("walk", "Walk only"),
-    ("flight", "Flight only"),
+    ("", "Toute la journée, parties détectées automatiquement"),
+    ("bike", "Trajet à vélo seulement"),
+    ("walk", "Marche seulement"),
+    ("flight", "Vol seulement"),
 )
 CUT_FIELDS = ("walk_start", "takeoff", "landing", "bike_return_start")
 
@@ -57,11 +59,20 @@ def _dur(seconds) -> str:
     return f"{s} s"
 
 
+def _num(value) -> str:
+    """12.5 -> 12,5"""
+    return str(value).replace(".", ",")
+
+
 def create_app(lines: Optional[LineSet] = None, schedule: Optional[Schedule] = None) -> Flask:
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
     app.jinja_env.filters["hms"] = _hms
     app.jinja_env.filters["dur"] = _dur
+    app.jinja_env.filters["num"] = _num
+    app.jinja_env.filters["verdict"] = lambda v: VERDICT_FR.get(v, v)
+    app.jinja_env.filters["kind"] = lambda v: KIND_FR.get(v, v)
+    app.jinja_env.filters["confidence"] = lambda v: CONFIDENCE_FR.get(v, v)
     lines = load_lines() if lines is None else lines
     schedule = load_schedule() if schedule is None else schedule
 
@@ -91,14 +102,14 @@ def create_app(lines: Optional[LineSet] = None, schedule: Optional[Schedule] = N
             mode = (modes[i] if i < len(modes) else "") or None
             uploads.append(Upload(filename=f.filename, data=f.read(), mode=mode))
         try:
-            result = analyse_uploads(uploads, cuts, lines, schedule)
+            result = analyse_uploads(uploads, cuts, lines, schedule, lang=LANG)
         except AnalysisError as exc:
             return page_index(error=str(exc), cuts=cuts, status=400)
         except Exception as exc:  # never show internals, never log file content
             app.logger.error("analysis failed: %s", type(exc).__name__)
             return page_index(
-                error="Something went wrong while analysing this file. Check that it is a complete export "
-                "of one recording, or send it to the organisers.",
+                error="Un problème est survenu pendant l'analyse de ce fichier. Vérifiez qu'il s'agit de "
+                "l'export complet d'un enregistrement, ou envoyez-le aux organisateurs.",
                 cuts=cuts,
                 status=500,
             )
@@ -116,8 +127,8 @@ def create_app(lines: Optional[LineSet] = None, schedule: Optional[Schedule] = N
     @app.errorhandler(413)
     def too_large(_exc):
         return page_index(
-            error=f"These files are larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB together. "
-            "Send one recording at a time, or export at a lower recording rate.",
+            error=f"Ces fichiers dépassent {MAX_UPLOAD_BYTES // (1024 * 1024)} Mo au total. "
+            "Envoyez un enregistrement à la fois, ou exportez avec une fréquence d'enregistrement plus basse.",
             status=413,
         )
 

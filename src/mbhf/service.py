@@ -15,6 +15,7 @@ from typing import Optional
 
 from .chrono import chrono_to_dict, compute_chrono
 from .cli import result_to_dict
+from .i18n import msg, translate
 from .merge import merge_tracks
 from .models import MODES, TrackError
 from .parsers import load_track
@@ -50,16 +51,13 @@ def _display_name(name: str) -> str:
     return re.sub(r"[^\w.\- ()]", "_", base)[:80] or "track"
 
 
-def _cut(text: str, label: str):
+def _cut(text: str, key: str, lang: str):
     text = (text or "").strip()
     if not text:
         return None
     when = parse_iso_time(text)
     if when is None:
-        raise AnalysisError(
-            f"{label}: cannot read {text!r} as a time. Use a form like 2026-09-12T09:41:10Z "
-            "(add Z for UTC, or an offset such as +02:00)."
-        )
+        raise AnalysisError(msg(lang, "bad_time", label=msg(lang, key), text=text))
     return when
 
 
@@ -69,15 +67,17 @@ def analyse_uploads(
     lines: Optional[LineSet] = None,
     schedule: Optional[Schedule] = None,
     max_fixes: int = MAX_FIXES,
+    lang: str = "en",
 ) -> Analysis:
+    """Analyse the uploads. ``lang`` ("en" or "fr") is the language of every message and label."""
     if not uploads:
-        raise AnalysisError("Choose at least one track file (IGC, GPX, KML or FIT).")
+        raise AnalysisError(msg(lang, "no_file"))
     cuts = cuts or {}
     parsed_cuts = Cuts(
-        walk_start=_cut(cuts.get("walk_start", ""), "Start of the walk"),
-        takeoff=_cut(cuts.get("takeoff", ""), "Take-off"),
-        landing=_cut(cuts.get("landing", ""), "Landing"),
-        bike_return_start=_cut(cuts.get("bike_return_start", ""), "Start of the ride back"),
+        walk_start=_cut(cuts.get("walk_start", ""), "cut_walk_start", lang),
+        takeoff=_cut(cuts.get("takeoff", ""), "cut_takeoff", lang),
+        landing=_cut(cuts.get("landing", ""), "cut_landing", lang),
+        bike_return_start=_cut(cuts.get("bike_return_start", ""), "cut_bike_return_start", lang),
     )
     tracks = []
     with tempfile.TemporaryDirectory(prefix="mbhf-") as tmp:
@@ -85,49 +85,66 @@ def analyse_uploads(
             shown = _display_name(up.filename)
             ext = os.path.splitext(shown)[1].lower()
             if ext not in ALLOWED_EXTENSIONS:
-                raise AnalysisError(f"{shown}: this file type is not accepted. Use IGC, GPX, KML or FIT.")
+                raise AnalysisError(msg(lang, "bad_ext", name=shown))
             if up.mode is not None and up.mode not in MODES:
-                raise AnalysisError(f"{shown}: unknown part type {up.mode!r}.")
+                raise AnalysisError(msg(lang, "bad_mode", name=shown, mode=up.mode))
             if not up.data:
-                raise AnalysisError(f"{shown}: the file is empty. Check the export and send it again.")
+                raise AnalysisError(msg(lang, "empty", name=shown))
             path = os.path.join(tmp, f"track{idx}{ext}")
             with open(path, "wb") as fh:
                 fh.write(up.data)
             try:
                 tr = load_track(path, hint=up.mode, src=idx)
             except TrackError as exc:
-                raise AnalysisError(_clean(str(exc), path, shown)) from exc
+                raise AnalysisError(translate(lang, _clean(str(exc), path, shown))) from exc
             tr.source = shown
             tracks.append(tr)
 
-    track = tracks[0] if len(tracks) == 1 else _merge(tracks)
+    track = tracks[0] if len(tracks) == 1 else _merge(tracks, lang)
     if len(track.points) > max_fixes:
-        raise AnalysisError(
-            f"This track has {len(track.points):,} points, more than the {max_fixes:,} the service accepts. "
-            "Export the days separately or at a lower recording rate."
-        )
+        raise AnalysisError(msg(lang, "too_many", n=len(track.points), max=max_fixes))
     try:
         res = segment_track(track, parsed_cuts)
     except SegmentationError as exc:
-        raise AnalysisError(str(exc)) from exc
+        raise AnalysisError(translate(lang, str(exc))) from exc
     rules = load_ruleset()
     lines = load_lines() if lines is None else lines
     schedule = load_schedule() if schedule is None else schedule
     chrono = compute_chrono(track, res, rules, lines, schedule)
 
     data = result_to_dict(track, res, [t.source for t in tracks], chrono)
-    data["report"] = build_report(track, res, chrono, rules)
-    fig = render_figure(track, res, chrono)
+    data["report"] = build_report(track, res, chrono, rules, lang)
+    if lang == "fr":
+        _translate_data(data, lang)
+    fig = render_figure(track, res, chrono, lang=lang)
     buf = io.BytesIO()
     fig.savefig(buf, format="png")
     return Analysis(data=data, png=buf.getvalue())
 
 
-def _merge(tracks):
+def _translate_data(data: dict, lang: str) -> None:
+    """French messages for the lists a participant reads; keys and codes stay as they are."""
+    data["warnings"] = [translate(lang, w) for w in data["warnings"]]
+    ch = data.get("chrono")
+    if not ch:
+        return
+    ch["problems"] = [translate(lang, m) for m in ch["problems"]]
+    # The per-stretch lines repeat the transport section, so they are not repeated as notes.
+    ch["notes"] = [
+        translate(lang, n) for n in ch["notes"] if not re.match(r"^(tram|lift|review): ", n)
+    ]
+    tp = ch.get("transport")
+    if tp:
+        tp["notes"] = [translate(lang, n) for n in tp["notes"]]
+        for st in tp["stretches"]:
+            st["reason"] = translate(lang, st["reason"])
+
+
+def _merge(tracks, lang: str = "en"):
     try:
         return merge_tracks(tracks)
     except (TrackError, ValueError) as exc:
-        raise AnalysisError(str(exc)) from exc
+        raise AnalysisError(translate(lang, str(exc))) from exc
 
 
 def _clean(message: str, path: str, shown: str) -> str:

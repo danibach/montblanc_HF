@@ -32,7 +32,7 @@
       if (busy) busy.hidden = false;
       if (button) {
         button.disabled = true;
-        button.textContent = "Analysing…";
+        button.textContent = "Analyse en cours…";
       }
     });
   }

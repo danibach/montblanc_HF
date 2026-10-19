@@ -40,7 +40,7 @@ def post(client, files, **form):
 
 def test_the_form_page_and_its_security_headers(client):
     r = client.get("/")
-    assert r.status_code == 200 and b"Analyse my track" in r.data
+    assert r.status_code == 200 and b"Analyser ma trace" in r.data
     csp = r.headers["Content-Security-Policy"]
     assert "default-src 'none'" in csp and "unsafe-inline" not in csp
     assert r.headers["X-Content-Type-Options"] == "nosniff" and r.headers["Referrer-Policy"] == "no-referrer"
@@ -51,24 +51,24 @@ def test_a_valid_track_gives_the_time_the_places_and_the_graph(client, day_gpx):
     r = post(client, [("my day.gpx", day_gpx)])
     assert r.status_code == 200
     html = r.data.decode()
-    assert "Places detected" in html and "Take-off" in html and "Last exit from the Nid d" in html
+    assert "Lieux détectés" in html and "Décollage" in html and "Dernière sortie du cylindre du Nid d" in html
     assert 'src="data:image/png;base64,' in html
-    assert "Provisional result" in html                      # no line data loaded in this fixture
+    assert "Résultat provisoire" in html                      # no line data loaded in this fixture
     assert r.headers["Cache-Control"] == "no-store"
 
 
 def test_no_file_is_a_clear_error(client):
     r = client.post("/analyse", data={}, content_type="multipart/form-data")
-    assert r.status_code == 400 and b"Choose at least one track file" in r.data
+    assert r.status_code == 400 and b"Choisissez au moins un fichier" in r.data
 
 
 def test_wrong_extension_empty_file_and_untimed_kml_are_explained(client):
-    assert b"not accepted" in post(client, [("notes.txt", b"hello")]).data
-    assert b"file is empty" in post(client, [("a.gpx", b"")]).data
+    assert b"pas accept" in post(client, [("notes.txt", b"hello")]).data
+    assert b"le fichier est vide" in post(client, [("a.gpx", b"")]).data
     kml = b'<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><LineString><coordinates>6.7,45.8,1000 6.71,45.81,1010</coordinates></LineString></Placemark></Document></kml>'
     r = post(client, [("Rando-Vol.kml", kml)])
     assert r.status_code == 400
-    assert b"timestamps are required" in r.data and b"Rando-Vol.kml" in r.data
+    assert b"horodatages sont obligatoires" in r.data and b"Rando-Vol.kml" in r.data
     assert b"/tmp" not in r.data and b"mbhf-" not in r.data  # no temporary path leaks
 
 
@@ -79,7 +79,7 @@ def test_a_hostile_file_name_is_escaped(client):
 
 def test_a_bad_manual_time_is_refused_and_kept_in_the_form(client, day_gpx):
     r = post(client, [("d.gpx", day_gpx)], takeoff="tomorrow morning")
-    assert r.status_code == 400 and b"cannot read" in r.data and b"tomorrow morning" in r.data
+    assert r.status_code == 400 and b"impossible de lire" in r.data and b"tomorrow morning" in r.data
 
 
 def test_oversized_uploads_get_a_clear_message():
@@ -88,15 +88,15 @@ def test_oversized_uploads_get_a_clear_message():
     r = app.test_client().post(
         "/analyse", data={"track": (io.BytesIO(b"x" * 5000), "big.gpx")}, content_type="multipart/form-data"
     )
-    assert r.status_code == 413 and b"larger than" in r.data
+    assert r.status_code == 413 and b"d\xc3\xa9passent" in r.data
 
 
 def test_a_tram_ride_is_shown_as_flagged():
     app = create_app(lines=TRAM, schedule=UNKNOWN)
     r = post(app.test_client(), [("ride.gpx", gpx_bytes(to_track(cyl_day(ascent_a_s=3600))))])
     html = r.data.decode()
-    assert r.status_code == 200 and "This track is flagged" in html and "Rails and lifts on the way up" in html
-    assert "Provisional result" not in html                  # the check ran
+    assert r.status_code == 200 and "Cette trace est signalée" in html and "Voies et remontées pendant la montée" in html
+    assert "Résultat provisoire" not in html                  # the check ran
 
 
 def test_two_files_with_their_modes(client):
@@ -109,4 +109,4 @@ def test_two_files_with_their_modes(client):
     data = {"track": [(io.BytesIO(gpx_bytes(walk)), "walk.gpx"), (io.BytesIO(gpx_bytes(rest)), "flight.gpx")],
             "mode": ["walk", "flight"]}
     r = client.post("/analyse", data=data, content_type="multipart/form-data")
-    assert r.status_code == 200 and b"Places detected" in r.data
+    assert r.status_code == 200 and "Lieux détectés".encode() in r.data

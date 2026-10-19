@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Check your Mont-Blanc track{% endblock %}</title>
+  <title>{% block title %}Vérifiez votre trace du Mont-Blanc{% endblock %}</title>
   <meta name="robots" content="noindex">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
@@ -11,14 +11,14 @@
 <body>
   <header class="site">
     <a class="site-name" href="{{ url_for('index') }}">Mont-Blanc Hike &amp; Fly</a>
-    <span class="site-note">Track check, draft rules</span>
+    <span class="site-note">Vérification de trace, règlement en projet</span>
   </header>
   <main>
     {% block main %}{% endblock %}
   </main>
   <footer class="site">
-    <p>Your files are read in memory and deleted before the page is shown. This service does not store your tracks or your results.</p>
-    <p>The result is automatic and provisional. The organisers review every submission before a badge or a rank is given.</p>
+    <p>Vos fichiers sont lus en mémoire puis supprimés avant l'affichage de la page. Ce service ne conserve ni vos traces ni vos résultats.</p>
+    <p>Le résultat est automatique et provisoire. L'équipe examine chaque dossier avant d'attribuer un badge ou un rang.</p>
   </footer>
 </body>
 </html>
