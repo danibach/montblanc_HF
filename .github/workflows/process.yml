@@ -1,0 +1,55 @@
+name: Process new outings
+
+# Every ten minutes (and when asked): analyse the outings waiting in Supabase, publish them, and
+# fill in place names that OpenStreetMap could not give earlier. The first step also keeps the free
+# Supabase project awake (it pauses after a week without activity).
+#
+# Needs two repository secrets (Settings > Secrets and variables > Actions):
+#   SUPABASE_URL           e.g. https://xxxx.supabase.co
+#   SUPABASE_SERVICE_KEY   the "secret" key of the project (Project Settings > API Keys)
+# GitHub switches scheduled workflows off after 60 days without any commit in the repository.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [new-outing]
+
+concurrency:
+  group: process-outings
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Keep Supabase awake (public key only)
+        run: |
+          URL=$(grep -oP "SUPABASE_URL: '\K[^']+" site/config.js)
+          KEY=$(grep -oP "SUPABASE_PUBLISHABLE_KEY: '\K[^']+" site/config.js)
+          curl --fail --silent --show-error --max-time 30 -H "apikey: $KEY" "$URL/rest/v1/outings?select=id&limit=1" > /dev/null
+
+      - name: Anything waiting?
+        id: todo
+        if: env.SUPABASE_SERVICE_KEY != ''
+        run: python3 scripts/process_pending.py --count-only
+
+      - uses: actions/setup-python@v5
+        if: steps.todo.outputs.count != '' && steps.todo.outputs.count != '0'
+        with:
+          python-version: "3.13"
+
+      - name: Analyse and publish
+        if: steps.todo.outputs.count != '' && steps.todo.outputs.count != '0'
+        run: |
+          pip install --quiet .
+          python scripts/process_pending.py

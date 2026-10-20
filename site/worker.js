@@ -1,5 +1,5 @@
 // Runs the Python analysis (package mbhf) in the participant's browser, off the page's main thread.
-// Nothing is sent anywhere: the files' bytes stay in this worker.
+// Nothing is sent anywhere from here: the file's bytes stay in this worker.
 
 import { loadPyodide } from './pyodide/pyodide.mjs';
 
@@ -7,9 +7,9 @@ let ready = null;
 
 async function boot() {
   const manifest = await (await fetch('manifest.json', { cache: 'no-cache' })).json();
-  post({ type: 'progress', text: 'Chargement de Python dans votre navigateur…' });
+  post({ type: 'progress', text: 'Loading Python in your browser…' });
   const py = await loadPyodide({ indexURL: new URL('./pyodide/', import.meta.url).href });
-  post({ type: 'progress', text: "Installation du programme d'analyse…" });
+  post({ type: 'progress', text: 'Installing the analysis program…' });
   for (const name of manifest.wheels) {
     const buf = await (await fetch(`py/${name}`)).arrayBuffer();
     py.unpackArchive(new Uint8Array(buf), 'wheel');
@@ -21,7 +21,8 @@ import sys
 sys.path.insert(0, "/home/pyodide/engine")
 import mbhf.browser
 `);
-  return { py, analyse: py.globals.get('mbhf').browser.analyse_json, version: manifest.version };
+  const browser = py.globals.get('mbhf').browser;
+  return { py, browser, version: manifest.version };
 }
 
 function post(msg) {
@@ -35,28 +36,28 @@ self.onmessage = async (ev) => {
     const engine = await ready;
     if (msg.type === 'init') {
       post({ type: 'ready', version: engine.version });
-      return;
-    }
-    if (msg.type === 'analyse') {
-      const files = engine.py.toPy(
-        msg.files.map((f) => [f.name, new Uint8Array(f.bytes), f.mode || null])
-      );
-      const cuts = engine.py.toPy(msg.cuts || {});
+    } else if (msg.type === 'analyse') {
+      const data = engine.py.toPy(new Uint8Array(msg.bytes));
       let text;
       try {
-        text = engine.analyse(files, cuts);
+        text = engine.browser.analyse_json(msg.name, data);
       } finally {
-        files.destroy();
-        cuts.destroy();
+        data.destroy();
       }
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'places_query') {
+      const q = engine.browser.places_query(JSON.stringify(msg.outing));
+      post({ type: 'result', id: msg.id, payload: { query: q === undefined ? null : q } });
+    } else if (msg.type === 'places') {
+      const text = engine.browser.resolve_places_json(JSON.stringify(msg.outing), JSON.stringify(msg.overpass));
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
     }
   } catch (err) {
     ready = msg.type === 'init' ? null : ready;
     post({
-      type: msg.type === 'analyse' ? 'result' : 'failed',
+      type: msg.type === 'init' ? 'failed' : 'result',
       id: msg.id,
-      payload: { ok: false, error: "L'analyse n'a pas pu démarrer dans votre navigateur.", detail: String(err && err.message || err) },
+      payload: { ok: false, error: 'The analysis could not start in your browser.', detail: String((err && err.message) || err) },
     });
   }
 };

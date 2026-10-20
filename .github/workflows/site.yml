@@ -33,7 +33,7 @@ jobs:
           node-version: "22"
 
       - name: Installer le programme et les outils de test
-        run: pip install -e ".[web,dev]" playwright
+        run: pip install -e ".[dev]" playwright
 
       - name: Tests du programme d'analyse
         run: pytest -q

@@ -1,4 +1,4 @@
-"""Synthetic tracks for tests: a bike ride, an ascent on foot, a flight, and the way back.
+"""Synthetic tracks for tests: a climb on foot, a flight, a second climb, a ride.
 
 The numbers are plausible but invented. They prove the code does what it is designed to do;
 they do NOT prove it works on real tracks, which still have to be tested.
@@ -13,11 +13,11 @@ from typing import Optional
 
 from mbhf.models import Point, Track
 
-T0 = datetime(2026, 9, 12, 5, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 9, 12, 6, 0, 0, tzinfo=timezone.utc)
 
 
 class Gen:
-    def __init__(self, t0: datetime = T0, lat: float = 45.90, lon: float = 6.80, alt: float = 600.0, seed: int = 1):
+    def __init__(self, t0: datetime = T0, lat: float = 45.90, lon: float = 6.80, alt: float = 1000.0, seed: int = 1):
         self.t = t0
         self.lat0, self.lon0 = lat, lon
         self.x = self.y = 0.0
@@ -34,12 +34,10 @@ class Gen:
         vz: float,
         heading: float,
         dt: float = 5.0,
-        hint: Optional[str] = None,
         wobble: float = 0.0,
         ramp: float = 0.0,
         circling: Optional[tuple[float, float, float, float]] = None,  # (start_s, end_s, deg_per_s, vz)
-        noise: tuple[float, float] = (3.0, 6.0),
-        src: int = 0,
+        noise: tuple[float, float] = (3.0, 4.0),
     ) -> None:
         if name:
             self.marks[name] = self.t
@@ -61,8 +59,6 @@ class Gen:
                     lat=self.lat0 + (self.y + self.rng.gauss(0, noise[0])) / 111_320.0,
                     lon=self.lon0 + (self.x + self.rng.gauss(0, noise[0])) / (111_320.0 * math.cos(math.radians(self.lat0))),
                     alt=self.alt + self.rng.gauss(0, noise[1]),
-                    hint=hint,
-                    src=src,
                 )
             )
             self.x += v * dt * math.sin(hr)
@@ -71,25 +67,70 @@ class Gen:
             self.t += timedelta(seconds=dt)
 
 
-def full_day(seed: int = 1, steep_descent: bool = False) -> Gen:
-    """Bike out, stop, ascent, summit pause, flight (with a thermal), landing, walk, bike back.
+def hike_and_fly(seed: int = 1) -> Gen:
+    """Start at 1 000 m, climb 1 200 m on foot in 2 h, pause, fly 25 min down ~1 150 m, walk 10 min.
 
-    Altitudes follow the real geography: valley at ~580 m, summit at ~4 800 m.
+    Expected: D+ about 1 200 m, D- about 1 150 m, one flight.
     """
-    g = Gen(seed=seed, alt=580.0)
-    g.leg("bike_out", 60 * 60, 15, 0.29, 80)                       # ride up to ~1 650 m
-    if steep_descent:
-        # a steep, straight bike descent (40 km/h, 12 % grade): looks like a glide on speed and sink alone
-        g.leg(None, 3 * 60, 40, -1.3, 80)
-        g.leg(None, 12 * 60, 12, 0.55, 80)
-    g.leg(None, 60, 0, 0.0, 80)                                    # standing at the transition
-    g.leg("ascent", 9 * 3600, 2.8, 0.097, 60, wobble=10)           # ~ +3 150 m on foot
-    g.leg(None, 5 * 60, 0, 0.0, 60)                                # summit pause, kit up
-    g.leg("flight", 25 * 60, 38, -2.7, 230, dt=2.0, wobble=25, ramp=20, circling=(500, 620, 18.0, 1.6))
-    g.leg("landing_walk", 10 * 60, 4.0, -0.05, 250, wobble=15)
-    g.leg("bike_return", 50 * 60, 32, -0.2, 250)
+    g = Gen(seed=seed, alt=1000.0)
+    g.leg("walk_up", 2 * 3600, 2.6, 1200 / 7200, 60, wobble=12)
+    g.leg("summit_pause", 5 * 60, 0, 0.0, 60)
+    g.leg("flight", 25 * 60, 38, -1150 / 1500, 230, dt=2.0, wobble=25, ramp=20, circling=(500, 620, 18.0, 1.6))
+    g.leg("landing_walk", 10 * 60, 4.0, -0.01, 250, wobble=15)
     return g
 
 
-def as_track(g: Gen, source: str = "synthetic", hint: Optional[str] = None) -> Track:
-    return Track(points=list(g.points), source=source, fmt="gpx", hint=hint)
+def two_flights(seed: int = 2) -> Gen:
+    """Climb 800 m, fly down 700 m, climb again 500 m (steeper), fly down 500 m."""
+    g = Gen(seed=seed, alt=900.0)
+    g.leg("up1", 80 * 60, 2.4, 800 / 4800, 70, wobble=12)
+    g.leg("pause1", 4 * 60, 0, 0.0, 70)
+    g.leg("fly1", 14 * 60, 36, -700 / 840, 220, dt=2.0, wobble=20, ramp=15)
+    g.leg("walk1", 8 * 60, 4.0, 0.0, 240, wobble=10)
+    g.leg("up2", 50 * 60, 2.4, 500 / 3000, 20, wobble=12)
+    g.leg("pause2", 4 * 60, 0, 0.0, 20)
+    g.leg("fly2", 10 * 60, 36, -500 / 600, 200, dt=2.0, wobble=20, ramp=15)
+    g.leg("walk2", 5 * 60, 4.0, 0.0, 200, wobble=10)
+    return g
+
+
+def drive_then_walk(seed: int = 3) -> Gen:
+    """No flight: a walk up and down. Rejected."""
+    g = Gen(seed=seed, alt=1000.0)
+    g.leg("up", 90 * 60, 2.5, 700 / 5400, 60, wobble=12)
+    g.leg("down", 60 * 60, 3.5, -700 / 3600, 240, wobble=12)
+    return g
+
+
+def lift_then_fly(seed: int = 4) -> Gen:
+    """A cable-car ride (fast, steady climb), then a flight: almost no walking, so rejected."""
+    g = Gen(seed=seed, alt=1000.0)
+    g.leg("walk_to_lift", 5 * 60, 4.0, 0.0, 60)
+    g.leg("lift", 10 * 60, 22, 1.5, 60, dt=3.0, noise=(2.0, 3.0))
+    g.leg("pause", 3 * 60, 0, 0.0, 60)
+    g.leg("flight", 15 * 60, 36, -900 / 900, 230, dt=2.0, wobble=20, ramp=15)
+    g.leg("walk", 5 * 60, 4.0, 0.0, 230)
+    return g
+
+
+def as_track(g: Gen, source: str = "synthetic") -> Track:
+    return Track(points=list(g.points), source=source, fmt="gpx")
+
+
+def gpx_bytes(track: Track, with_time: bool = True, with_alt: bool = True) -> bytes:
+    rows = []
+    for p in track.points:
+        t = f"<time>{p.t.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}</time>" if with_time else ""
+        e = f"<ele>{p.alt:.1f}</ele>" if with_alt else ""
+        rows.append(f'<trkpt lat="{p.lat:.6f}" lon="{p.lon:.6f}">{e}{t}</trkpt>')
+    return ('<?xml version="1.0"?><gpx version="1.1"><trk><trkseg>' + "".join(rows) + "</trkseg></trk></gpx>").encode()
+
+
+def hike_then_drive_home(seed: int = 5) -> Gen:
+    """Climb 700 m on foot, walk back down to the car park, then drive down a long road: no flight."""
+    g = Gen(seed=seed, alt=1500.0)
+    g.leg("up", 80 * 60, 2.6, 700 / 4800, 60, wobble=12)
+    g.leg("down", 60 * 60, 3.6, -700 / 3600, 240, wobble=12)
+    g.leg("pause", 3 * 60, 0, 0.0, 240)
+    g.leg("drive", 25 * 60, 45, -0.7, 200, dt=3.0, wobble=6, noise=(2.0, 3.0))
+    return g
