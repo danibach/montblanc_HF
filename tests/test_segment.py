@@ -38,7 +38,7 @@ def test_flight_boundaries_are_close_to_the_truth():
     assert abs((fl.t_end - g.marks["landing_walk"]).total_seconds()) < 60
 
 
-def test_a_steep_fast_descent_from_a_summit_is_still_a_flight():
+def test_a_speed_riding_descent_from_a_summit_is_still_a_flight():
     assert "flight" in modes(steep_flight_then_bike())
 
 
@@ -48,3 +48,8 @@ def test_the_ride_after_landing_is_not_part_of_the_flight():
     fl = [s for s in seg.segments if s.mode == "flight"][0]
     assert abs((fl.t_end - g.marks["bike"]).total_seconds()) < 60
     assert seg.segments[-1].mode == "vehicle"
+
+
+def test_a_descent_steeper_than_any_wing_glides_is_not_a_flight():
+    """4.5 m/s of sink at 38 km/h is a glide of 2.3:1: a slope under the feet (ski, bike)."""
+    assert "flight" not in modes(steep_flight_then_bike(sink=4.5))

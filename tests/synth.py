@@ -136,11 +136,12 @@ def hike_then_drive_home(seed: int = 5) -> Gen:
     return g
 
 
-def steep_flight_then_bike(seed: int = 6) -> Gen:
-    """Climb to 4 700 m, long pause, a steep fast descent (4.5 m/s of sink at 38 km/h), then a bike ride on the flat."""
+def steep_flight_then_bike(seed: int = 6, sink: float = 2.5) -> Gen:
+    """Climb to 4 700 m, long pause, a steep fast descent (2.5 m/s of sink at 38 km/h: glide 4:1, a speed-riding
+    wing), then a bike ride on the flat."""
     g = Gen(seed=seed, alt=1000.0)
     g.leg("walk_up", 3 * 3600, 2.6, 3700 / 10800, 60, wobble=12)
     g.leg("summit_pause", 10 * 60, 0, 0.0, 60)
-    g.leg("flight", 15 * 60, 38, -4.5, 230, dt=2.0, wobble=10, ramp=20)
+    g.leg("flight", 15 * 60, 38, -sink, 230, dt=2.0, wobble=10, ramp=20)
     g.leg("bike", 10 * 60, 30, 0.0, 250, dt=5.0, wobble=5)
     return g

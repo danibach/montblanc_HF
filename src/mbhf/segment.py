@@ -51,9 +51,10 @@ class SegmenterConfig:
     # flying
     flight_min_kmh: float = 15.0
     flight_max_kmh: float = 85.0
-    # A wing glides about 8:1, but big ears, a headwind or a speed bar make it much steeper; below 2:1 it is
-    # a slope under the feet (checked on a Mont-Blanc descent at 4:1 with 4-5 m/s of sink, which is fine)
-    flight_min_glide: float = 2.0
+    # Glide over the ground (wind included): a paraglider 7-9:1, a run&fly wing 6:1 or more, a speed-riding
+    # wing 4-5:1. A fix that sinks faster than 2 m/s and glides worse than this is a slope under the feet.
+    # On seven real tracks (flights from 5 to 179 minutes) any value from 2 to 6 gives the same result.
+    flight_min_glide: float = 4.0
     circling_sinuosity: float = 1.6
     # when speed and sink cannot tell a glide from a ride, prefer the glide (this is a Hike & Fly site)
     vehicle_bias: float = 0.3
