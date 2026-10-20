@@ -431,8 +431,9 @@ function pageLogin() {
   const email = h('input', { type: 'email', id: 'email', required: true, autocomplete: 'email', placeholder: 'you@example.com' });
   const msg = h('div');
   let token = '';
+  const needsCheck = Boolean(CONFIG.TURNSTILE_SITE_KEY);
   const captcha = h('div', { id: 'captcha' });
-  const submit = h('button', { class: 'primary' }, 'Send me a sign-in link');
+  const submit = h('button', { class: 'primary', disabled: needsCheck }, 'Send me a sign-in link');
   const form = h('form', { class: 'card', onsubmit: async (ev) => {
     ev.preventDefault();
     submit.disabled = true;
@@ -442,9 +443,10 @@ function pageLogin() {
       msg.replaceChildren(notice('ok', h('p', null, `We sent a sign-in link to ${email.value.trim()}. Open it on this device.`)));
     } catch (e) {
       msg.replaceChildren(notice('error', h('p', null, e.message)));
-      if (window.turnstile) window.turnstile.reset();
+      // a check can be used once: ask for a new one, and wait for it before the next try
       token = '';
-    } finally { submit.disabled = false; }
+      if (window.turnstile) window.turnstile.reset();
+    } finally { submit.disabled = needsCheck && !token; }
   } },
     h('label', { for: 'email' }, 'Your e-mail address'),
     h('div', { class: 'row' }, email, submit), captcha, msg,
@@ -456,7 +458,7 @@ function pageLogin() {
   const hashError = sessionStorageGet('signin-error');
   if (hashError) nodes.unshift(notice('error', h('p', null, hashError)));
   show(nodes);
-  loadTurnstile(captcha, (t) => { token = t; });
+  loadTurnstile(captcha, (t) => { token = t; submit.disabled = needsCheck && !token; });
 }
 
 function sessionStorageGet(key) {
