@@ -130,7 +130,7 @@ def process_pending(api: Api) -> None:
             }
             reason = messages.get(outing["reason"], "This track does not count.")
             if outing["reason"] == "no_flight" and any("follows the ground" in w for w in outing["warnings"]):
-                reason = "The descent follows the ground (ski, bike or run): no flight found."
+                reason = next(w for w in outing["warnings"] if "follows the ground" in w)
             reject(api, row["id"], reason)
             continue
 

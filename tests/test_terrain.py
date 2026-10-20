@@ -1,7 +1,7 @@
 from synth import as_track, gpx_bytes, hike_and_fly, steep_flight_then_bike
 
 from mbhf.analyse import analyse_bytes, prepare_bytes, terrain_query_for, with_terrain
-from mbhf.terrain import (TerrainConfig, apply_terrain, elevation_query, parse_elevations, sample_flights)
+from mbhf.terrain import elevation_query, parse_elevations, sample_flights
 
 
 def data(g):
@@ -26,7 +26,8 @@ def test_a_flight_well_above_the_ground_is_kept():
     s = sample_flights(p.track, p.seg)
     r = with_terrain(p, ground_like(s, below=300))
     assert r["outing"]["status"] == "ok" and r["outing"]["dminus_m"] > 800
-    assert not any("follows the ground" in w for w in r["outing"]["warnings"])
+    assert not any("follows the ground" in w or "to be checked" in w for w in r["outing"]["warnings"])
+    assert any(w.startswith("Terrain: 100%") for w in r["outing"]["warnings"])
 
 
 def test_a_descent_that_follows_the_ground_is_not_a_flight():
@@ -81,3 +82,13 @@ def test_the_browser_query_matches_the_samples():
     n = len(sample_flights(p.track, p.seg))
     lat, lon = q.split("&")
     assert lat.count(",") + 1 == n and lon.count(",") + 1 == n
+
+
+def test_a_descent_close_to_the_slope_is_kept_but_flagged():
+    """Speed riding: mostly near the ground, with a few stretches in the air."""
+    p = prepare_bytes("a.gpx", data(hike_and_fly()))
+    s = sample_flights(p.track, p.seg)
+    elev = [x["alt"] - (200 if k % 5 == 0 else 30) for k, x in enumerate(s)]
+    r = with_terrain(p, elev)
+    assert r["outing"]["status"] == "ok"
+    assert any("to be checked" in w for w in r["outing"]["warnings"])

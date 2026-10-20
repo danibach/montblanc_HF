@@ -37,8 +37,12 @@ USER_AGENT = "mbhf-hikeandfly/0.3 (https://github.com/danibach/montblanc_HF)"
 class TerrainConfig:
     # a fix is "in the air" when it is more than this above the ground
     air_height_m: float = 60.0
-    # a stretch is a flight when at least this share of its fixes are in the air
+    # a stretch is clearly a flight when at least this share of its fixes are in the air
     min_air_share: float = 0.35
+    # it clearly follows the ground when fewer than this share are in the air AND even its higher fixes
+    # (90th percentile of the heights) stay under ``ground_p90_m``; in between it is kept, with a note
+    ground_share: float = 0.10
+    ground_p90_m: float = 80.0
     # fewer valid fixes than this: no verdict, the flight is kept
     min_samples: int = 6
     # fixes to look up per flight: one every ``every_s`` seconds, between these bounds
@@ -107,12 +111,19 @@ def fetch_elevations(samples: list[dict], timeout: float = 20.0) -> Optional[lis
     return None
 
 
-def air_share(samples: list[dict], elevations: list[Optional[float]], cfg: TerrainConfig) -> Optional[float]:
-    """Share of the fixes more than ``air_height_m`` above the ground; None when too few can be judged."""
-    heights = [s["alt"] - e for s, e in zip(samples, elevations) if e is not None]
+def height_stats(samples: list[dict], elevations: list[Optional[float]], cfg: TerrainConfig) -> Optional[dict]:
+    """Heights above the ground along a flight: share in the air, median and 90th percentile (metres).
+    None when too few fixes can be judged."""
+    heights = sorted(s["alt"] - e for s, e in zip(samples, elevations) if e is not None)
     if len(heights) < cfg.min_samples:
         return None
-    return sum(1 for h in heights if h > cfg.air_height_m) / len(heights)
+    n = len(heights)
+    return {
+        "share": sum(1 for h in heights if h > cfg.air_height_m) / n,
+        "median": heights[n // 2],
+        "p90": heights[min(n - 1, int(0.9 * n))],
+        "n": n,
+    }
 
 
 def apply_terrain(
@@ -122,7 +133,10 @@ def apply_terrain(
     elevations: Optional[list[Optional[float]]],
     cfg: Optional[TerrainConfig] = None,
 ) -> tuple[SegmentationResult, list[str]]:
-    """Relabel the "flights" that follow the ground as vehicle. Returns the new segmentation and notes."""
+    """Relabel the "flights" that clearly follow the ground as vehicle. Returns the new segmentation and notes.
+
+    Three outcomes per flight: in the air (kept), clearly on the ground (ski, bike, run: not a flight),
+    or in between, e.g. speed riding close to the slope (kept, with a note to check it)."""
     cfg = cfg or TerrainConfig()
     if not samples:
         return seg, []
@@ -135,12 +149,20 @@ def apply_terrain(
         if s.mode != "flight":
             continue
         idx = [n for n, sm in enumerate(samples) if sm["flight"] == k]
-        share = air_share([samples[n] for n in idx], [elevations[n] for n in idx], cfg)
-        if share is not None and share < cfg.min_air_share:
+        st = height_stats([samples[n] for n in idx], [elevations[n] for n in idx], cfg)
+        if st is None:
+            continue
+        line = (f"Terrain: {st['share']:.0%} of the descent is more than {cfg.air_height_m:.0f} m above the ground "
+                f"(median height {st['median']:.0f} m).")
+        if st["share"] >= cfg.min_air_share:
+            notes.append(line)
+        elif st["share"] < cfg.ground_share and st["p90"] < cfg.ground_p90_m:
             for i in range(s.i_start, s.i_end + 1):
                 labels[i] = VEHICLE
             changed = True
-            notes.append("A fast descent follows the ground (ski, bike or run), so it is not counted as a flight.")
+            notes.append("A fast descent follows the ground (ski, bike or run), so it is not counted as a flight. " + line)
+        else:
+            notes.append(line + " It stays close to the ground: counted as a flight, to be checked.")
     if not changed:
         return seg, notes
     return SegmentationResult(segments=_build_segments(track.points, labels), labels=labels, warnings=seg.warnings), notes
