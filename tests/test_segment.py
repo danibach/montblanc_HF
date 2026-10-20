@@ -1,5 +1,5 @@
 from synth import (as_track, drive_then_walk, hike_and_fly, hike_then_drive_home, lift_then_fly,
-                   two_flights)
+                   steep_flight_then_bike, two_flights)
 
 from mbhf.segment import SegmenterConfig, segment_track
 
@@ -36,3 +36,15 @@ def test_flight_boundaries_are_close_to_the_truth():
     fl = [s for s in seg.segments if s.mode == "flight"][0]
     assert abs((fl.t_start - g.marks["flight"]).total_seconds()) < 60
     assert abs((fl.t_end - g.marks["landing_walk"]).total_seconds()) < 60
+
+
+def test_a_steep_fast_descent_from_a_summit_is_still_a_flight():
+    assert "flight" in modes(steep_flight_then_bike())
+
+
+def test_the_ride_after_landing_is_not_part_of_the_flight():
+    g = steep_flight_then_bike()
+    seg = segment_track(as_track(g), SegmenterConfig())
+    fl = [s for s in seg.segments if s.mode == "flight"][0]
+    assert abs((fl.t_end - g.marks["bike"]).total_seconds()) < 60
+    assert seg.segments[-1].mode == "vehicle"

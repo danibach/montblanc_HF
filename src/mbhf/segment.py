@@ -51,7 +51,9 @@ class SegmenterConfig:
     # flying
     flight_min_kmh: float = 15.0
     flight_max_kmh: float = 85.0
-    flight_min_glide: float = 3.0      # a paraglider glides at least 3 m forward per metre of sink
+    # A wing glides about 8:1, but big ears, a headwind or a speed bar make it much steeper; below 2:1 it is
+    # a slope under the feet (checked on a Mont-Blanc descent at 4:1 with 4-5 m/s of sink, which is fine)
+    flight_min_glide: float = 2.0
     circling_sinuosity: float = 1.6
     # when speed and sink cannot tell a glide from a ride, prefer the glide (this is a Hike & Fly site)
     vehicle_bias: float = 0.3
@@ -61,6 +63,10 @@ class SegmenterConfig:
     # starts more than ``launch_tolerance_m`` below the highest point of that walk is a drive home.
     launch_walk_s: float = 300.0
     launch_tolerance_m: float = 300.0
+    # After landing, a level stretch (altitude within ``landing_band_m``) of at least ``landing_tail_s`` at the
+    # end of a flight is the ground, not the air.
+    landing_band_m: float = 20.0
+    landing_tail_s: float = 120.0
 
 
 @dataclass
@@ -168,7 +174,7 @@ def _cost_flight(f: _Feat, c: SegmenterConfig) -> float:
             cost += min(1.5, (f.v - c.flight_max_kmh) * 0.05)
         if f.vz is not None:
             sink = -f.vz
-            # sinking faster than a 1:3 glide allows: a steep slope under the feet, not a wing
+            # sinking faster than the steepest glide allowed: a steep slope under the feet, not a wing
             if sink > 2.0 and sink > (f.v / 3.6) / c.flight_min_glide:
                 cost += 0.8
             # climbing in a straight line: a lift, not a thermal
@@ -237,6 +243,7 @@ def segment_track(track: Track, cfg: Optional[SegmenterConfig] = None) -> Segmen
         state = back[i][state]
 
     _drop_short_flights(pts, labels, cfg)
+    _trim_landing(pts, labels, cfg)
     _demote_unlaunched_flights(pts, labels, cfg)
     segments = _build_segments(pts, labels)
     return SegmentationResult(segments=segments, labels=labels)
@@ -254,6 +261,24 @@ def _drop_short_flights(pts: list[Point], labels: list[int], cfg: SegmenterConfi
             for k in range(i, j + 1):
                 labels[k] = WALK
         i = j + 1
+
+
+def _trim_landing(pts: list[Point], labels: list[int], cfg: SegmenterConfig) -> None:
+    """Cut the level stretch at the end of a flight: that is the pilot on the ground (walking or riding)."""
+    for label, i, j in _runs(labels):
+        tail = sorted(p.alt for p in pts[max(i, j - 6) : j + 1] if p.alt is not None)
+        if label != FLIGHT or not tail:
+            continue
+        end_alt = tail[len(tail) // 2]  # median of the last fixes: one noisy altitude must not decide
+        k = j
+        while k > i and pts[k - 1].alt is not None and abs(pts[k - 1].alt - end_alt) <= cfg.landing_band_m:
+            k -= 1
+        if k == i or (pts[j].t - pts[k].t).total_seconds() < cfg.landing_tail_s:
+            continue
+        dist = sum(haversine_m(pts[m].lat, pts[m].lon, pts[m + 1].lat, pts[m + 1].lon) for m in range(k, j))
+        speed = dist / (pts[j].t - pts[k].t).total_seconds() * 3.6
+        for m in range(k + 1, j + 1):
+            labels[m] = VEHICLE if speed > 8.0 else WALK
 
 
 def _runs(labels: list[int]) -> list[tuple[int, int, int]]:

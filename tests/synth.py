@@ -134,3 +134,13 @@ def hike_then_drive_home(seed: int = 5) -> Gen:
     g.leg("pause", 3 * 60, 0, 0.0, 240)
     g.leg("drive", 25 * 60, 45, -0.7, 200, dt=3.0, wobble=6, noise=(2.0, 3.0))
     return g
+
+
+def steep_flight_then_bike(seed: int = 6) -> Gen:
+    """Climb to 4 700 m, long pause, a steep fast descent (4.5 m/s of sink at 38 km/h), then a bike ride on the flat."""
+    g = Gen(seed=seed, alt=1000.0)
+    g.leg("walk_up", 3 * 3600, 2.6, 3700 / 10800, 60, wobble=12)
+    g.leg("summit_pause", 10 * 60, 0, 0.0, 60)
+    g.leg("flight", 15 * 60, 38, -4.5, 230, dt=2.0, wobble=10, ramp=20)
+    g.leg("bike", 10 * 60, 30, 0.0, 250, dt=5.0, wobble=5)
+    return g
