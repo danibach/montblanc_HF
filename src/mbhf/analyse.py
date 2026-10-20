@@ -14,6 +14,7 @@ from .models import Point, Track, TrackError
 from .outing import OutingConfig, build_outing, build_trace
 from .parsers import load_track
 from .segment import SegmenterConfig, segment_track
+from .terrain import apply_terrain, elevation_query, sample_flights
 
 ALLOWED_EXTENSIONS = (".igc", ".gpx", ".kml", ".fit")
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -47,8 +48,15 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> dict:
-    """Analyse one track file. Raises ``AnalysisError`` with a message fit to show the participant."""
+class Prepared:
+    """A file read and segmented, before the terrain check."""
+
+    def __init__(self, info: dict, track: Track, seg):
+        self.info, self.track, self.seg = info, track, seg
+
+
+def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Prepared:
+    """Read and segment one track file. Raises ``AnalysisError`` with a message fit to show the participant."""
     shown = _display_name(name)
     ext = os.path.splitext(shown)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -77,16 +85,42 @@ def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> di
         raise AnalysisError("This track is too short to analyse.")
 
     seg = segment_track(track, SegmenterConfig())
-    outing = build_outing(track, seg, OutingConfig())
+    info = {"name": shown, "format": ext[1:], "size": len(data), "sha256": sha256_hex(data), "fixes": fixes}
+    return Prepared(info, track, seg)
+
+
+def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
+    """The analysis result for a prepared file (with the segmentation the terrain check settled on)."""
+    seg = seg or prepared.seg
+    outing = build_outing(prepared.track, seg, OutingConfig())
+    if notes:
+        outing["warnings"] = list(outing["warnings"]) + [n for n in notes if n not in outing["warnings"]]
     return {
-        "file": {
-            "name": shown,
-            "format": ext[1:],
-            "size": len(data),
-            "sha256": sha256_hex(data),
-            "fixes": fixes,
-        },
+        "file": prepared.info,
         "outing": outing,
-        "trace": build_trace(track, seg.labels, OutingConfig().max_trace_points),
+        "trace": build_trace(prepared.track, seg.labels, OutingConfig().max_trace_points),
         "engine": {"version": __version__},
     }
+
+
+def terrain_query_for(prepared: Prepared) -> Optional[str]:
+    """What the browser must ask the elevation service for this file (None: no flight to check)."""
+    return elevation_query(sample_flights(prepared.track, prepared.seg))
+
+
+def with_terrain(prepared: Prepared, elevations: Optional[list]) -> dict:
+    """Redo the result after the terrain check, with the elevations the service gave (None: unavailable)."""
+    samples = sample_flights(prepared.track, prepared.seg)
+    seg, notes = apply_terrain(prepared.track, prepared.seg, samples, elevations)
+    return finish(prepared, seg, notes)
+
+
+def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES, elevation_fetch=None) -> dict:
+    """Analyse one track file. ``elevation_fetch(samples) -> [metres] | None`` switches the terrain check on
+    (the server passes ``terrain.fetch_elevations``). Raises ``AnalysisError`` with a message fit to show."""
+    prepared = prepare_bytes(name, data, max_bytes)
+    if elevation_fetch is None:
+        return finish(prepared)
+    samples = sample_flights(prepared.track, prepared.seg)
+    seg, notes = apply_terrain(prepared.track, prepared.seg, samples, elevation_fetch(samples) if samples else None)
+    return finish(prepared, seg, notes)

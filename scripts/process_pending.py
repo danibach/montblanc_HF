@@ -97,6 +97,7 @@ def look_up_places(outing: dict):
 def process_pending(api: Api) -> None:
     from mbhf.analyse import AnalysisError, analyse_bytes
     from mbhf.rows import outing_row
+    from mbhf.terrain import fetch_elevations
 
     for row in api.select(f"{TO_CHECK}&select=id,file_path,file_format&order=created_at.asc&limit={BATCH}"):
         print(f"outing {row['id']} ({row['file_path']})")
@@ -107,7 +108,7 @@ def process_pending(api: Api) -> None:
             print(f"  {exc}")
             continue
         try:
-            result = analyse_bytes(f"track.{row['file_format']}", data)
+            result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations)
         except AnalysisError as exc:
             reject(api, row["id"], str(exc))
             continue
@@ -127,7 +128,10 @@ def process_pending(api: Api) -> None:
                 "no_flight": "No flight found in this track.",
                 "too_little_climb": "Not enough climbing on foot before the flight (at least 100 m).",
             }
-            reject(api, row["id"], messages.get(outing["reason"], "This track does not count."))
+            reason = messages.get(outing["reason"], "This track does not count.")
+            if outing["reason"] == "no_flight" and any("follows the ground" in w for w in outing["warnings"]):
+                reason = "The descent follows the ground (ski, bike or run): no flight found."
+            reject(api, row["id"], reason)
             continue
 
         values = outing_row(result, look_up_places(outing))

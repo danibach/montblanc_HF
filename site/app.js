@@ -8,7 +8,7 @@
 
 import { CONFIG } from './config.js';
 import * as api from './api.js';
-import { analyseFile, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
+import { analyseFile, checkTerrain, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName } from './util.js';
 
@@ -35,7 +35,7 @@ function renderFooter() {
   const f = $('#footer');
   const lines = [
     h('p', null, 'Published tracks are public: map, profile and statistics. The original file stays private.'),
-    h('p', null, 'Place names come from OpenStreetMap. Scores are automatic: D+ on foot plus D− in flight, in metres.'),
+    h('p', null, 'Place names come from OpenStreetMap and ground altitudes from Open-Meteo (the preview sends them a few points of the flight). Scores are automatic: D+ on foot plus D− in flight, in metres.'),
   ];
   if (CONFIG.CONTACT_EMAIL) {
     lines.push(h('p', null, 'To remove a track or an account: ', h('a', { href: `mailto:${CONFIG.CONTACT_EMAIL}` }, CONFIG.CONTACT_EMAIL), ' (or use the delete buttons).'));
@@ -367,6 +367,7 @@ async function analyse(file, out) {
   let res;
   try {
     res = await analyseFile(file);
+    res = await checkTerrain(res);
   } catch (e) {
     return out.replaceChildren(notice('error', h('p', null, e.message)));
   }
@@ -376,7 +377,7 @@ async function analyse(file, out) {
 
   const verdict = o.status === 'ok'
     ? notice('ok', h('p', null, h('b', null, `${fmtInt(o.score)} points`), ` — ${fmtInt(o.dplus_m)} m climbed on foot and ${fmtInt(o.dminus_m)} m flown down.`))
-    : notice('error', h('p', null, o.reason === 'no_flight' ? 'No flight found in this track, so it does not count.' : 'Not enough climbing on foot before the flight (at least 100 m), so it does not count.'));
+    : notice('error', h('p', null, o.reason === 'no_flight' ? ((o.warnings || []).some((w) => w.includes('follows the ground')) ? 'The descent follows the ground (ski, bike or run): no flight found, so it does not count.' : 'No flight found in this track, so it does not count.') : 'Not enough climbing on foot before the flight (at least 100 m), so it does not count.'));
   const publish = h('button', { class: 'primary', id: 'publish', disabled: o.status !== 'ok' }, 'Publish this outing');
   const status = h('span', { class: 'hint', role: 'status' });
   publish.addEventListener('click', async () => {

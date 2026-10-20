@@ -66,6 +66,30 @@ export async function analyseFile(file) {
   return res.result;
 }
 
+/**
+ * Tell a flight from a descent on the ground (ski, bike) with the height above the terrain.
+ * Takes the result of analyseFile; resolves to the result again, with the check applied, or to the
+ * same result if the elevation service cannot be reached.
+ */
+export async function checkTerrain(result) {
+  const query = result.terrain && result.terrain.query;
+  if (!query) return result;
+  let response = null;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch(`${CONFIG.ELEVATION_URL}?${query}`, { signal: ctl.signal });
+    if (r.ok) response = await r.json();
+  } catch (_) {
+    response = null;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response) return result; // the server checks again anyway
+  const res = await call({ type: 'terrain', sha256: result.file.sha256, response });
+  return res && res.ok ? res.result : result;
+}
+
 /** Names from OpenStreetMap for an outing. Resolves to the places object, or null if unavailable. */
 export async function lookUpPlaces(outing) {
   try {

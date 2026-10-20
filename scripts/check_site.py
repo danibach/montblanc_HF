@@ -119,6 +119,13 @@ def supabase(route, request):
     return j(route, {"message": f"not mocked: {request.method} {u.path}"}, 404)
 
 
+def elevation_answer(route):
+    # a terrain far below the flight: the descent is in the air
+    n = len(route.request.url.split("latitude=")[1].split("&")[0].split(","))
+    calls.append(("ELEVATION", n))
+    return j(route, {"elevation": [100.0] * n})
+
+
 def session_script():
     payload = base64.urlsafe_b64encode(json.dumps({"sub": UID, "role": "authenticated", "exp": 4102444800}).encode()).decode().rstrip("=")
     token = f"eyJhbGciOiJIUzI1NiJ9.{payload}.sig"
@@ -159,11 +166,12 @@ def new_page(browser, signed_in=False, width=1280, height=900):
     external, logs = [], []
     page.route(re.compile(r"https://[^/]*supabase\.co/.*"), supabase)
     page.route(re.compile(r"https://overpass-api\.de/.*"), lambda r: j(r, overpass_for(NATIVE)))
+    page.route(re.compile(r"https://api\.open-meteo\.com/v1/elevation.*"), elevation_answer)
     page.route(re.compile(r"https://[^/]*tile\.opentopomap\.org/.*"), lambda r: r.fulfill(status=200, content_type="image/png", body=PNG))
     page.route(re.compile(r"https://challenges\.cloudflare\.com/.*"), lambda r: r.fulfill(
         status=200, content_type="application/javascript",
         body="window.turnstile={render:function(e,o){e.textContent='[captcha]';o.callback('test-token')},reset:function(){}};"))
-    page.on("request", lambda r: None if r.url.startswith((BASE, "blob:", "data:")) or re.match(r"https://([^/]*supabase\.co|overpass-api\.de|[^/]*tile\.opentopomap\.org|challenges\.cloudflare\.com)/", r.url) else external.append(r.url))
+    page.on("request", lambda r: None if r.url.startswith((BASE, "blob:", "data:")) or re.match(r"https://([^/]*supabase\.co|overpass-api\.de|api\.open-meteo\.com|[^/]*tile\.opentopomap\.org|challenges\.cloudflare\.com)/", r.url) else external.append(r.url))
     page.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
     page.on("pageerror", lambda e: logs.append(f"pageerror: {e}"))
     return page, external, logs
@@ -250,6 +258,7 @@ with sync_playwright() as p:
     check(comma(NATIVE["dplus_m"]) in stats and comma(NATIVE["dminus_m"]) in stats, "preview D+ and D-")
     check("Pointe Haute" in page.inner_text("#preview h2"), "preview names the summit from OSM: " + page.inner_text("#preview h2"))
     page.wait_for_selector("#preview .leaflet-container path.leaflet-interactive", timeout=15000)
+    check(any(c[0] == "ELEVATION" and c[1] >= 8 for c in calls), "terrain asked for about the flight's points")
     check(not page.is_disabled("#publish"), "publish enabled")
     page.screenshot(path=f"{SHOTS}/5-preview.png", full_page=True)
     page.click("#publish")

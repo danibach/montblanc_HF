@@ -15,6 +15,8 @@ export const CONFIG = {
   TILES_ATTRIBUTION: 'Map &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap (CC-BY-SA)',
   TILES_MAX_ZOOM: 17,
   OVERPASS_URL: 'https://overpass-api.de/api/interpreter',
+  // Ground altitude under the flight (tells a flight from a ski or bike descent). Also change connect-src in index.html.
+  ELEVATION_URL: 'https://api.open-meteo.com/v1/elevation',
   // Address for removal requests, shown in the page footer. Leave empty until it is chosen.
   CONTACT_EMAIL: '',
   MAX_FILE_MB: 10,

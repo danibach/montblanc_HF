@@ -17,7 +17,7 @@ The rules and the concept stay in Notion (source of truth): *Projet // Mont-Blan
 | score | D+ on foot + D− in flight (`score_version` 1) |
 
 An outing counts if it has at least one flight and at least 100 m of climb on foot. Otherwise it is rejected with a reason (`no_flight`, `too_little_climb`).
-Rides (car, bike, lift, skis) are detected and left out. Accepted files: IGC, GPX, KML, FIT, with timestamps and altitude, up to 10 MB.
+Rides (car, bike, lift, skis) are detected and left out. A descent is a flight only if it is above the terrain: the engine asks Open-Meteo for the ground altitude under a few dozen points of each flight (`src/mbhf/terrain.py`), and a descent that follows the ground (ski, bike, run) is not counted. If the service is unreachable, the flight is kept and a warning says so. Accepted files: IGC, GPX, KML, FIT, with timestamps and altitude, up to 10 MB.
 
 ## Pages
 
@@ -45,6 +45,7 @@ The outing is published at once on the browser's analysis, with a "Validation pe
 | GitHub Actions | `.github/workflows/process.yml`: analysis of waiting tracks, keep-alive |
 | Cloudflare Turnstile | anti-bot on sign-in (enabled in Supabase Auth) |
 | OpenStreetMap | place names, country (Overpass), map tiles (OpenTopoMap, fair use) |
+| Open-Meteo | ground altitude under the flights (free, no key; terms: non-commercial use) |
 
 Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (front end), `supabase/schema-v2.sql` (database).
 
@@ -74,8 +75,8 @@ pip install playwright && python scripts/check_site.py _site --shots shots   # e
 ## Known limits
 
 - Thresholds were tuned on synthetic tracks only: calibrate on real ones (`SegmenterConfig`, `OutingConfig`).
-- A ski or bike descent can look like a glide; the take-off must follow a climb on foot.
-- The preview sends start, summit and take-off coordinates to overpass-api.de (stated in the footer).
+- Ski or bike descents are told from flights by the height above the terrain (model resolution 30-90 m, GPS altitude drifts 10-30 m): thresholds in `TerrainConfig` are first guesses, untested against the live service.
+- The preview sends start, summit and take-off coordinates to overpass-api.de, and a few dozen flight points to api.open-meteo.com (stated in the footer).
 - Display names are unique (to confirm in Notion).
 - Real tracks show where people live: never commit them (`.gitignore`).
 

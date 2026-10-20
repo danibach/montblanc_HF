@@ -45,6 +45,9 @@ self.onmessage = async (ev) => {
         data.destroy();
       }
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'terrain') {
+      const text = engine.browser.terrain_json(msg.sha256, JSON.stringify(msg.response));
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
     } else if (msg.type === 'places_query') {
       const q = engine.browser.places_query(JSON.stringify(msg.outing));
       post({ type: 'result', id: msg.id, payload: { query: q === undefined ? null : q } });
