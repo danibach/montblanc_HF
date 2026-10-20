@@ -4,10 +4,10 @@ import { CONFIG } from './config.js';
 import { h, s, fmtInt } from './util.js';
 
 export const MODE_NAMES = ['On foot', 'Flight', 'Vehicle'];
-export const MODE_COLOURS = ['#3f8f46', '#e0552b', '#7b8794'];
-const INK = '#18303a';
-const MUTED = '#5b7078';
-const GRID = '#dbe3e7';
+export const MODE_COLOURS = ['#5fbf68', '#f0693d', '#8796a3'];
+const INK = '#e6edf1';
+const MUTED = '#9fb0b9';
+const GRID = '#2b3b44';
 
 /** Runs of consecutive fixes with the same mode: [{m, from, to}] (indexes into the trace arrays). */
 function runs(trace) {

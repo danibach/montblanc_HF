@@ -346,7 +346,8 @@ async function pageUpload() {
   const drop = h('div', { class: 'drop', id: 'drop' },
     h('p', null, h('b', null, 'Drop your track here'), ' or choose a file'),
     h('p', null, input),
-    h('p', { class: 'hint' }, `IGC, GPX, KML or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB. The analysis runs in your browser: nothing is sent until you publish.`));
+    h('p', { class: 'hint' }, `IGC, GPX, KML or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB. The analysis runs in your browser: nothing is sent until you publish.`),
+    h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused.'));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => {
@@ -473,7 +474,7 @@ function loadTurnstile(box, onToken) {
   if (!CONFIG.TURNSTILE_SITE_KEY) return;
   const render = () => {
     if (!window.turnstile || !box.isConnected) return;
-    window.turnstile.render(box, { sitekey: CONFIG.TURNSTILE_SITE_KEY, callback: onToken, 'expired-callback': () => onToken('') });
+    window.turnstile.render(box, { sitekey: CONFIG.TURNSTILE_SITE_KEY, theme: 'dark', callback: onToken, 'expired-callback': () => onToken('') });
   };
   if (window.turnstile) return render();
   if (document.getElementById('turnstile-script')) return void setTimeout(render, 800);
