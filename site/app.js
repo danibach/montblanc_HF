@@ -393,13 +393,15 @@ async function analyse(file, out) {
       out.prepend(notice('error', h('p', null, e.message)));
     }
   });
+  const actions = h('div', { class: 'publish-bar' },
+    h('div', { class: 'row' }, publish, status),
+    h('p', { class: 'hint' }, 'Not published yet. By publishing you agree that this track — map, profile and statistics — is shown publicly. The original file stays private. The result is computed again on our side before it is confirmed.'));
   out.replaceChildren(...[
     verdict,
+    o.status === 'ok' ? actions : null,
     h('h2', null, pv.title),
     outingDetail(pv),
     pv.warnings && pv.warnings.length ? h('p', { class: 'hint' }, pv.warnings.join(' · ')) : null,
-    h('div', { class: 'row' }, publish, status),
-    h('p', { class: 'hint' }, 'By publishing you agree that this track — map, profile and statistics — is shown publicly. The original file stays private. The result is computed again on our side before it is listed.'),
   ].filter(Boolean));
 }
 

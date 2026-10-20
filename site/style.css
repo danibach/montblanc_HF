@@ -85,3 +85,6 @@ td.score { font-weight: 700; }
   .map { height: 300px; }
   th, td { padding: .45rem .5rem; }
 }
+
+.publish-bar { margin: 12px 0 20px; }
+.publish-bar .hint { margin-top: 6px; }
