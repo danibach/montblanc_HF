@@ -2,7 +2,9 @@
 
     SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...  python scripts/process_pending.py [--count-only]
 
-Run by GitHub Actions (.github/workflows/process.yml) every ten minutes and when asked. The service
+Run by GitHub Actions (.github/workflows/process.yml) every ten minutes and when asked. An outing is shown
+at once on the browser's analysis ("validation pending"); this job recomputes it from the original file,
+marks it verified, or rejects it. The service
 key is a secret of the repository: never put it in a file. The script reads the original file from
 the private storage, runs the same analysis as the participant's browser, looks the place names up on
 OpenStreetMap, and writes the result into the outing's row.
@@ -22,6 +24,7 @@ import urllib.parse
 import urllib.request
 
 BATCH = 20
+TO_CHECK = "verified=is.false&status=in.(pending,published)"
 
 
 class Api:
@@ -70,7 +73,7 @@ def now() -> str:
 
 
 def waiting(api: Api) -> tuple[int, int]:
-    return api.count("status=eq.pending"), api.count("status=eq.published&places_pending=is.true")
+    return api.count(TO_CHECK), api.count("verified=is.true&status=eq.published&places_pending=is.true")
 
 
 def reject(api: Api, outing_id: str, reason: str) -> None:
@@ -95,7 +98,7 @@ def process_pending(api: Api) -> None:
     from mbhf.analyse import AnalysisError, analyse_bytes
     from mbhf.rows import outing_row
 
-    for row in api.select(f"status=eq.pending&select=id,file_path,file_format&order=created_at.asc&limit={BATCH}"):
+    for row in api.select(f"{TO_CHECK}&select=id,file_path,file_format&order=created_at.asc&limit={BATCH}"):
         print(f"outing {row['id']} ({row['file_path']})")
         try:
             data = api.download(row["file_path"])
@@ -129,8 +132,13 @@ def process_pending(api: Api) -> None:
 
         values = outing_row(result, look_up_places(outing))
         values.update({"analysed_at": now(), "file_sha256": sha, "file_size": result["file"]["size"],
-                       "status": "published", "reject_reason": None})
-        api.patch(row["id"], values)
+                       "status": "published", "reject_reason": None, "verified": True})
+        try:
+            api.patch(row["id"], values)
+        except RuntimeError as exc:  # e.g. the announced hash was not the real one and the file is a twin
+            print(f"  {exc}")
+            reject(api, row["id"], "This track was already submitted.")
+            continue
         print(f"  published: score {outing['score']} (D+ {outing['dplus_m']}, D- {outing['dminus_m']})")
 
 
@@ -138,7 +146,7 @@ def retry_places(api: Api) -> None:
     from mbhf.rows import outing_row
 
     for row in api.select(
-        "status=eq.published&places_pending=is.true&select=id,start_lat,start_lon,summit_lat,summit_lon,summit_alt,"
+        "verified=is.true&status=eq.published&places_pending=is.true&select=id,start_lat,start_lon,summit_lat,summit_lon,summit_alt,"
         f"takeoff_lat,takeoff_lon,takeoff_alt&limit={BATCH}"
     ):
         outing = {

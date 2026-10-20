@@ -58,6 +58,8 @@ create table if not exists public.outings (
   status text not null default 'pending' check (status in ('pending', 'published', 'rejected')),
   reject_reason text,
   hidden boolean not null default false,
+  -- false until the server job has recomputed the result from the original file
+  verified boolean not null default false,
 
   -- the file, as announced by the browser (the job recomputes the hash)
   file_path text not null,
@@ -65,7 +67,7 @@ create table if not exists public.outings (
   file_size integer,
   file_sha256 text,
 
-  -- everything below is written by the analysis job only
+  -- the browser's own analysis (shown at once, "validation pending"), then rewritten by the job
   analysed_at timestamptz,
   engine_version text,
   score_version smallint,
@@ -94,6 +96,9 @@ create table if not exists public.outings (
   places_pending boolean not null default false
 );
 
+alter table public.outings add column if not exists verified boolean not null default false;
+
+create index if not exists outings_verified_idx on public.outings (verified) where not verified;
 create index if not exists outings_list_idx on public.outings (status, outing_date desc);
 create index if not exists outings_user_idx on public.outings (user_id, outing_date desc);
 create index if not exists outings_country_idx on public.outings (country_code);
@@ -108,8 +113,16 @@ create policy "Read published outings and your own" on public.outings for select
   using ((status = 'published' and not hidden) or user_id = auth.uid());
 
 drop policy if exists "Add your own outing" on public.outings;
+-- The outing is published at once on the browser's own analysis, flagged "not verified". The checks
+-- below only keep absurd values out; the job recomputes everything from the file and overwrites it.
 create policy "Add your own outing" on public.outings for insert to authenticated
-  with check (user_id = auth.uid() and status = 'pending' and file_path like auth.uid()::text || '/%');
+  with check (
+    user_id = auth.uid() and status = 'published' and not verified and not hidden
+    and file_path like auth.uid()::text || '/%'
+    and dplus_m between 100 and 30000 and dminus_m between 0 and 15000
+    and score = dplus_m + dminus_m
+    and (trace is null or pg_column_size(trace) < 600000)
+  );
 
 drop policy if exists "Delete your own outing" on public.outings;
 create policy "Delete your own outing" on public.outings for delete to authenticated
@@ -117,7 +130,14 @@ create policy "Delete your own outing" on public.outings for delete to authentic
 
 revoke all on public.outings from anon, authenticated;
 grant select on public.outings to anon, authenticated;
-grant insert (file_path, file_format, file_size, file_sha256) on public.outings to authenticated;
+grant insert (
+  file_path, file_format, file_size, file_sha256, status,
+  engine_version, score_version, title, outing_date, started_at, duration_s, country_code, country_name,
+  start_lat, start_lon, start_alt, start_place, start_commune,
+  summit_name, summit_lat, summit_lon, summit_alt,
+  takeoff_name, takeoff_lat, takeoff_lon, takeoff_alt, landing_lat, landing_lon, landing_alt,
+  dplus_m, dminus_m, walk_km, flight_free_km, flight_path_km, score, flights, trace, warnings, places_pending
+) on public.outings to authenticated;
 grant delete on public.outings to authenticated;
 
 -- at most 20 uploads per person per day

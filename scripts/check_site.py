@@ -50,7 +50,7 @@ def build_row(rid, user, name, gen, title_places=True):
     res = analyse_bytes("a.gpx", gpx_bytes(as_track(gen)))
     places = resolve_places(res["outing"], overpass_for(res["outing"]))
     row = outing_row(res, places)
-    row.update({"id": rid, "user_id": user, "status": "published", "reject_reason": None, "hidden": False,
+    row.update({"id": rid, "user_id": user, "status": "published", "reject_reason": None, "hidden": False, "verified": rid.endswith("1"),
                 "created_at": "2026-09-12T20:00:00Z", "file_path": f"{user}/{rid}.gpx",
                 "profiles": {"id": user, "display_name": name}})
     return res, row
@@ -178,6 +178,7 @@ with sync_playwright() as p:
     page.wait_for_selector("tbody tr", timeout=30000)
     rows = page.locator("tbody tr")
     check(rows.count() == 2, f"list shows the 2 published outings ({rows.count()})")
+    check(page.inner_text("main").count("Validation pending") == 1, "only the unverified outing carries the badge")
     first = rows.nth(0).inner_text()
     check("Alice" in first and comma(ROW1["score"]) in first, "list row: pilot and score " + first.replace("\t", " | ")[:80])
     check(page.locator("#f-year option").count() == 2 and page.locator("#f-country option").count() == 2, "year and country filters filled")
@@ -252,13 +253,17 @@ with sync_playwright() as p:
     check(not page.is_disabled("#publish"), "publish enabled")
     page.screenshot(path=f"{SHOTS}/5-preview.png", full_page=True)
     page.click("#publish")
-    page.wait_for_selector("#preview .notice-ok:has-text('Received')", timeout=30000)
-    check("a few minutes" in page.inner_text("#preview .notice-ok").replace("\n", " "), "after publish: " + page.inner_text("#preview .notice-ok")[:60])
+    page.wait_for_selector("#preview .notice-ok:has-text('Published')", timeout=30000)
+    check("Validation pending" in page.inner_text("#preview .notice-ok").replace("\n", " "), "after publish: " + page.inner_text("#preview .notice-ok")[:60])
     posted = [c for c in calls if c[0] == "POST" and c[1].startswith("/storage/v1/object/track-files/")]
     inserted = [c for c in calls if c[0] == "BODY" and c[1] == "outings"]
     check(len(posted) == 1 and posted[0][1].split("/")[5] == UID, "file stored in the person's own folder")
     body = json.loads(inserted[0][2]) if inserted else {}
-    check(set(body) == {"file_path", "file_format", "file_size", "file_sha256"}, "only the file is sent, nothing computed: " + ",".join(sorted(body)))
+    check(body.get("status") == "published" and not ({"verified", "hidden", "user_id", "analysed_at", "reject_reason"} & set(body)),
+          "published at once, never sends verified/hidden/user_id: " + ",".join(sorted(body))[:200])
+    check(body.get("score") == body.get("dplus_m", 0) + body.get("dminus_m", 0) and body.get("score") == NATIVE["score"],
+          "sent result equals the browser analysis")
+    check("i_start" not in json.dumps(body.get("flights")), "flights sent without trace indexes")
     check(len(body.get("file_sha256", "")) == 64 and body.get("file_format") == "gpx", "hash and format of the file")
 
     page.goto(BASE + f"#/user/{UID}")

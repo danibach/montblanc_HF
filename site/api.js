@@ -65,7 +65,7 @@ export async function setDisplayName(name) {
 // ---------- reading
 
 const LIST_COLUMNS =
-  'id,title,outing_date,country_code,country_name,dplus_m,dminus_m,score,flight_free_km,walk_km,user_id,status,reject_reason,profiles(display_name)';
+  'id,title,outing_date,country_code,country_name,dplus_m,dminus_m,score,flight_free_km,walk_km,user_id,status,verified,reject_reason,profiles(display_name)';
 
 export async function getFilters() {
   const { data, error } = await sb.rpc('outing_filters');
@@ -127,17 +127,26 @@ async function sha256Hex(buffer) {
 }
 
 /** Store the original file privately and add the outing, which the analysis job will publish. */
-export async function submitTrack(file, onProgress) {
+// The columns the browser may write (the same list as the grant in schema-v2.sql).
+const WRITABLE = ['status', 'engine_version', 'score_version', 'title', 'outing_date', 'started_at', 'duration_s',
+  'country_code', 'country_name', 'start_lat', 'start_lon', 'start_alt', 'start_place', 'start_commune',
+  'summit_name', 'summit_lat', 'summit_lon', 'summit_alt', 'takeoff_name', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt',
+  'landing_lat', 'landing_lon', 'landing_alt', 'dplus_m', 'dminus_m', 'walk_km', 'flight_free_km', 'flight_path_km',
+  'score', 'flights', 'trace', 'warnings', 'places_pending'];
+
+export async function submitTrack(file, onProgress, result) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   const buffer = await file.arrayBuffer();
   const hash = await sha256Hex(buffer);
+  const fields = {};
+  for (const k of WRITABLE) if (result && result[k] !== undefined) fields[k] = result[k];
   const path = `${state.user.id}/${crypto.randomUUID()}.${ext}`;
   onProgress && onProgress('Uploading…');
   const up = await sb.storage.from(BUCKET).upload(path, file, { contentType: 'application/octet-stream', upsert: false });
   if (up.error) throw new Error(up.error.message || 'The file could not be uploaded.');
   const ins = await sb
     .from('outings')
-    .insert({ file_path: path, file_format: ext, file_size: file.size, file_sha256: hash })
+    .insert({ ...fields, file_path: path, file_format: ext, file_size: file.size, file_sha256: hash, status: 'published' })
     .select('id')
     .single();
   if (ins.error) {

@@ -27,16 +27,16 @@ List of outings (filter by year and country) · outing page (map, profile, stats
 
 ```
 browser ── analysis in Python (Pyodide) ── preview ──┐
-   │                                                  │ publish = original file only
+   │                                                  │ publish = file + result (unverified)
    ▼                                                  ▼
- GitHub Pages (static site)               Supabase Storage (private) + `outings` row (pending)
+ GitHub Pages (static site)               Supabase Storage (private) + `outings` row (published, unverified)
                                                       │
                           GitHub Actions (every 10 min / on demand)
                           re-analyses the file with the same Python code,
-                          fills in places (Overpass), publishes or rejects
+                          fills in places (Overpass), confirms or rejects
 ```
 
-The browser result is a preview only. What is listed is always recomputed on the server side from the original file. Duplicates are detected by file hash.
+The outing is published at once on the browser's analysis, with a "Validation pending" badge. Within ten minutes the server job recomputes it from the original file (overwriting the numbers if they differ), removes the badge, or rejects the outing (it then disappears from the public lists and the owner sees the reason). The database only accepts plausible values from the browser (D+ 100–30 000 m, score = D+ + D−). Duplicates are detected by file hash.
 
 | part | role |
 |---|---|

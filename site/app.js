@@ -111,7 +111,8 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
   return rows.map((r) => h('tr', null,
     h('td', null, fmtDate(r.outing_date)),
     showPilot ? h('td', null, link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
-    h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, r.title || 'Outing') : (r.title || 'Uploaded track')),
+    h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, r.title || 'Outing') : (r.title || 'Uploaded track'),
+      r.status === 'published' && r.verified === false ? [' ', statusBadge(r)] : null),
     h('td', null, r.country_name || r.country_code || ''),
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
@@ -121,6 +122,7 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
 
 function statusBadge(r) {
   if (r.status === 'pending') return h('span', { class: 'dot pending' }, 'Processing');
+  if (r.status === 'published' && r.verified === false) return h('span', { class: 'dot pending', title: 'Published on the first analysis; the server is checking it.' }, 'Validation pending');
   if (r.status === 'rejected') return h('span', { class: 'dot rejected', title: r.reject_reason || '' }, 'Not counted');
   return h('span', { class: 'dot' }, 'Published');
 }
@@ -240,7 +242,7 @@ async function pageOuting(token, id) {
     h('div', null,
       h('h1', null, o.title || 'Outing'),
       h('p', { class: 'sub' }, link(`#/user/${o.user_id}`, pilotName(o.profiles)), ` · ${fmtDate(o.outing_date)}`, o.country_name ? ` · ${o.country_name}` : '')),
-    o.status !== 'published' ? statusBadge(o) : null);
+    o.status !== 'published' || o.verified === false ? statusBadge(o) : null);
   if (o.status === 'pending') {
     return show(head, notice('pending', h('p', null, 'Your track is being analysed. This usually takes a few minutes; reload this page later.')), actions);
   }
@@ -380,9 +382,9 @@ async function analyse(file, out) {
   publish.addEventListener('click', async () => {
     publish.disabled = true;
     try {
-      await api.submitTrack(file, (t) => { status.textContent = t; });
-      out.replaceChildren(notice('ok', h('p', null, 'Received. Your outing will appear in the list within a few minutes, once it has been checked.'),
-        h('p', null, link(`#/user/${api.state.user.id}`, 'Go to your page'))));
+      const id = await api.submitTrack(file, (t) => { status.textContent = t; }, pv);
+      out.replaceChildren(notice('ok', h('p', null, 'Published. The server now checks the result: the "Validation pending" badge disappears within a few minutes once it is confirmed.'),
+        h('p', null, link(`#/outing/${id}`, 'See your outing'))));
     } catch (e) {
       status.textContent = '';
       publish.disabled = false;
@@ -405,6 +407,9 @@ function previewRow(res, places) {
   const pl = places || {};
   const pick = (p, k) => (p ? p[k] : null);
   return {
+    engine_version: res.engine && res.engine.version, score_version: o.score_version, started_at: o.started_at,
+    flight_path_km: o.flight_path_km, places_pending: !places,
+    flights: (o.flights || []).map(({ i_start, i_end, ...rest }) => rest),
     title: (pl.summit && pl.summit.name) || pl.start_place || 'Hike & Fly outing',
     outing_date: o.date, duration_s: o.duration_s, score: o.score, dplus_m: o.dplus_m, dminus_m: o.dminus_m,
     walk_km: o.walk_km, flight_free_km: o.flight_free_km, warnings: o.warnings,
