@@ -377,7 +377,7 @@ async function analyse(file, out) {
 
   const verdict = o.status === 'ok'
     ? notice('ok', h('p', null, h('b', null, `${fmtInt(o.score)} points`), ` — ${fmtInt(o.dplus_m)} m climbed on foot and ${fmtInt(o.dminus_m)} m flown down.`))
-    : notice('error', h('p', null, o.reason === 'no_flight' ? ((o.warnings || []).some((w) => w.includes('follows the ground')) ? 'The descent follows the ground (ski, bike or run): no flight found, so it does not count.' : 'No flight found in this track, so it does not count.') : 'Not enough climbing on foot before the flight (at least 100 m), so it does not count.'));
+    : notice('error', h('p', null, o.reason === 'no_flight' ? ((o.warnings || []).some((w) => w.includes('follows the ground')) ? 'The descent follows the ground (ski, bike or run): no flight found, so it does not count.' : 'No flight found in this track, so it does not count.') : 'Not enough climbing on foot before the flight (at least 200 m), so it does not count.'));
   if (o.status !== 'ok' && (o.warnings || []).length) verdict.append(h('p', { class: 'hint' }, o.warnings.join(' · ')));
   const publish = h('button', { class: 'primary', id: 'publish', disabled: o.status !== 'ok' }, 'Publish this outing');
   const status = h('span', { class: 'hint', role: 'status' });

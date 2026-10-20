@@ -126,7 +126,7 @@ def process_pending(api: Api) -> None:
         if outing["status"] != "ok":
             messages = {
                 "no_flight": "No flight found in this track.",
-                "too_little_climb": "Not enough climbing on foot before the flight (at least 100 m).",
+                "too_little_climb": "Not enough climbing on foot before the flight (at least 200 m).",
             }
             reason = messages.get(outing["reason"], "This track does not count.")
             if outing["reason"] == "no_flight" and any("follows the ground" in w for w in outing["warnings"]):

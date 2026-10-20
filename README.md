@@ -16,7 +16,7 @@ The rules and the concept stay in Notion (source of truth): *Projet // Mont-Blan
 | flight distance (km) | FAI free distance, up to 3 turnpoints |
 | score | D+ on foot + D− in flight (`score_version` 1) |
 
-An outing counts if it has at least one flight and at least 100 m of climb on foot. Otherwise it is rejected with a reason (`no_flight`, `too_little_climb`).
+An outing counts if it has at least one flight and at least 200 m of climb on foot. Otherwise it is rejected with a reason (`no_flight`, `too_little_climb`).
 Rides (car, bike, lift, skis) are detected and left out. A descent is a flight only if it is above the terrain: the engine asks Open-Meteo for the ground altitude under a few dozen points of each flight (`src/mbhf/terrain.py`), and a descent that follows the ground (ski, bike, run) is not counted. If the service is unreachable, the flight is kept and a warning says so. Accepted files: IGC, GPX, KML, FIT, with timestamps and altitude, up to 10 MB.
 
 ## Pages

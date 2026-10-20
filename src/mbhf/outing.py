@@ -30,7 +30,7 @@ SCORE_VERSION = 1
 class OutingConfig:
     smooth_s: float = 30.0            # altitude averaging window (seconds, each side)
     climb_threshold_m: float = 15.0   # a dip smaller than this does not end a climb (to calibrate)
-    min_walk_climb_m: float = 100.0   # climbing on foot needed for the outing to count
+    min_walk_climb_m: float = 200.0   # climbing on foot needed for the outing to count
     min_flight_drop_m: float = 30.0   # a flight must lose at least this much height to count
     max_trace_points: int = 1200
 
