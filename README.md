@@ -1,127 +1,82 @@
-# montblanc_HF
+# H&F Tracks (montblanc_HF, V2)
 
-Track analysis tools for the Mont-Blanc Hike & Fly challenge. The rules are still a working draft in Notion; this repository follows them (Notion stays the source of truth).
+An XContest-style Hike & Fly platform. A contributor sends **only the track**; the engine reads it and publishes the outing.
+The rules and the concept stay in Notion (source of truth): *Projet // Mont-Blanc Hike & Fly*.
 
-## What exists today
+## What the engine extracts
 
-`mbhf segment` takes a recorded track and splits it into the parts of the challenge:
-
-| part | meaning |
+| value | how |
 |---|---|
-| `bike_out` | optional ride to the mountain |
-| `ascent` | the walk up (this is where the Nid d'Aigle and summit cylinders will be applied) |
-| `flight` | the paraglider descent |
-| `walk_after_landing` | optional walk to the bike |
-| `bike_return` | optional ride back |
+| walk start | first fix on foot; place and country from OpenStreetMap |
+| highest summit on foot | highest point of the walking parts; named summit within 500 m |
+| take-off | first fix of the first flight; named peak/saddle within 600 m |
+| D+ on foot (m) | sum of climbs on foot, 30 s-smoothed altitude, 15 m hysteresis |
+| D− in flight (m) | take-off altitude minus landing altitude, per flight |
+| walk distance (km) | path length on foot |
+| flight distance (km) | FAI free distance, up to 3 turnpoints |
+| score | D+ on foot + D− in flight (`score_version` 1) |
 
-Accepted files: IGC, GPX, KML (`gx:Track` only) and FIT. **Timestamps are mandatory**: a file without them is refused.
+An outing counts if it has at least one flight and at least 100 m of climb on foot. Otherwise it is rejected with a reason (`no_flight`, `too_little_climb`).
+Rides (car, bike, lift, skis) are detected and left out. Accepted files: IGC, GPX, KML, FIT, with timestamps and altitude, up to 10 MB.
 
-### How it decides
+## Pages
 
-The challenge has a fixed order (bike, walk, flight, walk, bike, every part optional), so each fix is labelled with one of five ordered states and the cheapest labelling that only moves forward is found (Viterbi). The cost of a state at a fix comes from smoothed ground speed, vertical speed and altitude (no road in the Alps goes above about 2 900 m, which is what separates a flight from a steep bike descent). Everything is tunable in `SegmenterConfig`.
+List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · upload · sign in.
 
-### Options
+## How it works
 
-```bash
-pip install -e ".[plot,dev]"
-
-# one file holding the whole adventure, automatic
-mbhf segment day.gpx --json result.json --plot result.png
-
-# separate files; pin each to its mode (the program then only has to find the rest)
-mbhf segment bike=ride_out.gpx walk=ascent.gpx flight=flight.igc bike=ride_back.gpx
-
-# a watch recording the whole day + the vario's IGC for the flight: the specific file wins
-# where they overlap (flight > walk > bike > unlabelled)
-mbhf segment day.fit flight=vario.igc
-
-# fix a transition by hand after looking at the plot (ISO 8601, UTC unless an offset is given)
-mbhf segment day.gpx --takeoff 2026-09-12T09:41:10Z
-# also: --walk-start  --landing  --bike-return-start
+```
+browser ── analysis in Python (Pyodide) ── preview ──┐
+   │                                                  │ publish = file + result (unverified)
+   ▼                                                  ▼
+ GitHub Pages (static site)               Supabase Storage (private) + `outings` row (published, unverified)
+                                                      │
+                          GitHub Actions (every 10 min / on demand)
+                          re-analyses the file with the same Python code,
+                          fills in places (Overpass), confirms or rejects
 ```
 
-### The climbing chrono
+The outing is published at once on the browser's analysis, with a "Validation pending" badge. Within ten minutes the server job recomputes it from the original file (overwriting the numbers if they differ), removes the badge, or rejects the outing (it then disappears from the public lists and the owner sees the reason). The database only accepts plausible values from the browser (D+ 100–30 000 m, score = D+ + D−). Duplicates are detected by file hash.
 
-After segmenting, `mbhf segment` also computes the chrono from leaving the Nid d'Aigle cylinder to entering the summit cylinder, with the cylinders taken from the ruleset (`src/mbhf/data/ruleset-draft.json`, or `--rules file.json`):
+| part | role |
+|---|---|
+| GitHub Pages | static site, built by `.github/workflows/site.yml` on every push to `main` |
+| Supabase | Postgres (+ row level security), Auth (magic link, optional Google), private file storage |
+| GitHub Actions | `.github/workflows/process.yml`: analysis of waiting tracks, keep-alive |
+| Cloudflare Turnstile | anti-bot on sign-in (enabled in Supabase Auth) |
+| OpenStreetMap | place names, country (Overpass), map tiles (OpenTopoMap, fair use) |
 
-* Nid d'Aigle: the clock starts at the **last exit** before the summit cylinder is entered (sideways or upward), so GPS jitter on the edge cannot restart it.
-* Summit: the clock stops at the first entry, which must be **on foot**. The final exit must be **by flight** for the HF/BHF conditions; a flight from a lower point still counts for the ranking.
-* Crossing times are interpolated between fixes, and the result carries its uncertainty (time between the fixes around each crossing).
+Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (front end), `supabase/schema-v2.sql` (database).
 
-Only what the track contains is judged. A track that **starts at Nid d'Aigle** (the tram ride is not in it) is valid: HF badge and the Nid d'Aigle to summit rank. A track that contains a tram or lift section is not. (An unrecorded tram ride cannot be detected: that is accepted.) Later the origin of the climb (Nid d'Aigle, Bionnassay, Passy, Aiguille du Midi, Courmayeur...) can be used to filter or label results; it is not computed yet.
+## Set-up (once)
 
-Hiking up by **any other route** than Nid d'Aigle is authorised: such a track has no climbing chrono and no ranking, but can still earn the HF/BHF badge (on foot to the summit, take-off from it).
+1. **Database**: Supabase > SQL Editor > run `supabase/schema-v2.sql`.
+2. **Secrets** (GitHub > Settings > Secrets and variables > Actions): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service role key, never in the site).
+3. **Supabase Auth**:
+   - URL configuration: add `https://danibach.github.io/montblanc_HF/**` as redirect URL.
+   - SMTP: the default mailer is limited to 2 e-mails per hour and to team members, so set a custom SMTP (Resend, Brevo…).
+   - Attack protection: enable CAPTCHA (Turnstile) with the Turnstile secret key.
+   - Optional Google: enable the provider, then set `GOOGLE_LOGIN: true` in `site/config.js`.
+4. **Pages**: Settings > Pages > Source: GitHub Actions.
+5. `site/config.js`: set `CONTACT_EMAIL`.
+6. The free Supabase plan has no backups and pauses after a week without activity (the keep-alive in `process.yml` prevents it).
 
-### Was the approach on foot? Tram and lifts
-
-Before the summit is entered, `mbhf.transport` looks for rides on the Mont-Blanc tramway and on lifts. A ride **flags** the track: no ranking and no badge until a human decides (the flag is evidence, not a final verdict).
-
-* **Tramway**: a ride is a stretch that (1) follows the rail line (within 30 m for 500 m or more), (2) is at a time the tram runs, and (3) climbs at 1 200 m/h or more over a window of up to 10 min. Walking along the rails is fine: it is slow (best hikers measured so far: 600 to 800 m/h). Fast on the rails while the tram is *not* running is only reported for review.
-* **Other lifts** (cable cars, gondolas, chairlifts, funiculars): a stretch following the lift line for 400 m or more at 8 km/h or more. No timetable needed. Slow lifts (fixed-grip chairlifts, drag lifts) cannot be told from walking and are **not** detected.
-* **Recording gaps** (phone off in the cabin): the climb or speed implied between the last and next fix is tested the same way.
-* A stretch the segmenter labelled as *bike* is ambiguous (a tram ride looks like a bike ride to it, and a cyclist beside the rails looks like a tram). It counts as a ride only if its median distance to the line is 12 m or less; otherwise it is a review item.
-
-Line geometry comes from OpenStreetMap (© OpenStreetMap contributors, ODbL). Export the tram line and the lifts from [overpass-turbo](https://overpass-turbo.eu) (GeoJSON) and import them:
-
-```bash
-mbhf import-osm export.geojson --out src/mbhf/data/transport-osm.json
-```
-
-**Until that file is filled, the check is not performed and every result says so** ("provisional"). The tram timetable (`data/tmb-schedule.json`) is also incomplete and must be checked with the operator for each season; a date without data counts as "tram possibly running".
-
-The JSON output lists each part, its confidence (how sharply the evidence flips at its start; `low` means "check this transition") and the transition times in the form the options above accept.
-
-## The web app
-
-The page is in French. Participants upload a track and get the climbing time, the places detected (start, transitions, Nid d'Aigle exit, summit entry and exit, each with position and altitude), the parts of the day, the checks, and the graphs.
+## Develop
 
 ```bash
-pip install -e ".[web]"
-flask --app mbhf.web:create_app run          # http://127.0.0.1:5000
-# production: gunicorn "mbhf.web:create_app()"   (see the Dockerfile)
-docker build -t mbhf-web . && docker run -p 8000:8000 mbhf-web
+pip install -e ".[dev]"
+pytest -q                                   # engine tests (synthetic tracks)
+mbhf analyse day.gpx --places               # analysis of one file, JSON
+python scripts/build_site.py --out _site    # site (downloads pinned Pyodide and supabase-js)
+pip install playwright && python scripts/check_site.py _site --shots shots   # end-to-end check with mocks
 ```
 
-* **Language.** The analysis code (command line, JSON, tests) writes English; `mbhf.i18n` turns every message a participant reads into French (the web app, the figure labels, dates and number formats included). A new English message needs a French rule there: `tests/test_i18n.py` fails on any known message without one.
-* **Hosting.** GitHub Pages cannot run this Flask app (it needs a Python server); the browser version below can. For the Flask app, any host that runs a Docker image or a gunicorn process works (the repository has a Dockerfile); several have free tiers, check their current terms.
-* **Nothing is stored.** Uploads are analysed in memory and in a temporary directory that is deleted before the page is sent. The app has no database, no cookies and no accounts, and logs neither file names nor contents. Put it behind HTTPS and make sure your proxy does not log request bodies.
-* The analysis takes one to two seconds of CPU, so rate-limit uploads at the proxy. The app itself limits a request to 60 MB and a track to 200 000 points.
-* Strict content security policy (no inline scripts or styles, no external requests); the page loads nothing from third parties. The only outgoing links are the "open on a map" links, which the participant clicks.
-* The result is marked provisional until the tram and lift geometry is loaded (see above). It is an automatic check: the organisers still review every submission.
+## Known limits
 
-## The website (analysis in the browser)
+- Thresholds were tuned on synthetic tracks only: calibrate on real ones (`SegmenterConfig`, `OutingConfig`).
+- A ski or bike descent can look like a glide; the take-off must follow a climb on foot.
+- The preview sends start, summit and take-off coordinates to overpass-api.de (stated in the footer).
+- Display names are unique (to confirm in Notion).
+- Real tracks show where people live: never commit them (`.gitignore`).
 
-The public page runs this same Python package **in the participant's browser** (Pyodide, Python compiled to WebAssembly), so it is a static site that GitHub Pages can host for free. The file never leaves the participant's device.
-
-* The participant gets the climbing time, the verdicts, the track drawn from above and its altitude profile (numbered places, coloured parts), the places and parts tables, and the checks. The result is marked **provisional, awaiting validation**: sending it for validation is not built yet.
-* **Fixing transitions.** If a part of the day is wrongly cut, the participant places the start of the walk up, the take-off, the landing or the start of the ride back by clicking on the profile or the track (or typing the Paris time), then recomputes. These are the same `Cuts` as the command-line options.
-* Code: `site/` (page, worker, styles added to the web app's `style.css`), `src/mbhf/browser.py` (the one entry point the page calls; tested in `tests/test_browser.py`), `scripts/build_site.py` (assembles `_site/`: the page, Pyodide 314.0.7 from npm, the pure-Python wheels `defusedxml`, `fitdecode`, `tzdata`, and `src/mbhf` without the Flask app), `scripts/check_site.py` (opens the built site in Chromium, analyses a synthetic track, places a transition, checks the result equals normal Python and that no request leaves the site).
-* The workflow `.github/workflows/site.yml` runs the tests, builds, checks and publishes on every push to `main`. One-time setting: **Settings > Pages > Source: GitHub Actions**.
-* First visit downloads about 6 MB (compressed), kept by the browser afterwards; the analysis itself takes about a second.
-* Content security policy in the page: nothing is loaded from other sites; WebAssembly needs `'wasm-unsafe-eval'`.
-
-```bash
-python scripts/build_site.py --out _site          # needs npm and pip to reach their registries
-python -m http.server -d _site 8000               # http://127.0.0.1:8000
-python scripts/check_site.py _site                # needs: pip install playwright; playwright install chromium
-```
-
-## Honest limits
-
-* The thresholds are first guesses. The tests use **synthetic** tracks (invented but realistic numbers); they show the code does what it is designed to do, **not** that it works on real tracks. Real tracks still have to be tried and the thresholds tuned.
-* The FIT reader has no test file yet.
-* The cylinder coordinates are provisional (read from Google Maps links) and the altitude bands were tuned on a single real track.
-* The tram and lift thresholds (1 200 m/h, 8 km/h, 12 m, 30 m) were set from two hiking tracks and the tram's published average; they have never seen a real tram or lift ride. The lift line geometry and the tram timetable are not loaded yet.
-* Not built yet: sending a track for validation and storing submissions (planned: Supabase storage, then a scheduled re-analysis by this package), a real map under the drawn track, GNSS altitude bias correction, the IGC signature check, biplace comparison.
-* The in-browser page has only been checked with synthetic tracks, in Chromium.
-* Transitions can currently be fixed by time only, not by place.
-
-## Privacy
-
-Real tracks show where people live. `tracks/` and common track extensions are git-ignored so they are never committed by accident.
-
-## Tests
-
-```bash
-pytest
-```
+`supabase/legacy/` keeps the SQL of the former `tracks` repository, which this repository replaces.

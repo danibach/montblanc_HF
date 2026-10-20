@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mbhf"
-version = "0.1.0"
-description = "Track analysis for the Mont-Blanc Hike & Fly challenge"
+version = "0.2.0"
+description = "Hike & Fly track analysis: walk, flight and ride segmentation, D+/D-, FAI free distance, places"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,8 +14,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-plot = ["matplotlib>=3.7"]
-web = ["flask>=3", "matplotlib>=3.7", "gunicorn>=22"]
 dev = ["pytest>=8"]
 
 [project.scripts]
@@ -25,7 +23,7 @@ mbhf = "mbhf.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mbhf = ["data/*.json", "web/templates/*.html", "web/static/*"]
+mbhf = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

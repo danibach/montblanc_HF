@@ -1,5 +1,0 @@
-{
-  "source": "OpenStreetMap contributors (ODbL)",
-  "note": "EMPTY: not loaded yet. Export the tram line and the lifts from overpass-turbo, then run: mbhf import-osm export.geojson --out src/mbhf/data/transport-osm.json",
-  "lines": []
-}

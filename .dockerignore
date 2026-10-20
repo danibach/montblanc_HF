@@ -1,9 +1,0 @@
-.git
-tracks
-tests
-**/__pycache__
-*.egg-info
-*.gpx
-*.igc
-*.kml
-*.fit
