@@ -20,5 +20,5 @@ export const CONFIG = {
   // Address for removal requests, shown in the page footer. Leave empty until it is chosen.
   CONTACT_EMAIL: '',
   MAX_FILE_MB: 10,
-  PAGE_SIZE: 50,
+  PAGE_SIZE: 100,   // outings per page on the home list
 };
