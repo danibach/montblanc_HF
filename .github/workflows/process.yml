@@ -13,6 +13,11 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      relabel:
+        description: "Look the place names up again for every published outing"
+        type: boolean
+        default: false
   repository_dispatch:
     types: [new-outing]
 
@@ -44,12 +49,12 @@ jobs:
         run: python3 scripts/process_pending.py --count-only
 
       - uses: actions/setup-python@v5
-        if: steps.todo.outputs.count != '' && steps.todo.outputs.count != '0'
+        if: inputs.relabel || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
         with:
           python-version: "3.13"
 
       - name: Analyse and publish
-        if: steps.todo.outputs.count != '' && steps.todo.outputs.count != '0'
+        if: inputs.relabel || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
         run: |
           pip install --quiet .
-          python scripts/process_pending.py
+          python scripts/process_pending.py ${{ inputs.relabel && '--relabel' || '' }}
