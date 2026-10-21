@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .models import Track
-from .segment import FLIGHT, VEHICLE, SegmentationResult, _build_segments, launch_after_pause
+from .segment import FLIGHT, VEHICLE, SegmentationResult, _build_segments
 
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 MAX_COORDINATES = 100  # the service takes at most 100 per request
@@ -49,12 +49,6 @@ class TerrainConfig:
     every_s: float = 40.0
     min_per_flight: int = 8
     max_per_flight: int = 45
-    # The head of a flight (before the pause where the pilot prepared the wing, see ``launch_after_pause``) is
-    # a ski or walk down when its fixes are on the ground: median height under ``head_ground_median_m`` and
-    # 75th percentile under ``head_ground_p75_m``, over at least ``min_head_samples`` fixes.
-    head_ground_median_m: float = 40.0
-    head_ground_p75_m: float = 80.0
-    min_head_samples: int = 3
 
 
 def sample_flights(track: Track, seg: SegmentationResult, cfg: Optional[TerrainConfig] = None) -> list[dict]:
@@ -160,20 +154,6 @@ def apply_terrain(
             continue
         line = (f"Terrain: {st['share']:.0%} of the descent is more than {cfg.air_height_m:.0f} m above the ground "
                 f"(median height {st['median']:.0f} m).")
-        if st["share"] >= cfg.min_air_share or not (st["share"] < cfg.ground_share and st["p90"] < cfg.ground_p90_m):
-            # kept as a flight: does it start with a ski (or walk) down before the pause of the take-off?
-            end = launch_after_pause(track.points, s.i_start, s.i_end)
-            if end is not None:
-                hs = sorted(samples[n]["alt"] - elevations[n] for n in idx
-                            if elevations[n] is not None and samples[n]["i"] <= end)
-                if (len(hs) >= cfg.min_head_samples and hs[len(hs) // 2] < cfg.head_ground_median_m
-                        and hs[min(len(hs) - 1, int(0.75 * len(hs)))] < cfg.head_ground_p75_m):
-                    minutes = (track.points[end].t - track.points[s.i_start].t).total_seconds() / 60
-                    for i in range(s.i_start, end + 1):
-                        labels[i] = VEHICLE
-                    changed = True
-                    notes.append(f"The first {minutes:.0f} min of this descent follow the ground (ski or walk), up to a pause: "
-                                 "the flight starts at the end of that pause.")
         if st["share"] >= cfg.min_air_share:
             notes.append(line)
         elif st["share"] < cfg.ground_share and st["p90"] < cfg.ground_p90_m:

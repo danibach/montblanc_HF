@@ -77,14 +77,6 @@ class SegmenterConfig:
     sure_p10_kmh: float = 12.0
     sure_sink_ms: float = 1.0
     sure_glide: float = 10.0
-    # A pilot who skis or walks down before taking off stops to prepare the wing: the altitude stops dropping.
-    # In a "flight" that starts with a descent of at least ``pause_head_drop_m``, the last stretch in its
-    # first half where the sink stays under ``pause_sink_ms`` (10 s average) for ``pause_min_s``, going
-    # straight (a thermal circles), is that pause: the flight starts where it ends (see ``launch_after_pause``).
-    pause_sink_ms: float = 1.5
-    pause_min_s: float = 40.0
-    pause_head_drop_m: float = 100.0
-    pause_max_sinuosity: float = 1.3
 
 
 @dataclass
@@ -341,47 +333,6 @@ def _demote_slow_flights(pts: list[Point], labels: list[int], cfg: SegmenterConf
         if v and _percentile(v, 0.5) < cfg.flight_min_median_kmh:
             for k in range(i, j + 1):
                 labels[k] = VEHICLE
-
-
-def launch_after_pause(pts: list[Point], i: int, j: int, cfg: Optional[SegmenterConfig] = None) -> Optional[int]:
-    """Index of the fix where a take-off that follows a ski (or walk) down would be, for the flight i..j.
-
-    A pilot who comes down on skis or on foot stops to prepare the wing: the altitude stops dropping. Where
-    the flight starts with a descent of at least ``pause_head_drop_m`` followed by such a pause, the take-off
-    is where the last pause in the first half of the flight ends. None when there is no such pause.
-    A pause alone is not proof (a ridge or a thermal also stops the sink): the caller must check that the
-    head of the flight really is on the ground (``terrain.apply_terrain`` does).
-    """
-    cfg = cfg or SegmenterConfig()
-    ts = [p.t.timestamp() for p in pts]
-    half = (ts[j] - ts[i]) / 2.0
-    flat: list[bool] = []
-    for k in range(i, j + 1):
-        if ts[k] - ts[i] > half:
-            break
-        a, b = _window(ts, k, 10.0, cfg.gap_s)
-        vz = None
-        if ts[b] > ts[a] and pts[a].alt is not None and pts[b].alt is not None:
-            vz = (pts[b].alt - pts[a].alt) / (ts[b] - ts[a])
-        c, d = _window(ts, k, cfg.speed_window_s, cfg.gap_s)
-        chord = haversine_m(pts[c].lat, pts[c].lon, pts[d].lat, pts[d].lon)
-        path = sum(haversine_m(pts[m].lat, pts[m].lon, pts[m + 1].lat, pts[m + 1].lon) for m in range(c, d))
-        sinu = path / chord if chord > 0.5 * (ts[d] - ts[c]) and path > 0 else 1.0
-        flat.append(vz is not None and vz > -cfg.pause_sink_ms and sinu < cfg.pause_max_sinuosity)
-    k = len(flat) - 1
-    while k >= 0:
-        if not flat[k]:
-            k -= 1
-            continue
-        e = k
-        while k >= 0 and flat[k]:
-            k -= 1
-        s = k + 1
-        if ts[i + e] - ts[i + s] >= cfg.pause_min_s:
-            a0, a1 = pts[i].alt, pts[i + e].alt
-            if a0 is not None and a1 is not None and a0 - a1 >= cfg.pause_head_drop_m:
-                return i + e
-    return None
 
 
 def _is_sure_flight(pts: list[Point], i: int, j: int, cfg: SegmenterConfig) -> bool:
