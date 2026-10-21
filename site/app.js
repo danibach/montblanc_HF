@@ -93,7 +93,7 @@ function outingDetail(o) {
       stat(`${fmtInt(o.dplus_m)} m`, 'D+ on foot'),
       stat(`${fmtInt(o.dminus_m)} m`, 'D− in flight'),
       stat(fmtKm(o.walk_km), 'Distance on foot'),
-      stat(fmtKm(o.flight_free_km), 'Free distance (FAI)'),
+      stat(fmtKm(o.flight_free_km), 'Free distance (FAI, total)'),
       stat(fmtDur(o.duration_s), 'Duration')),
     h('dl', { class: 'places' },
       place('Start on foot', [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
@@ -347,7 +347,7 @@ async function pageUpload() {
     h('p', null, h('b', null, 'Drop your tracks here'), ' or choose one or several files'),
     h('p', null, input),
     h('p', { class: 'hint' }, `IGC, GPX, KML, TCX or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB each. The analysis runs in your browser: nothing is sent until you publish.`),
-    h('p', { class: 'hint' }, `Several files at once: each one is analysed, you review the list, then publish them together (at most ${DAILY_LIMIT} uploads per day).`),
+    h('p', { class: 'hint' }, `Several files at once: each one is analysed, you review the list, then publish them together (at most 20 uploads per day, and up to 1,000 per day during the first two weeks of your account).`),
     h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused.'));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
@@ -411,7 +411,6 @@ async function analyse(file, out) {
   ].filter(Boolean));
 }
 
-const DAILY_LIMIT = 20;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function refusalText(o) {
@@ -479,7 +478,7 @@ async function analyseBatch(fileList, out) {
   if (!ready.length) { status.textContent = 'Nothing to publish.'; return; }
   publish.textContent = `Publish ${ready.length} outing${ready.length > 1 ? 's' : ''}`;
   publish.disabled = false;
-  out.insertBefore(h('p', { class: 'hint' }, `Not published yet. By publishing you agree that these tracks — map, profile and statistics — are shown publicly. The original files stay private. Each result is computed again on our side before it is confirmed. At most ${DAILY_LIMIT} uploads per day: if the limit is reached, the rest is kept in the list so you can send those files again tomorrow.`), grid);
+  out.insertBefore(h('p', { class: 'hint' }, `Not published yet. By publishing you agree that these tracks — map, profile and statistics — are shown publicly. The original files stay private. Each result is computed again on our side before it is confirmed. There is a daily limit on uploads: if it is reached, the rest is kept in the list so you can send those files again tomorrow.`), grid);
 
   // 2. publish, one after the other; stop cleanly at the daily limit
   publish.addEventListener('click', async () => {
@@ -498,7 +497,7 @@ async function analyseBatch(fileList, out) {
         it.cells.result.append(link(`#/outing/${id}`, 'Published'));
       } catch (e) {
         if (/already submitted/i.test(e.message)) set(it, 'duplicate', 'Already submitted before', 'warn-text');
-        else if (/limit of \d+ uploads/i.test(e.message)) { stopped = true; set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); }
+        else if (/daily upload limit/i.test(e.message)) { stopped = true; set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); }
         else set(it, 'error', e.message, 'error-text');
       }
     }

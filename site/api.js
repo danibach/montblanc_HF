@@ -152,7 +152,7 @@ export async function submitTrack(file, onProgress, result) {
   if (ins.error) {
     await sb.storage.from(BUCKET).remove([path]);
     if (ins.error.code === '23505') throw new Error('This track was already submitted.');
-    if (ins.error.code === 'P0001') throw new Error('You reached the limit of 20 uploads per day. Try again tomorrow.');
+    if (ins.error.code === 'P0001') throw new Error('You reached the daily upload limit. Try again tomorrow.');
     throw new Error(ins.error.message);
   }
   return ins.data.id;

@@ -6,7 +6,7 @@ What is measured (all from the track alone, nothing is typed in by the participa
 * D+ on foot: the sum of the climbs, each from a low point to the next high point; a dip smaller
   than ``climb_threshold_m`` does not end a climb (it is GPS noise)
 * D- in flight: for each flight, take-off altitude minus landing altitude (thermals ignored)
-* distance on foot, and the FAI free distance of the longest flight
+* distance on foot, and the FAI free distance of each flight, added up over the outing
 * score = D+ on foot + D- in flight, in metres (``score_version`` says which formula)
 
 A track counts as a Hike & Fly outing when it holds at least one flight and at least
@@ -208,7 +208,7 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
         "dplus_m": dplus_r,
         "dminus_m": dminus,
         "walk_km": round(walk_m / 1000, 2),
-        "flight_free_km": max((f["free_km"] for f in flights), default=0.0),
+        "flight_free_km": round(sum(f["free_km"] for f in flights), 2),
         "flight_path_km": round(sum(f["path_km"] for f in flights), 2),
         "vehicle_km": round(vehicle_m / 1000, 2),
         "score": dplus_r + dminus,

@@ -21,7 +21,7 @@ Rides (car, bike, lift, skis) are detected and left out. A descent is a flight o
 
 ## Pages
 
-List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day) · sign in.
+List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account) · sign in.
 
 ## How it works
 
