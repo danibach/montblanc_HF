@@ -429,8 +429,9 @@ async function analyseBatch(fileList, out) {
   const files = fileList.slice().sort((a, b) => a.name.localeCompare(b.name));
   const items = files.map((file) => ({
     file, state: 'waiting', pv: null,
-    cells: { name: h('td', null, file.name), title: h('td'), result: h('td', null, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('td', { class: 'hint' }) },
+    cells: { name: h('td', { class: 'wrap' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
   }));
+  for (const it of items) it.cells.name.append(h('div', null, it.file.name), it.cells.notes);
   const set = (it, state, text, kind) => {
     it.state = state;
     it.cells.result.replaceChildren(text);
@@ -441,8 +442,8 @@ async function analyseBatch(fileList, out) {
   const publish = h('button', { class: 'primary', id: 'publish-all', disabled: true }, 'Publish');
   const status = h('span', { class: 'hint', role: 'status' });
   const grid = table(
-    [{ label: 'File' }, { label: 'Outing' }, { label: 'Result' }, { label: 'Score', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Notes' }],
-    items.map((it) => h('tr', null, it.cells.name, it.cells.title, it.cells.result, it.cells.score, it.cells.dplus, it.cells.dminus, it.cells.notes)));
+    [{ label: 'File and notes' }, { label: 'Outing', cls: 'hide-narrow' }, { label: 'Result' }, { label: 'Score', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }],
+    items.map((it) => h('tr', null, it.cells.name, it.cells.title, it.cells.result, it.cells.score, it.cells.dplus, it.cells.dminus)));
   out.replaceChildren(
     summary,
     h('label', { class: 'row', for: 'send-as-you-go' }, auto, ' Publish each outing as soon as it is analysed (recommended for long lists: nothing is lost if you close the page)'),
