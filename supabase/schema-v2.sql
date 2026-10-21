@@ -119,7 +119,7 @@ create policy "Add your own outing" on public.outings for insert to authenticate
   with check (
     user_id = auth.uid() and status = 'published' and not verified and not hidden
     and file_path like auth.uid()::text || '/%'
-    and dplus_m between 100 and 30000 and dminus_m between 0 and 15000
+    and dplus_m between 200 and 30000 and dminus_m between 0 and 15000
     and score = dplus_m + dminus_m
     and (trace is null or pg_column_size(trace) < 600000)
   );
