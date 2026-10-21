@@ -155,6 +155,34 @@ def process_pending(api: Api) -> None:
             reject(api, row["id"], "This track was already submitted.")
             continue
         print(f"  published: score {outing['score']} (D+ {outing['dplus_m']}, D- {outing['dminus_m']})")
+        save_climb(api, row["id"], values["trace"], outing["flights"])
+
+
+def save_climb(api: Api, outing_id: str, trace, flights) -> None:
+    """The climb drawn on the take-off map. Written apart: an error here (for example the column is not there
+    yet, migration-2026-10-21-map-outings.sql not run) must never reject an outing."""
+    from mbhf.climb import climb_of
+
+    try:
+        api.patch(outing_id, {"climb": climb_of(trace, flights)})
+    except Exception as exc:
+        print(f"  climb not saved: {exc}")
+
+
+def fill_climbs(api: Api) -> None:
+    """Compute the climb of every published outing that has none yet, from its stored trace."""
+    from mbhf.climb import climb_of
+
+    done = 0
+    while True:
+        rows = api.select(f"{PUBLISHED}&climb=is.null&trace=not.is.null&select=id,trace,flights&order=created_at.asc&limit={BATCH}")
+        if not rows:
+            break
+        for row in rows:
+            # an outing without a climb gets an empty object, so that it is not read again
+            api.patch(row["id"], {"climb": climb_of(row["trace"], row["flights"]) or {}})
+            done += 1
+    print(f"climbs filled in: {done}")
 
 
 def retry_places(api: Api, relabel: bool = False) -> None:
@@ -199,6 +227,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--count-only", action="store_true", help="print how many outings wait, and stop")
     ap.add_argument("--relabel", action="store_true", help="look the names up again for every published outing, and stop")
+    ap.add_argument("--climbs", action="store_true", help="compute the climb (take-off map) of published outings without one, and stop")
     args = ap.parse_args()
     url, key = os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_SERVICE_KEY", "")
     if not url or not key:
@@ -207,6 +236,9 @@ def main() -> int:
     api = Api(url, key)
     if args.relabel:
         retry_places(api, relabel=True)
+        return 0
+    if args.climbs:
+        fill_climbs(api)
         return 0
     pending, no_names = waiting(api)
     print(f"waiting: {pending} new, {no_names} without place names")

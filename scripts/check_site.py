@@ -98,7 +98,8 @@ def supabase(route, request):
     if u.path == "/rest/v1/rpc/map_outings":
         # like the SQL function: only the verified outings (ROW1), not the one waiting for the server (ROW2)
         return j(route, [[r["id"], r["takeoff_lat"], r["takeoff_lon"], r["takeoff_alt"], r["takeoff_name"], r["title"], r["outing_date"],
-                          r["dplus_m"], r["walk_km"], r["start_place"], r["profiles"]["display_name"], r["summit_alt"]]
+                          r["dplus_m"], r["walk_km"], r["start_place"], r["profiles"]["display_name"], r["summit_alt"],
+                          r["user_id"], None]  # no stored climb: the page reads the track
                          for r in ROWS if r["verified"] and r["takeoff_lat"] is not None])
     if u.path == "/rest/v1/outings" and request.method == "GET" and q.get("id", [""])[0].startswith("in."):
         ids = q["id"][0][4:-1].replace('"', "").split(",")
@@ -231,6 +232,11 @@ with sync_playwright() as p:
     page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
     check("1 take-off spot, 1 confirmed outing" in page.inner_text(".side"), "map counts only the verified outing: " + page.inner_text(".side")[:90])
     check(page.locator(".leaflet-control-layers input[type=checkbox]").count() == 2, "map: heat map and take-offs can be switched")
+    check("pilots" in page.inner_text(".heat-legend"), "map: heat map legend")
+    winter = int(ROW1["outing_date"][5:7]) in (11, 12, 1, 2, 3, 4)
+    page.select_option("#m-season", "winter")
+    check(("1 take-off spot," if winter else "0 take-off spots,") in page.inner_text(".side"), "map: season filter")
+    page.select_option("#m-season", "")
     page.locator(".tk.spot").first.click()
     page.wait_for_selector(".out-list li", timeout=15000)
     check(page.locator(".out-list li").count() == 1 and "Alice" in page.inner_text(".out-list"), "take-off clicked: its outing is listed")

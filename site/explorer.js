@@ -1,5 +1,6 @@
-// The take-off map: a heat layer, one marker per take-off (grouped when zoomed out), and, for the take-off
-// that is clicked, the climbs on foot that reached it and the list of its outings. Flights are never drawn.
+// The take-off map: a heat map (take-offs when zoomed out, the ways up on foot when zoomed in), one marker per
+// take-off (grouped when zoomed out), and, for the take-off that is clicked, the climbs on foot that reached it
+// and the list of its outings. Flights are never drawn. Filters by season and year apply to everything.
 
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
@@ -8,18 +9,29 @@ import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 const SAME_SPOT_M = 150;
 // Markers whose centres are closer than this on screen are shown as one group, with the sum of their outings.
 const GROUP_PX = 56;
-// At most this many tracks are read for one take-off (the most recent ones).
+// At most this many tracks are read for one take-off whose outings have no stored climb yet.
 const MAX_TRACES = 60;
+// From this zoom on, the heat map shows the ways up instead of the take-offs.
+const ROUTES_ZOOM = 11;
+// Points are laid along each climb this far apart for the heat map of the ways up.
+const ROUTE_STEP_M = 40;
 
-// Heat layer: each take-off weighs its number of outings. Below HEAT.maxZoom the weight is halved at each zoom
+// Heat of the take-offs: each spot weighs its number of pilots. Below maxZoom the weight is halved at each zoom
 // level out, while nearby spots add up; minOpacity keeps a lone take-off visible on the world view.
-const HEAT = {
-  radius: 18, blur: 15, maxZoom: 8, max: 5, minOpacity: 0.35,
-  gradient: { 0.4: '#4aa3c8', 0.65: '#5fbf68', 0.85: '#f0c870', 1: '#f0693d' },
-};
+const GRADIENT = { 0.4: '#4aa3c8', 0.65: '#5fbf68', 0.85: '#f0c870', 1: '#f0693d' };
+const HEAT_SPOTS = { radius: 18, blur: 15, maxZoom: 8, max: 5, minOpacity: 0.35, gradient: GRADIENT };
+// Heat of the ways up: each pilot counts once per take-off, spread along their climbs; 3 pilots on the same
+// path make it hot.
+const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 3, minOpacity: 0.25, gradient: GRADIENT };
 const CLIMB = { color: '#5fbf68', weight: 3, opacity: 0.55 };
 const CLIMB_HOT = { color: '#f0693d', weight: 5, opacity: 1 };
 const CLIMB_BACK = { color: '#5fbf68', weight: 2, opacity: 0.18 };
+const SEASONS = {
+  summer: { label: 'Summer (May–Oct)', months: [5, 6, 7, 8, 9, 10] },
+  winter: { label: 'Winter (Nov–Apr)', months: [11, 12, 1, 2, 3, 4] },
+};
+
+const plural = (n, word) => `${fmtInt(n)} ${word}${n === 1 ? '' : 's'}`;
 
 function metres(lat1, lon1, lat2, lon2) {
   const r = Math.PI / 180;
@@ -28,7 +40,9 @@ function metres(lat1, lon1, lat2, lon2) {
   return 12742000 * Math.asin(Math.sqrt(a));
 }
 
-/** Outings whose take-offs are within SAME_SPOT_M of each other form one spot: [{lat, lon, alt, name, outings}]. */
+const pilotOf = (o) => o.user_id || o.pilot || o.id;
+
+/** Outings whose take-offs are within SAME_SPOT_M of each other form one spot: [{lat, lon, alt, name, outings, pilots}]. */
 export function groupTakeoffs(rows) {
   const spots = [];
   const grid = new Map(); // cells of about 1 km, so each outing is compared with nearby spots only
@@ -57,6 +71,7 @@ export function groupTakeoffs(rows) {
     const n = sp.outings.length;
     sp.lat = sp.outings.reduce((a, o) => a + o.takeoff_lat, 0) / n;
     sp.lon = sp.outings.reduce((a, o) => a + o.takeoff_lon, 0) / n;
+    sp.pilots = new Set(sp.outings.map(pilotOf)).size;
     const alts = sp.outings.map((o) => o.takeoff_alt).filter((a) => a != null);
     sp.alt = alts.length ? alts.reduce((a, b) => a + b, 0) / alts.length : null;
     const names = new Map();
@@ -68,9 +83,8 @@ export function groupTakeoffs(rows) {
 }
 
 /**
- * The climb on foot that reached the take-off: the run of walking fixes just before the main flight (the one
- * that loses the most height, as for the outing's take-off). Driving, lifts and flights are left out.
- * Returns {line, km, duration_s} or null.
+ * The climb on foot to the take-off, from a full trace, for outings whose climb is not stored yet (the server
+ * job stores it: src/mbhf/climb.py, same rule). Returns {line, km, duration_s} or null.
  */
 export function climbOf(o) {
   const tr = o.trace;
@@ -99,23 +113,68 @@ export function climbOf(o) {
   return { line, km: m / 1000, duration_s: tr.t[end] - tr.t[first] };
 }
 
+const storedClimb = (o) => (o.climb && o.climb.line && o.climb.line.length > 1 ? o.climb : null);
+
+/** Heat points of the ways up: points every ROUTE_STEP_M along each stored climb; a pilot weighs 1 per spot. */
+function routePoints(spots) {
+  const pts = [];
+  for (const sp of spots) {
+    const climbsOf = new Map();
+    for (const o of sp.outings) {
+      const c = storedClimb(o);
+      if (c) climbsOf.set(pilotOf(o), [...(climbsOf.get(pilotOf(o)) || []), c.line]);
+    }
+    for (const lines of climbsOf.values()) {
+      const w = 1 / lines.length;
+      for (const line of lines) {
+        for (let i = 1; i < line.length; i++) {
+          const [a, b] = [line[i - 1], line[i]];
+          const steps = Math.max(1, Math.round(metres(a[0], a[1], b[0], b[1]) / ROUTE_STEP_M));
+          for (let k = 0; k < steps; k++) {
+            const f = k / steps;
+            pts.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, w]);
+          }
+        }
+      }
+    }
+  }
+  return pts;
+}
+
+function season(o) {
+  const month = Number(String(o.outing_date || '').slice(5, 7));
+  return Object.keys(SEASONS).find((k) => SEASONS[k].months.includes(month)) || '';
+}
+
 /**
- * The page's map and side panel. ``rows`` are the outings of getMapOutings(); ``loadTraces(ids)`` reads tracks.
- * Returns {element, start}: start() is called once the element is in the page.
+ * The page's filters, map and side panel. ``rows`` are the outings of getMapOutings(); ``loadTraces(ids)`` reads
+ * full tracks. Returns {element, start}: start() is called once the element is in the page.
  */
 export function buildExplorer(rows, loadTraces) {
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': 'Map of the take-offs' });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
-  const element = h('div', { class: 'explorer' }, mapBox, side);
+  const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const seasonPick = h('select', { id: 'm-season' }, h('option', { value: '' }, 'All seasons'),
+    Object.entries(SEASONS).map(([k, s]) => h('option', { value: k }, s.label)));
+  const yearPick = h('select', { id: 'm-year' }, h('option', { value: '' }, 'All years'), years.map((y) => h('option', { value: y }, y)));
+  const bar = h('div', { class: 'filters' },
+    h('div', { class: 'field' }, h('label', { for: 'm-season' }, 'Season'), seasonPick),
+    h('div', { class: 'field' }, h('label', { for: 'm-year' }, 'Year'), yearPick));
+  const element = h('div', null, bar, h('div', { class: 'explorer' }, mapBox, side));
   const L = window.L;
   if (!L || !L.heatLayer) {
     mapBox.append(h('p', { class: 'hint pad' }, 'The map could not be loaded.'));
     return { element, start() {} };
   }
-  const spots = groupTakeoffs(rows);
+  let shown = rows;
+  let spots = [];
   let map;
   let markers;
   let climbs;
+  let heat; // holds the heat layer that suits the zoom
+  let heatSpots;
+  let heatRoutes;
+  let legendText;
   let current = null; // the spot shown in the panel
   let request = 0; // a slow answer for a spot we already left must not draw over the new one
 
@@ -123,11 +182,12 @@ export function buildExplorer(rows, loadTraces) {
     current = null;
     request += 1;
     if (climbs) climbs.clearLayers();
-    element.classList.remove('has-spot');
+    element.querySelector('.explorer').classList.remove('has-spot');
     side.replaceChildren(
       h('h2', null, 'Take-offs'),
-      h('p', { class: 'hint' }, `${fmtInt(spots.length)} take-off spot${spots.length === 1 ? '' : 's'}, ${fmtInt(rows.length)} confirmed outing${rows.length === 1 ? '' : 's'}.`),
-      h('p', { class: 'hint' }, 'Click a take-off to see the climbs that reached it and its outings. Numbers on the map are outings; zoom in to split a group.'));
+      h('p', { class: 'hint' }, `${plural(spots.length, 'take-off spot')}, ${plural(shown.length, 'confirmed outing')}.`),
+      h('p', { class: 'hint' }, 'Click a take-off to see the climbs that reached it and its outings. Numbers on the map are outings; zoom in to split a group.'),
+      h('p', { class: 'hint' }, `Zoomed out, the heat map shows the take-offs; from zoom ${ROUTES_ZOOM} on, the ways up on foot. Warmer means more pilots: someone who goes up the same way many times counts once.`));
     if (markers) draw();
   }
 
@@ -152,48 +212,77 @@ export function buildExplorer(rows, loadTraces) {
         const sp = group[0];
         const mk = L.marker([sp.lat, sp.lon], { icon: icon(n, sp === current ? 'spot on' : 'spot'), title: sp.name, riseOnHover: true });
         // a node, not a string: Leaflet would read a string as HTML, and names come from OpenStreetMap
-        mk.bindTooltip(h('span', null, `${sp.name} · ${n} outing${n === 1 ? '' : 's'}`), { direction: 'top', offset: [0, -14] });
+        mk.bindTooltip(h('span', null, `${sp.name} · ${plural(n, 'outing')} · ${plural(sp.pilots, 'pilot')}`), { direction: 'top', offset: [0, -14] });
         mk.on('click', () => openSpot(sp));
         markers.addLayer(mk);
       } else {
         const lat = group.reduce((a, sp) => a + sp.lat, 0) / group.length;
         const lon = group.reduce((a, sp) => a + sp.lon, 0) / group.length;
         const mk = L.marker([lat, lon], { icon: icon(n, 'group'), title: `${group.length} take-offs` });
-        mk.bindTooltip(h('span', null, `${group.length} take-offs · ${n} outings — click to zoom in`), { direction: 'top', offset: [0, -16] });
+        mk.bindTooltip(h('span', null, `${group.length} take-offs · ${plural(n, 'outing')} — click to zoom in`), { direction: 'top', offset: [0, -16] });
         mk.on('click', () => map.fitBounds(L.latLngBounds(group.map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 15 }));
         markers.addLayer(mk);
       }
     }
   }
 
+  // the heat map of the take-offs zoomed out, of the ways up zoomed in
+  function pickHeat() {
+    if (!map.getSize().x) return; // a hidden map has no size: Leaflet.heat cannot draw it (called again on resize)
+    const routes = map.getZoom() >= ROUTES_ZOOM;
+    const want = routes ? heatRoutes : heatSpots;
+    if (!heat.hasLayer(want)) {
+      heat.clearLayers();
+      heat.addLayer(want);
+    }
+    legendText.textContent = routes ? 'Ways up on foot · pilots' : 'Take-offs · pilots';
+  }
+
+  function applyFilters() {
+    const s = seasonPick.value;
+    const y = yearPick.value;
+    shown = rows.filter((o) => (!s || season(o) === s) && (!y || String(o.outing_date || '').startsWith(y)));
+    spots = groupTakeoffs(shown);
+    heatSpots.setLatLngs(spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
+    heatRoutes.setLatLngs(routePoints(spots));
+    overview();
+  }
+
   async function openSpot(sp) {
     current = sp;
     const mine = ++request;
     climbs.clearLayers();
-    element.classList.add('has-spot');
+    element.querySelector('.explorer').classList.add('has-spot');
     draw();
     const list = h('ul', { class: 'out-list' });
-    const status = h('p', { class: 'hint' }, 'Loading the climbs…');
+    const status = h('p', { class: 'hint' });
     side.replaceChildren(
       h('div', { class: 'side-head' },
         h('div', null,
           h('h2', null, sp.name),
-          h('p', { class: 'hint' }, `${fmtInt(sp.outings.length)} confirmed outing${sp.outings.length === 1 ? '' : 's'}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
+          h('p', { class: 'hint' }, `${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
       status, list);
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
-    const recent = sp.outings.slice(0, MAX_TRACES);
-    let tracks = [];
-    try {
-      tracks = await loadTraces(recent.map((o) => o.id));
-    } catch (e) {
+    // the climbs: stored by the server job; read from the full tracks only for outings that have none yet
+    const climbOfId = new Map();
+    for (const o of sp.outings) if (storedClimb(o)) climbOfId.set(o.id, storedClimb(o));
+    const missing = sp.outings.filter((o) => !o.climb).slice(0, MAX_TRACES);
+    if (missing.length) {
+      status.textContent = 'Loading the climbs…';
+      try {
+        for (const t of await loadTraces(missing.map((o) => o.id))) {
+          const c = climbOf({ ...missing.find((o) => o.id === t.id), ...t });
+          if (c) climbOfId.set(t.id, c);
+        }
+      } catch (e) {
+        if (mine !== request) return;
+        status.textContent = `Some tracks could not be loaded (${e.message}).`;
+      }
       if (mine !== request) return;
-      status.textContent = `The tracks could not be loaded (${e.message}).`;
     }
-    if (mine !== request) return;
-    const byId = new Map(tracks.map((t) => [t.id, t]));
     const lines = new Map();
     const bounds = L.latLngBounds([[sp.lat, sp.lon]]);
     let selected = null;
@@ -207,9 +296,8 @@ export function buildExplorer(rows, loadTraces) {
     };
     const select = (id) => { selected = selected === id ? null : id; restyle(null); };
 
-    for (const o of recent) {
-      const t = byId.get(o.id);
-      const climb = t ? climbOf({ ...o, ...t }) : null;
+    for (const o of sp.outings) {
+      const climb = climbOfId.get(o.id);
       if (climb) {
         const line = L.polyline(climb.line, CLIMB).addTo(climbs);
         line.on('mouseover', () => restyle(o.id));
@@ -222,12 +310,13 @@ export function buildExplorer(rows, loadTraces) {
         lines.set(o.id, line);
         bounds.extend(line.getBounds());
       }
+      const dplus = climb && climb.dplus_m != null ? climb.dplus_m : o.dplus_m;
       const li = h('li', { 'data-id': o.id, tabindex: '0' },
         h('b', null, outingTitle(o)),
         h('span', { class: 'hint' }, `${o.pilot || 'Anonymous'} · ${fmtDate(o.outing_date)}`),
         h('span', null, `From ${o.start_place || 'the valley'} to ${sp.name}`),
         h('span', { class: 'nums' },
-          h('span', { title: 'D+ on foot (engine)' }, `↗ ${fmtInt(o.dplus_m)} m`),
+          h('span', { title: climb && climb.dplus_m != null ? 'D+ of the climb' : 'D+ on foot' }, `↗ ${fmtInt(dplus)} m`),
           h('span', { title: 'Distance of the climb' }, climb ? fmtKm(climb.km) : fmtKm(o.walk_km)),
           h('span', { title: 'Time of the climb' }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : '')),
         climb ? null : h('span', { class: 'hint' }, 'No climb track to draw.'),
@@ -239,9 +328,7 @@ export function buildExplorer(rows, loadTraces) {
       li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target === li) select(o.id); });
       list.append(li);
     }
-    status.textContent = sp.outings.length > MAX_TRACES
-      ? `The ${MAX_TRACES} most recent outings. Hover one to light its climb; click it to keep it lit.`
-      : 'Hover an outing to light its climb; click it to keep it lit.';
+    status.textContent = 'Hover an outing to light its climb; click it to keep it lit.';
     if (lines.size) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
 
@@ -252,15 +339,31 @@ export function buildExplorer(rows, loadTraces) {
       maxZoom: CONFIG.TILES_MAX_ZOOM,
       attribution: CONFIG.TILES_ATTRIBUTION,
     }).addTo(map);
-    const heat = L.heatLayer(spots.map((sp) => [sp.lat, sp.lon, sp.outings.length]), HEAT).addTo(map);
+    heatSpots = L.heatLayer([], HEAT_SPOTS);
+    heatRoutes = L.heatLayer([], HEAT_ROUTES);
+    heat = L.layerGroup().addTo(map);
     climbs = L.featureGroup().addTo(map);
     markers = L.layerGroup().addTo(map);
     L.control.layers(null, { 'Heat map': heat, 'Take-offs': markers }, { collapsed: false }).addTo(map);
-    map.on('zoomend', draw);
+
+    // legend of the heat map, shown with it
+    const legend = L.control({ position: 'bottomleft' });
+    legendText = h('span');
+    const legendBox = h('div', { class: 'heat-legend' }, legendText, h('i', { class: 'heat-bar' }), h('span', { class: 'heat-ends' }, h('span', null, 'few'), h('span', null, 'many')));
+    legend.onAdd = () => legendBox;
+    legend.addTo(map);
+    map.on('overlayadd overlayremove', (e) => { if (e.layer === heat) legendBox.hidden = e.type === 'overlayremove'; });
+
+    map.on('zoomend', () => { pickHeat(); draw(); });
+    map.on('resize', pickHeat);
+    spots = groupTakeoffs(shown);
     if (spots.length) map.fitBounds(L.latLngBounds(spots.map((sp) => [sp.lat, sp.lon])), { padding: [40, 40], maxZoom: 11 });
     else map.setView([45.92, 6.87], 9); // Mont Blanc, until the first outing is confirmed
+    pickHeat();
+    applyFilters();
+    seasonPick.addEventListener('change', applyFilters);
+    yearPick.addEventListener('change', applyFilters);
     mapBox._map = map;
-    overview();
   };
   return { element, start };
 }

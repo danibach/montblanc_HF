@@ -120,7 +120,7 @@ export async function listUserOutings(userId) {
 }
 
 const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_name', 'title', 'outing_date',
-  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt'];
+  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb'];
 
 /** The verified public outings for the take-off map (no track): the order of MAP_FIELDS, as in map_outings(). */
 export async function getMapOutings() {
