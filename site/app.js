@@ -346,8 +346,8 @@ async function pageUpload() {
   const drop = h('div', { class: 'drop', id: 'drop' },
     h('p', null, h('b', null, 'Drop your tracks here'), ' or choose one or several files'),
     h('p', null, input),
-    h('p', { class: 'hint' }, `IGC, GPX, KML, TCX or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB each. The analysis runs in your browser: nothing is sent until you publish.`),
-    h('p', { class: 'hint' }, `Several files at once: each one is analysed, you review the list, then publish them together (at most 20 uploads per day, and up to 1,000 per day during the first two weeks of your account).`),
+    h('p', { class: 'hint' }, `IGC, GPX, KML, TCX or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB each. The analysis runs in your browser: a single file is sent only when you publish it.`),
+    h('p', { class: 'hint' }, `Several files at once: each one is analysed and, by default, published as soon as it is ready. Keep the page open until the list is finished. At most 20 uploads per day, and up to 1,000 per day during the first two weeks of your account.`),
     h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused.'));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
@@ -421,8 +421,9 @@ function refusalText(o) {
 }
 
 /**
- * Several files at once. Each is analysed in the browser (the same steps as a single file), the list is
- * shown for review, and one click publishes the ones that count. Nothing is sent before that click.
+ * Several files at once. Each is analysed in the browser (the same steps as a single file). By default each
+ * outing that counts is published as soon as it is analysed, so a long batch loses nothing if the page is
+ * closed; untick the box to review the whole list first and publish with one click at the end.
  */
 async function analyseBatch(fileList, out) {
   const files = fileList.slice().sort((a, b) => a.name.localeCompare(b.name));
@@ -435,18 +436,56 @@ async function analyseBatch(fileList, out) {
     it.cells.result.replaceChildren(text);
     it.cells.result.className = kind || '';
   };
-  const summary = h('p', { role: 'status', id: 'batch-summary' }, `Analysing ${items.length} files…`);
+  const summary = h('p', { role: 'status', id: 'batch-summary' }, `Preparing ${items.length} files…`);
+  const auto = h('input', { type: 'checkbox', id: 'send-as-you-go', checked: true });
   const publish = h('button', { class: 'primary', id: 'publish-all', disabled: true }, 'Publish');
   const status = h('span', { class: 'hint', role: 'status' });
   const grid = table(
     [{ label: 'File' }, { label: 'Outing' }, { label: 'Result' }, { label: 'Score', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Notes' }],
     items.map((it) => h('tr', null, it.cells.name, it.cells.title, it.cells.result, it.cells.score, it.cells.dplus, it.cells.dminus, it.cells.notes)));
-  out.replaceChildren(summary, h('div', { class: 'publish-bar' }, h('div', { class: 'row' }, publish, status)), grid);
+  out.replaceChildren(
+    summary,
+    h('label', { class: 'row', for: 'send-as-you-go' }, auto, ' Publish each outing as soon as it is analysed (recommended for long lists: nothing is lost if you close the page)'),
+    h('p', { class: 'hint' }, 'By publishing you agree that these tracks — map, profile and statistics — are shown publicly. The original files stay private. Each result is computed again on our side before it is confirmed. There is a daily limit on uploads: if it is reached, the rest is kept in the list so you can send those files again tomorrow. Keep this page open until the list is finished.'),
+    h('div', { class: 'publish-bar' }, h('div', { class: 'row' }, publish, status)), grid);
   const alive = () => out.isConnected;
+  let busy = true;
+  const warn = (ev) => { if (busy) { ev.preventDefault(); ev.returnValue = ''; } };
+  window.addEventListener('beforeunload', warn);
+  const finish = () => { busy = false; window.removeEventListener('beforeunload', warn); };
+  let limitReached = false;
+
+  // Send one analysed outing; a duplicate or the daily limit are reported in the list, not thrown.
+  const send = async (it) => {
+    if (limitReached) { set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); return false; }
+    set(it, 'busy', 'Publishing…');
+    try {
+      const id = await api.submitTrack(it.file, null, it.pv);
+      set(it, 'published', '', 'ok-text');
+      it.cells.result.append(link(`#/outing/${id}`, 'Published'));
+      return true;
+    } catch (e) {
+      if (/already submitted/i.test(e.message)) set(it, 'duplicate', 'Already submitted before', 'warn-text');
+      else if (/daily upload limit/i.test(e.message)) { limitReached = true; set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); }
+      else set(it, 'error', e.message, 'error-text');
+      return false;
+    }
+  };
+
+  // 0. skip what this account has already sent (a restarted batch picks up where it stopped)
+  try {
+    const hashes = await Promise.all(items.map(async (it) => { it.hash = await api.sha256Hex(await it.file.arrayBuffer()); return it.hash; }));
+    const sent = await api.alreadySent(hashes);
+    for (const it of items) if (sent.has(it.hash)) { set(it, 'duplicate', 'Already submitted before', 'warn-text'); it.cells.score.textContent = '–'; }
+  } catch (_) { /* not essential */ }
+  const todo = items.filter((it) => it.state === 'waiting');
 
   // 1. analyse, one file after the other (the map service asks for a pause between requests)
-  for (const it of items) {
-    if (!alive()) return;
+  let n = 0;
+  for (const it of todo) {
+    if (!alive()) { finish(); return; }
+    n += 1;
+    summary.textContent = `Analysing file ${n} of ${todo.length}…`;
     set(it, 'busy', 'Analysing…');
     try {
       if (it.file.size > CONFIG.MAX_FILE_MB * 1024 * 1024) throw new Error(`Larger than ${CONFIG.MAX_FILE_MB} MB`);
@@ -462,6 +501,7 @@ async function analyseBatch(fileList, out) {
         it.cells.title.textContent = it.pv.title;
         it.cells.score.textContent = fmtInt(o.score);
         set(it, 'ready', 'Ready', 'ok-text');
+        if (auto.checked) await send(it);
       } else {
         it.cells.score.textContent = '–';
         set(it, 'refused', `Not counted: ${refusalText(o)}`, 'warn-text');
@@ -471,41 +511,35 @@ async function analyseBatch(fileList, out) {
       set(it, 'error', e.message || 'This file could not be analysed.', 'error-text');
     }
   }
-  const ready = items.filter((it) => it.state === 'ready');
-  const refused = items.filter((it) => it.state === 'refused').length;
-  const errors = items.filter((it) => it.state === 'error').length;
-  summary.replaceChildren(h('b', null, `${ready.length} ready to publish`), ` · ${refused} not counted · ${errors} not readable. Check the list, then publish.`);
-  if (!ready.length) { status.textContent = 'Nothing to publish.'; return; }
-  publish.textContent = `Publish ${ready.length} outing${ready.length > 1 ? 's' : ''}`;
-  publish.disabled = false;
-  out.insertBefore(h('p', { class: 'hint' }, `Not published yet. By publishing you agree that these tracks — map, profile and statistics — are shown publicly. The original files stay private. Each result is computed again on our side before it is confirmed. There is a daily limit on uploads: if it is reached, the rest is kept in the list so you can send those files again tomorrow.`), grid);
+  finish();
+  const count = (st) => items.filter((it) => it.state === st).length;
+  const describe = () => [
+    h('b', null, `${count('published')} published`),
+    ` · ${count('ready')} ready to publish · ${count('refused')} not counted · ${count('duplicate')} already submitted · ${count('unsent')} not sent (daily limit) · ${count('error')} with a problem.`,
+    count('published') ? ' The server now checks each result: the "Validation pending" badge disappears within a few minutes once it is confirmed.' : '',
+  ];
+  summary.replaceChildren(...describe());
 
-  // 2. publish, one after the other; stop cleanly at the daily limit
+  // 2. publish what is still waiting (the box was unticked, or a send failed)
+  const waiting = () => items.filter((it) => it.state === 'ready');
+  if (!waiting().length) return;
+  publish.textContent = `Publish ${waiting().length} outing${waiting().length > 1 ? 's' : ''}`;
+  publish.disabled = false;
   publish.addEventListener('click', async () => {
     publish.disabled = true;
-    let done = 0;
-    let stopped = false;
-    for (const it of ready) {
-      if (!alive()) return;
-      if (stopped) { set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); continue; }
-      set(it, 'busy', 'Publishing…');
-      status.textContent = `Publishing ${done + 1} of ${ready.length}…`;
-      try {
-        const id = await api.submitTrack(it.file, null, it.pv);
-        done += 1;
-        set(it, 'published', '', 'ok-text');
-        it.cells.result.append(link(`#/outing/${id}`, 'Published'));
-      } catch (e) {
-        if (/already submitted/i.test(e.message)) set(it, 'duplicate', 'Already submitted before', 'warn-text');
-        else if (/daily upload limit/i.test(e.message)) { stopped = true; set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); }
-        else set(it, 'error', e.message, 'error-text');
-      }
+    busy = true;
+    window.addEventListener('beforeunload', warn);
+    const list = waiting();
+    let k = 0;
+    for (const it of list) {
+      if (!alive()) { finish(); return; }
+      k += 1;
+      status.textContent = `Publishing ${k} of ${list.length}…`;
+      await send(it);
     }
-    const unsent = ready.filter((it) => it.state === 'unsent').length;
+    finish();
     status.textContent = '';
-    summary.replaceChildren(h('b', null, `${done} outing${done === 1 ? '' : 's'} published`),
-      unsent ? ` · ${unsent} not sent (daily limit): choose those files again tomorrow` : '',
-      '. The server now checks each result: the "Validation pending" badge disappears within a few minutes once it is confirmed.');
+    summary.replaceChildren(...describe());
   });
 }
 
