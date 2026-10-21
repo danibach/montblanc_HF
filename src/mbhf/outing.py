@@ -11,6 +11,12 @@ What is measured (all from the track alone, nothing is typed in by the participa
 
 A track counts as a Hike & Fly outing when it holds at least one flight and at least
 ``min_walk_climb_m`` of climbing on foot. Anything else is reported as ``rejected`` with a reason.
+
+Only the climbing that leads to a take-off counts: the walk since the last landing or the last ride
+before each flight. A climb given up without taking off (too much wind, then down on foot or by car)
+does not count, even when the same file holds a flight later. Across a recording gap (no fix for more
+than ``gap_s``: the recorder was off, often in a car or a lift) neither D+ nor distance is counted;
+a pause with the recorder on is a standstill and changes nothing.
 """
 
 from __future__ import annotations
@@ -32,6 +38,10 @@ class OutingConfig:
     climb_threshold_m: float = 15.0   # a dip smaller than this does not end a climb (to calibrate)
     min_walk_climb_m: float = 200.0   # climbing on foot needed for the outing to count
     min_flight_drop_m: float = 30.0   # a flight must lose at least this much height to count
+    # no fix for longer than this: a recording gap, nothing on foot is counted across it
+    gap_s: float = 600.0
+    # a ride at least this long ends the climb on foot that led to it (shorter: a misread step, ignored)
+    ride_break_m: float = 500.0
     max_trace_points: int = 1200
 
 
@@ -133,6 +143,34 @@ def build_trace(track: Track, labels: list[int], max_points: int = 1200) -> dict
     }
 
 
+def _recorded_pieces(pts: list[Point], i0: int, i1: int, gap_s: float) -> list[tuple[int, int]]:
+    """Index ranges of i0..i1 split where no fix was recorded for more than ``gap_s``."""
+    out, a = [], i0
+    for i in range(i0 + 1, i1 + 1):
+        if (pts[i].t - pts[i - 1].t).total_seconds() > gap_s:
+            out.append((a, i - 1))
+            a = i
+    out.append((a, i1))
+    return out
+
+
+def _walks_leading_to_a_flight(segments: list[Segment], cfg: OutingConfig) -> set[int]:
+    """The walks (by ``id``) whose climbing counts: those followed by a flight with no ride of at least
+    ``ride_break_m`` in between. A walk after the last flight, or before a ride with no flight in between
+    (a climb given up), does not lead to a take-off."""
+    leads: set[int] = set()
+    pending: list[Segment] = []
+    for s in segments:
+        if s.mode == "walk":
+            pending.append(s)
+        elif s.mode == "flight":
+            leads.update(id(w) for w in pending)
+            pending = []
+        elif s.distance_m >= cfg.ride_break_m:
+            pending = []
+    return leads
+
+
 def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConfig] = None) -> dict:
     cfg = cfg or OutingConfig()
     pts = track.points
@@ -146,14 +184,32 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
     dplus = 0.0
     walk_m = 0.0
     highest: Optional[int] = None
+    lost_climb = 0.0
+    leads = _walks_leading_to_a_flight(seg.segments, cfg)
     for s in walks:
-        series = [a for a in salt[s.i_start : s.i_end + 1] if a is not None]
-        up, _ = climbs(series, cfg.climb_threshold_m)
-        dplus += up
-        walk_m += s.distance_m
+        up = 0.0
+        for a, b in _recorded_pieces(pts, s.i_start, s.i_end, cfg.gap_s):
+            series = [x for x in salt[a : b + 1] if x is not None]
+            up += climbs(series, cfg.climb_threshold_m)[0]
+            walk_m += path_length_m([(pts[i].lat, pts[i].lon) for i in range(a, b + 1)])
+        if id(s) in leads:
+            dplus += up
+        else:
+            lost_climb += up
         for i in range(s.i_start, s.i_end + 1):
             if salt[i] is not None and (highest is None or salt[i] > salt[highest]):
                 highest = i
+    for i in range(1, len(pts)):
+        gap = (pts[i].t - pts[i - 1].t).total_seconds()
+        if gap > cfg.gap_s and seg.labels[i - 1] == WALK and seg.labels[i] == WALK:
+            a0, a1 = pts[i - 1].alt, pts[i].alt
+            change = f", {a0:.0f} m to {a1:.0f} m" if a0 is not None and a1 is not None else ""
+            warnings.append(f"recording gap of {gap / 60:.0f} min ({pts[i - 1].t.strftime('%H:%M')}{change}): "
+                            "nothing on foot counted across it")
+    if not flights_raw:  # no flight at all: the outing is refused anyway, show the climbing as measured
+        dplus, lost_climb = dplus + lost_climb, 0.0
+    if lost_climb >= cfg.climb_threshold_m:
+        warnings.append(f"{lost_climb:.0f} m climbed on foot that did not lead to a take-off: not counted")
     start_walk = walks[0].i_start if walks else None
 
     # ---- in flight
