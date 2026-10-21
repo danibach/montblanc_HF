@@ -19,12 +19,23 @@ import datetime as dt
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 BATCH = 20
 TO_CHECK = "verified=is.false&status=in.(pending,published)"
+PUBLISHED = "verified=is.true&status=eq.published"
+PLACE_COLUMNS = ("id,outing_date,start_lat,start_lon,summit_lat,summit_lon,summit_alt,"
+                 "takeoff_lat,takeoff_lon,takeoff_alt")
+
+
+def no_names_filter() -> str:
+    """Outings still without any name. Only the first day after analysis: an outing in a place that OpenStreetMap
+    does not name would otherwise be retried (and trigger the job) for ever."""
+    since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).isoformat()
+    return f"{PUBLISHED}&places_pending=is.true&analysed_at=gt.{urllib.parse.quote(since)}"
 
 
 class Api:
@@ -73,7 +84,7 @@ def now() -> str:
 
 
 def waiting(api: Api) -> tuple[int, int]:
-    return api.count(TO_CHECK), api.count("verified=is.true&status=eq.published&places_pending=is.true")
+    return api.count(TO_CHECK), api.count(no_names_filter())
 
 
 def reject(api: Api, outing_id: str, reason: str) -> None:
@@ -146,44 +157,57 @@ def process_pending(api: Api) -> None:
         print(f"  published: score {outing['score']} (D+ {outing['dplus_m']}, D- {outing['dminus_m']})")
 
 
-def retry_places(api: Api) -> None:
+def retry_places(api: Api, relabel: bool = False) -> None:
+    """Fill in the names of outings still waiting for them; with ``relabel``, redo every published outing."""
     from mbhf.rows import has_names, place_title
 
-    for row in api.select(
-        "verified=is.true&status=eq.published&places_pending=is.true&select=id,outing_date,start_lat,start_lon,summit_lat,summit_lon,summit_alt,"
-        f"takeoff_lat,takeoff_lon,takeoff_alt&limit={BATCH}"
-    ):
-        outing = {
-            "start": {"lat": row["start_lat"], "lon": row["start_lon"]} if row["start_lat"] is not None else None,
-            "summit": {"lat": row["summit_lat"], "lon": row["summit_lon"], "alt": row["summit_alt"]} if row["summit_lat"] is not None else None,
-            "takeoff": {"lat": row["takeoff_lat"], "lon": row["takeoff_lon"], "alt": row["takeoff_alt"]} if row["takeoff_lat"] is not None else None,
-        }
-        places = look_up_places(outing)
-        if not has_names(places):
-            continue  # Overpass answered without any name: stays pending, retried at the next run
-        summit = places.get("summit") or {}
-        takeoff = places.get("takeoff") or {}
-        country = places.get("country") or {}
-        api.patch(row["id"], {
-            "places_pending": False,
-            "title": place_title(places, row["outing_date"], row["summit_alt"]),
-            "country_code": country.get("code"), "country_name": country.get("name"),
-            "start_place": places.get("start_place"), "start_commune": places.get("commune"),
-            "summit_name": summit.get("name"), "summit_osm_id": summit.get("osm_id"),
-            "takeoff_name": takeoff.get("name"),
-        })
-        print(f"  places filled in for {row['id']}")
+    where = PUBLISHED if relabel else no_names_filter()
+    offset = 0
+    while True:
+        rows = api.select(f"{where}&select={PLACE_COLUMNS}&order=created_at.asc&limit={BATCH}&offset={offset}")
+        if not rows:
+            return
+        offset += BATCH
+        for row in rows:
+            outing = {
+                "start": {"lat": row["start_lat"], "lon": row["start_lon"]} if row["start_lat"] is not None else None,
+                "summit": {"lat": row["summit_lat"], "lon": row["summit_lon"], "alt": row["summit_alt"]} if row["summit_lat"] is not None else None,
+                "takeoff": {"lat": row["takeoff_lat"], "lon": row["takeoff_lon"], "alt": row["takeoff_alt"]} if row["takeoff_lat"] is not None else None,
+            }
+            places = look_up_places(outing)
+            if not has_names(places):
+                continue  # Overpass gave nothing: left as it is (retried for a day when still pending)
+            summit = places.get("summit") or {}
+            takeoff = places.get("takeoff") or {}
+            country = places.get("country") or {}
+            api.patch(row["id"], {
+                "places_pending": False,
+                "title": place_title(places, row["outing_date"], row["summit_alt"]),
+                "country_code": country.get("code"), "country_name": country.get("name"),
+                "start_place": places.get("start_place"), "start_commune": places.get("commune"),
+                "summit_name": summit.get("name"), "summit_osm_id": summit.get("osm_id"),
+                "takeoff_name": takeoff.get("name"),
+            })
+            print(f"  places filled in for {row['id']}")
+            if relabel:
+                time.sleep(2)  # be polite with Overpass
+        if not relabel:
+            return  # the next run continues with the rest
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--count-only", action="store_true", help="print how many outings wait, and stop")
+    ap.add_argument("--relabel", action="store_true", help="look the names up again for every published outing, and stop")
     args = ap.parse_args()
     url, key = os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_SERVICE_KEY", "")
     if not url or not key:
         print("SUPABASE_URL and SUPABASE_SERVICE_KEY are required", file=sys.stderr)
         return 1
     api = Api(url, key)
+    if args.relabel:
+        retry_places(api, relabel=True)
+        return 0
     pending, no_names = waiting(api)
     print(f"waiting: {pending} new, {no_names} without place names")
     if args.count_only:

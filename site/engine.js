@@ -96,20 +96,25 @@ export async function lookUpPlaces(outing) {
     await startEngine();
     const { query } = await call({ type: 'places_query', outing });
     if (!query) return null;
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 20000);
-    let response;
-    try {
-      const r = await fetch(CONFIG.OVERPASS_URL, {
-        method: 'POST',
-        body: new URLSearchParams({ data: query }),
-        signal: ctl.signal,
-      });
-      if (!r.ok) return null;
-      response = await r.json();
-    } finally {
-      clearTimeout(timer);
+    let response = null;
+    for (let attempt = 0; attempt < 3 && !response; attempt += 1) { // Overpass often answers 502/504 when busy
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 20000);
+      try {
+        const r = await fetch(CONFIG.OVERPASS_URL, {
+          method: 'POST',
+          body: new URLSearchParams({ data: query }),
+          signal: ctl.signal,
+        });
+        if (r.ok) response = await r.json();
+      } catch (_) {
+        response = null;
+      } finally {
+        clearTimeout(timer);
+      }
     }
+    if (!response) return null;
     const places = await call({ type: 'places', outing, overpass: response });
     return places && places.ok === false ? null : places;
   } catch (_) {

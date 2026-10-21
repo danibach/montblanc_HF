@@ -30,7 +30,9 @@ def has_names(places: Optional[dict]) -> bool:
 
 def place_title(places: Optional[dict], date: Optional[str], summit_alt: Optional[float]) -> str:
     p = places or {}
-    return (p.get("summit") or {}).get("name") or p.get("start_place") or fallback_title(date, summit_alt)
+    takeoff = p.get("takeoff") or {}
+    site = takeoff.get("name") if takeoff.get("kind") == "site" else None  # a mapped paragliding take-off, as pilots call it
+    return site or (p.get("summit") or {}).get("name") or p.get("start_place") or fallback_title(date, summit_alt)
 
 
 def outing_row(result: dict, places: Optional[dict]) -> dict:

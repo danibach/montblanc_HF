@@ -13,6 +13,7 @@ the field stays empty and the outing is shown without that name.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -31,7 +32,9 @@ USER_AGENT = "mbhf-hikeandfly/0.2 (https://github.com/danibach/montblanc_HF)"
 SUMMIT_RADIUS_M = 500
 TAKEOFF_RADIUS_M = 600
 PLACE_RADIUS_M = 3000
-ELE_TOLERANCE_M = 150
+ELE_TOLERANCE_M = 400  # track altitudes drift by 100 m or more: only absurd differences rule a peak out
+ELE_WEIGHT = 0.5  # metres of height difference that count as one metre of distance
+SITE_RADIUS_M = 400  # a mapped paragliding take-off (sport=free_flying) near the take-off point
 PLACE_TYPES = "hamlet|village|town|city|isolated_dwelling|locality"
 
 
@@ -55,6 +58,7 @@ def overpass_query(outing: dict) -> Optional[str]:
             parts.append(f'  node({_around(SUMMIT_RADIUS_M if p is summit else TAKEOFF_RADIUS_M, p)})["natural"~"^(peak|saddle)$"]["name"];')
     if takeoff:
         parts.append(f'  node({_around(PLACE_RADIUS_M, takeoff)})["place"~"^({PLACE_TYPES})$"]["name"];')
+        parts.append(f'  nwr({_around(SITE_RADIUS_M, takeoff)})["sport"="free_flying"]["name"];')
     parts += [");", "out tags center;"]
     return "[out:json][timeout:25];\n" + "\n".join(parts)
 
@@ -69,6 +73,37 @@ def _ele(tags: dict) -> Optional[float]:
         return float(raw)
     except ValueError:
         return None
+
+
+_SITE_PREFIX = re.compile(
+    r"^\s*(?:d[ée]collage|take-?off|d[ée]part)\s+(?:(?:de\s+)?(?:parapente|deltaplane|vol\s+libre)\s*)?(?:(?:FFVL|ffvl)\s*)?"
+    r"(?:de\s+la\s+|de\s+l['’]|du\s+|des\s+|de\s+|d['’]|\s)?",
+    re.IGNORECASE,
+)
+
+
+def site_name(raw: str) -> Optional[str]:
+    """"Décollage parapente FFVL de Planfait" -> "Planfait". None for a landing field."""
+    if re.search(r"atterriss|landing", raw, re.IGNORECASE):
+        return None
+    name = _SITE_PREFIX.sub("", raw).strip(" -–·")
+    if not name:
+        return None
+    return name[0].upper() + name[1:]
+
+
+def _sites(elements: list) -> list[dict]:
+    """Paragliding take-offs (nodes, or ways and relations with a centre), as ``{"id", "lat", "lon", "name"}``."""
+    out = []
+    for e in elements:
+        tags = e.get("tags", {})
+        if tags.get("sport") != "free_flying" or not _name(tags):
+            continue
+        c = e if "lat" in e else e.get("center") or {}
+        name = site_name(_name(tags))
+        if name and "lat" in c:
+            out.append({"id": e.get("id"), "lat": c["lat"], "lon": c["lon"], "tags": {"name": name}})
+    return out
 
 
 def _nodes(elements: list, key: str, values: tuple[str, ...]) -> list[dict]:
@@ -89,7 +124,7 @@ def _nearest(nodes: list[dict], p: dict, radius: int, alt: Optional[float] = Non
         if alt is not None and ele is not None:
             if abs(ele - alt) > ELE_TOLERANCE_M:
                 continue
-            score += 2 * abs(ele - alt)
+            score += ELE_WEIGHT * abs(ele - alt)
         if e["tags"].get("natural") == "saddle":
             score += 50  # a summit is a better match than a col next to it
         if best_score is None or score < best_score:
@@ -130,8 +165,11 @@ def resolve_places(outing: dict, response: dict) -> dict:
 
     takeoff = outing.get("takeoff")
     if takeoff:
+        site = _nearest(_sites(elements), takeoff, SITE_RADIUS_M)
         peak = _nearest(peaks, takeoff, TAKEOFF_RADIUS_M, takeoff.get("alt"))
-        if peak:
+        if site:
+            out["takeoff"] = {"name": site["tags"]["name"], "osm_id": site["id"], "kind": "site"}
+        elif peak:
             out["takeoff"] = {"name": _name(peak["tags"]), "osm_id": peak["id"], "kind": "peak"}
         else:
             near = _nearest(places, takeoff, PLACE_RADIUS_M)
