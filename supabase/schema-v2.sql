@@ -97,6 +97,9 @@ create table if not exists public.outings (
 );
 
 alter table public.outings add column if not exists verified boolean not null default false;
+-- the climb on foot drawn on the take-off map, written by the server job only:
+-- {line: [[lat, lon], …], dplus_m, km, duration_s}, {} when there is no climb to draw
+alter table public.outings add column if not exists climb jsonb;
 
 create index if not exists outings_verified_idx on public.outings (verified) where not verified;
 create index if not exists outings_list_idx on public.outings (status, outing_date desc);
@@ -206,8 +209,22 @@ language sql stable as $$
   )
 $$;
 
+-- the public, verified outings for the take-off map, as one JSON array of [id, take-off lat, lon, alt, take-off
+-- name, title, date, D+ on foot, km on foot, start place, pilot, highest point, pilot id, climb]. One JSON value
+-- rather than rows, so the API row limit (1,000) does not cut the map.
+create or replace function public.map_outings() returns json
+language sql stable as $$
+  select coalesce(json_agg(json_build_array(o.id, o.takeoff_lat, o.takeoff_lon, o.takeoff_alt, o.takeoff_name, o.title,
+           o.outing_date, o.dplus_m, o.walk_km, o.start_place, p.display_name, o.summit_alt, o.user_id, o.climb)
+         order by o.outing_date desc), '[]'::json)
+  from public.outings o join public.profiles p on p.id = o.user_id
+  where o.status = 'published' and o.verified and not o.hidden
+    and o.takeoff_lat is not null and o.takeoff_lon is not null
+$$;
+
 grant execute on function public.ranking(int, text, int) to anon, authenticated;
 grant execute on function public.outing_filters() to anon, authenticated;
+grant execute on function public.map_outings() to anon, authenticated;
 
 -- ---------------------------------------------------------------------------------------------
 -- delete my account: the site first deletes the person's files, then calls this.

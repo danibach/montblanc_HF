@@ -21,7 +21,7 @@ Rides (car, bike, lift, skis) are detected and left out. A descent is a flight o
 
 ## Pages
 
-List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account) · sign in.
+List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · take-off map (heat map of the take-offs zoomed out and of the ways up on foot zoomed in, weighted by pilots; take-off markers; filters by season and year; a click shows the climbs on foot that reached the take-off and its outings, never the flights; `map_outings()` in the database, `site/explorer.js`; the climbs are stored by the server job, `src/mbhf/climb.py`) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account) · sign in.
 
 ## How it works
 
@@ -52,7 +52,9 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 ## Set-up (once)
 
 1. **Database**: Supabase > SQL Editor > run `supabase/schema-v2.sql`.
-   On a database created before 2026-10-21, also run `supabase/migration-2026-10-21-tcx.sql` (accepts TCX files).
+   On a database created before 2026-10-21, also run `supabase/migration-2026-10-21-tcx.sql` (accepts TCX files)
+   and `supabase/migration-2026-10-21-map-outings.sql` (take-off map), then run the "Process new outings" action
+   once with "climbs" ticked (climbs of the outings already published).
 2. **Secrets** (GitHub > Settings > Secrets and variables > Actions): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service role key, never in the site).
 3. **Supabase Auth**:
    - URL configuration: add `https://danibach.github.io/montblanc_HF/**` as redirect URL.
@@ -71,6 +73,7 @@ pytest -q                                   # engine tests (synthetic tracks)
 mbhf analyse day.gpx --places               # analysis of one file, JSON
 python scripts/build_site.py --out _site    # site (downloads pinned Pyodide and supabase-js)
 pip install playwright && python scripts/check_site.py _site --shots shots   # end-to-end check with mocks
+python scripts/preview_map.py --real        # the take-off map with the live public outings (read-only), http://127.0.0.1:8765/#/map
 ```
 
 ## Known limits

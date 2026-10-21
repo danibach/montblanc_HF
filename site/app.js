@@ -3,6 +3,7 @@
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
 //   #/ranking          ranking of participants (by year or all time)
+//   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
 //   #/login            sign in
 
@@ -10,6 +11,7 @@ import { CONFIG } from './config.js';
 import * as api from './api.js';
 import { analyseFile, checkTerrain, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
+import { buildExplorer } from './explorer.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
@@ -237,6 +239,18 @@ async function pageRanking(token) {
     rows.length
       ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Score', num: true }], body)
       : notice('info', h('p', null, 'No outing yet for these filters.')));
+}
+
+async function pageMap(token) {
+  setNav('map');
+  const rows = await api.getMapOutings();
+  if (token !== routeToken) return;
+  const mapView = buildExplorer(rows, api.getTraces);
+  show(
+    h('h1', null, 'Take-off map'),
+    h('p', { class: 'sub' }, 'Where pilots took off after the climb, and the ways up on foot. The warmer the colour, the more outings.'),
+    mapView.element);
+  requestAnimationFrame(() => mapView.start());
 }
 
 async function pageOuting(token, id) {
@@ -655,9 +669,11 @@ async function route() {
   }
   const path = (location.hash.replace(/^#\/?/, '').split('?')[0] || '').split('/');
   window.scrollTo(0, 0);
+  document.body.classList.toggle('wide', path[0] === 'map');
   try {
     if (path[0] === '') { loading(); await pageHome(token); }
     else if (path[0] === 'ranking') { loading(); await pageRanking(token); }
+    else if (path[0] === 'map') { loading(); await pageMap(token); }
     else if (path[0] === 'outing' && path[1]) { loading(); await pageOuting(token, path[1]); }
     else if (path[0] === 'user' && path[1]) { loading(); await pageUser(token, path[1]); }
     else if (path[0] === 'upload') await pageUpload();

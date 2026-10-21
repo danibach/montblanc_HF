@@ -135,6 +135,27 @@ export async function listUserOutings(userId) {
   return data || [];
 }
 
+const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_name', 'title', 'outing_date',
+  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb'];
+
+/** The verified public outings for the take-off map (no track): the order of MAP_FIELDS, as in map_outings(). */
+export async function getMapOutings() {
+  const { data, error } = await sb.rpc('map_outings');
+  if (error) throw new Error(error.message);
+  return (data || []).map((a) => Object.fromEntries(MAP_FIELDS.map((k, i) => [k, a[i]])));
+}
+
+/** The tracks and flights of these outings, read only when their take-off is clicked. */
+export async function getTraces(ids) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += 25) {
+    const { data, error } = await sb.from('outings').select('id,trace,flights').in('id', ids.slice(i, i + 25));
+    if (error) throw new Error(error.message);
+    out.push(...data);
+  }
+  return out;
+}
+
 export async function getRanking({ year, country }) {
   const { data, error } = await sb.rpc('ranking', { p_year: year || null, p_country: country || null, p_limit: 200 });
   if (error) throw new Error(error.message);
