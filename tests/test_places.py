@@ -62,3 +62,32 @@ def test_takeoff_falls_back_to_a_nearby_place():
     resp = {"elements": [node(10, 45.9190, 6.8480, place="hamlet", name="Chalet Alpage")]}
     p = resolve_places(OUTING, resp)
     assert p["takeoff"] == {"name": "Chalet Alpage", "osm_id": 10, "kind": "place"}
+
+
+def test_peak_choice_does_not_depend_on_drifting_altitude():
+    # two peaks near the point: the closer one wins even if the track altitude is 170 m too low
+    outing = {"start": {"lat": 45.919, "lon": 6.478}, "summit": {"lat": 45.90888, "lon": 6.50790, "alt": 2368},
+              "takeoff": {"lat": 45.90885, "lon": 6.50797, "alt": 2365}}
+    resp = {"elements": [
+        node(1, 45.90770, 6.50790, natural="peak", name="Tête Pelouse", ele="2537"),
+        node(2, 45.90640, 6.51120, natural="peak", name="La Grande Torche", ele="2505"),
+    ]}
+    p = resolve_places(outing, resp)
+    assert p["summit"]["name"] == "Tête Pelouse" and p["takeoff"]["name"] == "Tête Pelouse"
+
+
+def test_mapped_paragliding_site_names_the_takeoff():
+    from mbhf.places import site_name
+    from mbhf.rows import place_title
+
+    assert site_name("Décollage parapente FFVL de Planfait") == "Planfait"
+    assert site_name("Décollage Parapente FFVL du col de la Forclaz - Montmin") == "Col de la Forclaz - Montmin"
+    assert site_name("Décollage du Col des Frêtes") == "Col des Frêtes"
+    assert site_name("Les passagers du vent atterrissage Planfait") is None
+    assert site_name("Planfait") == "Planfait"
+    way = {"type": "way", "id": 5, "center": {"lat": 45.9196, "lon": 6.8492}, "tags": {"sport": "free_flying", "name": "Décollage parapente FFVL de Planfait"}}
+    resp = {"elements": RESPONSE["elements"] + [way]}
+    p = resolve_places(OUTING, resp)
+    assert p["takeoff"] == {"name": "Planfait", "osm_id": 5, "kind": "site"}
+    assert place_title(p, "2021-09-29", 2205) == "Planfait"
+    assert "free_flying" in overpass_query(OUTING)
