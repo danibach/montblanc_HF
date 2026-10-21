@@ -92,14 +92,14 @@ def reject(api: Api, outing_id: str, reason: str) -> None:
     api.patch(outing_id, {"status": "rejected", "reject_reason": reason[:300], "analysed_at": now()})
 
 
-def look_up_places(outing: dict):
+def look_up_places(outing: dict, attempts: int = 2, timeout: float = 40.0):
     from mbhf.places import fetch_overpass, overpass_query, resolve_places
 
     query = overpass_query(outing)
     if not query:
         return None
     try:
-        return resolve_places(outing, fetch_overpass(query))
+        return resolve_places(outing, fetch_overpass(query, attempts=attempts, timeout=timeout))
     except OSError as exc:
         print(f"  places unavailable: {exc}")
         return None
@@ -185,26 +185,37 @@ def fill_climbs(api: Api) -> None:
     print(f"climbs filled in: {done}")
 
 
-def retry_places(api: Api, relabel: bool = False) -> None:
-    """Fill in the names of outings still waiting for them; with ``relabel``, redo every published outing."""
+def retry_places(api: Api, relabel: bool = False, budget_s: float = 0.0) -> None:
+    """Fill in the names of outings still waiting for them.
+
+    With ``relabel``, every published outing is first marked as waiting, then done a few at a time. The mark is the
+    bookmark: an outing leaves the waiting list once its names are written, so a run that is stopped (or runs out of
+    ``budget_s`` seconds) is simply started again and continues where it stopped.
+    """
     from mbhf.rows import has_names, place_title
 
-    where = PUBLISHED if relabel else no_names_filter()
-    offset = 0
+    if relabel:
+        api.request("PATCH", f"/rest/v1/outings?{PUBLISHED}", {"places_pending": True}, extra={"Prefer": "return=minimal"})
+    where = f"{PUBLISHED}&places_pending=is.true" if relabel else no_names_filter()
+    started, skipped = time.monotonic(), 0
     while True:
-        rows = api.select(f"{where}&select={PLACE_COLUMNS}&order=created_at.asc&limit={BATCH}&offset={offset}")
+        rows = api.select(f"{where}&select={PLACE_COLUMNS}&order=created_at.asc&limit={BATCH}&offset={skipped}")
         if not rows:
+            print(f"done; {skipped} outing(s) left waiting (Overpass gave no answer)")
             return
-        offset += BATCH
         for row in rows:
+            if budget_s and time.monotonic() - started > budget_s:
+                print("time budget used up: run it again to continue")
+                return
             outing = {
                 "start": {"lat": row["start_lat"], "lon": row["start_lon"]} if row["start_lat"] is not None else None,
                 "summit": {"lat": row["summit_lat"], "lon": row["summit_lon"], "alt": row["summit_alt"]} if row["summit_lat"] is not None else None,
                 "takeoff": {"lat": row["takeoff_lat"], "lon": row["takeoff_lon"], "alt": row["takeoff_alt"]} if row["takeoff_lat"] is not None else None,
             }
-            places = look_up_places(outing)
+            places = look_up_places(outing, attempts=1, timeout=25.0) if relabel else look_up_places(outing)
             if not has_names(places):
-                continue  # Overpass gave nothing: left as it is (retried for a day when still pending)
+                skipped += 1  # Overpass gave nothing: stays waiting
+                continue
             summit = places.get("summit") or {}
             takeoff = places.get("takeoff") or {}
             country = places.get("country") or {}
@@ -218,7 +229,7 @@ def retry_places(api: Api, relabel: bool = False) -> None:
             })
             print(f"  places filled in for {row['id']}")
             if relabel:
-                time.sleep(2)  # be polite with Overpass
+                time.sleep(1)  # be polite with Overpass
         if not relabel:
             return  # the next run continues with the rest
 
@@ -235,7 +246,7 @@ def main() -> int:
         return 1
     api = Api(url, key)
     if args.relabel:
-        retry_places(api, relabel=True)
+        retry_places(api, relabel=True, budget_s=float(os.environ.get("RELABEL_BUDGET_S", "0")))
         return 0
     if args.climbs:
         fill_climbs(api)

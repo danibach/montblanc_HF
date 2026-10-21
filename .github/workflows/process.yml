@@ -25,8 +25,9 @@ on:
   repository_dispatch:
     types: [new-outing]
 
+# The relabel run has its own queue: a normal run waiting behind it (or it behind a normal one) used to replace it.
 concurrency:
-  group: process-outings
+  group: process-outings${{ inputs.relabel && '-relabel' || '' }}
   cancel-in-progress: false
 
 permissions:
@@ -61,4 +62,4 @@ jobs:
         if: inputs.relabel || inputs.climbs || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
         run: |
           pip install --quiet .
-          python scripts/process_pending.py ${{ inputs.relabel && '--relabel' || '' }} ${{ inputs.climbs && '--climbs' || '' }}
+          RELABEL_BUDGET_S=19800 python scripts/process_pending.py ${{ inputs.relabel && '--relabel' || '' }} ${{ inputs.climbs && '--climbs' || '' }}
