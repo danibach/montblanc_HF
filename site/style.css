@@ -108,3 +108,9 @@ td.score { font-weight: 700; }
 .ok-text { color: var(--ok); }
 .warn-text { color: var(--warn); }
 .error-text { color: var(--error); }
+
+/* sortable column headers and the page buttons of the home list */
+th button.sort { all: unset; cursor: pointer; font: inherit; color: inherit; }
+th button.sort:hover, th button.sort:focus-visible { text-decoration: underline; }
+th[aria-sort] { color: var(--ink); }
+.pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1rem 0; }
