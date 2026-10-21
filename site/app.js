@@ -10,7 +10,7 @@ import { CONFIG } from './config.js';
 import * as api from './api.js';
 import { analyseFile, checkTerrain, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
-import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName } from './util.js';
+import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
 let routeToken = 0;       // a slow answer for a page we already left must not draw over the new page
@@ -111,7 +111,7 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
   return rows.map((r) => h('tr', null,
     h('td', null, fmtDate(r.outing_date)),
     showPilot ? h('td', null, link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
-    h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, r.title || 'Outing') : (r.title || 'Uploaded track'),
+    h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, outingTitle(r)) : (r.title || 'Uploaded track'),
       r.status === 'published' && r.verified === false ? [' ', statusBadge(r)] : null),
     h('td', null, r.country_name || r.country_code || ''),
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
@@ -228,7 +228,7 @@ async function pageOuting(token, id) {
   const mine = api.state.user && api.state.user.id === o.user_id;
   const actions = h('div', { class: 'row' });
   if (o.status === 'published' && o.trace) {
-    actions.append(h('button', { onclick: () => downloadText(`${(o.title || 'outing').replace(/[^\w-]+/g, '_')}.gpx`, trackToGpx(o.trace, o.title || 'Outing'), 'application/gpx+xml') }, 'Download GPX'));
+    actions.append(h('button', { onclick: () => downloadText(`${outingTitle(o).replace(/[^\w-]+/g, '_')}.gpx`, trackToGpx(o.trace, outingTitle(o)), 'application/gpx+xml') }, 'Download GPX'));
   }
   if (mine) {
     actions.append(h('button', { class: 'danger', onclick: async () => {
@@ -240,7 +240,7 @@ async function pageOuting(token, id) {
   }
   const head = h('div', { class: 'headline' },
     h('div', null,
-      h('h1', null, o.title || 'Outing'),
+      h('h1', null, outingTitle(o)),
       h('p', { class: 'sub' }, link(`#/user/${o.user_id}`, pilotName(o.profiles)), ` · ${fmtDate(o.outing_date)}`, o.country_name ? ` · ${o.country_name}` : '')),
     o.status !== 'published' || o.verified === false ? statusBadge(o) : null);
   if (o.status === 'pending') {
@@ -553,7 +553,7 @@ function previewRow(res, places) {
     engine_version: res.engine && res.engine.version, score_version: o.score_version, started_at: o.started_at,
     flight_path_km: o.flight_path_km, places_pending: !places,
     flights: (o.flights || []).map(({ i_start, i_end, ...rest }) => rest),
-    title: (pl.summit && pl.summit.name) || pl.start_place || 'Hike & Fly outing',
+    title: (pl.summit && pl.summit.name) || pl.start_place || 'Hike & Fly outing', // shown through outingTitle()
     outing_date: o.date, duration_s: o.duration_s, score: o.score, dplus_m: o.dplus_m, dminus_m: o.dminus_m,
     walk_km: o.walk_km, flight_free_km: o.flight_free_km, warnings: o.warnings,
     country_name: pl.country && pl.country.name, country_code: pl.country && pl.country.code,

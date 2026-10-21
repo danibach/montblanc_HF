@@ -59,3 +59,14 @@ export function table(headers, rows, cls) {
 export function notice(kind, ...children) {
   return h('div', { class: `notice notice-${kind}`, role: kind === 'error' ? 'alert' : 'status' }, ...children);
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** The title to show: the stored one, or "Hike & Fly · 29 Sep 2021 · 1,606 m" when OpenStreetMap gave no name. */
+export function outingTitle(o) {
+  if (o.title && o.title !== 'Hike & Fly outing') return o.title;
+  const parts = ['Hike & Fly'];
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(o.outing_date || '');
+  if (m) parts.push(`${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`);
+  if (o.summit_alt != null) parts.push(`${Math.round(o.summit_alt).toLocaleString('en-US')} m`);
+  return parts.join(' · ');
+}

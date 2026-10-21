@@ -21,5 +21,16 @@ def test_row_with_names():
 def test_row_without_names_asks_for_a_retry():
     res = analyse_bytes("a.gpx", gpx_bytes(as_track(hike_and_fly())))
     row = outing_row(res, None)
-    assert row["places_pending"] is True and row["title"] == "Hike & Fly outing"
+    assert row["places_pending"] is True and row["title"].startswith("Hike & Fly · ")
     assert row["country_code"] is None
+
+
+def test_fallback_title_and_empty_lookup_stays_pending():
+    from mbhf.rows import fallback_title
+
+    assert fallback_title("2021-09-29", 1606.4) == "Hike & Fly · 29 Sep 2021 · 1,606 m"
+    assert fallback_title("2021-09-29", None) == "Hike & Fly · 29 Sep 2021"
+    res = analyse_bytes("a.gpx", gpx_bytes(as_track(hike_and_fly())))
+    empty = {"country": None, "commune": None, "start_place": None, "summit": None, "takeoff": None}
+    row = outing_row(res, empty)  # Overpass answered, but with no names
+    assert row["places_pending"] is True and row["title"] == fallback_title(row["outing_date"], row["summit_alt"])

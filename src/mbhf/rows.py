@@ -5,6 +5,34 @@ from __future__ import annotations
 from typing import Optional
 
 
+GENERIC_TITLE = "Hike & Fly outing"
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def fallback_title(date: Optional[str], summit_alt: Optional[float]) -> str:
+    """A title when OpenStreetMap gave no name: "Hike & Fly · 29 Sep 2021 · 1,606 m"."""
+    parts = ["Hike & Fly"]
+    try:
+        y, m, d = str(date)[:10].split("-")
+        parts.append(f"{int(d)} {_MONTHS[int(m) - 1]} {int(y)}")
+    except (ValueError, IndexError):
+        pass
+    if summit_alt is not None:
+        parts.append(f"{round(summit_alt):,} m")
+    return " · ".join(parts)
+
+
+def has_names(places: Optional[dict]) -> bool:
+    """True when the lookup gave at least one usable name or the country."""
+    p = places or {}
+    return bool(p.get("country") or p.get("start_place") or p.get("summit") or p.get("takeoff") or p.get("commune"))
+
+
+def place_title(places: Optional[dict], date: Optional[str], summit_alt: Optional[float]) -> str:
+    p = places or {}
+    return (p.get("summit") or {}).get("name") or p.get("start_place") or fallback_title(date, summit_alt)
+
+
 def outing_row(result: dict, places: Optional[dict]) -> dict:
     """The values the analysis job writes for one outing. ``places`` is None when OSM was unreachable."""
     o = result["outing"]
@@ -16,7 +44,7 @@ def outing_row(result: dict, places: Optional[dict]) -> dict:
     def pick(point: Optional[dict], key: str):
         return point.get(key) if point else None
 
-    title = summit.get("name") or places.get("start_place") or "Hike & Fly outing"
+    title = place_title(places, o["date"], pick(o["summit"], "alt"))
     return {
         "analysed_at": None,  # set by the job (server clock)
         "engine_version": result["engine"]["version"],
@@ -47,5 +75,5 @@ def outing_row(result: dict, places: Optional[dict]) -> dict:
         ],
         "trace": result["trace"],
         "warnings": o["warnings"],
-        "places_pending": not places,
+        "places_pending": not has_names(places),
     }
