@@ -168,3 +168,16 @@ def slow_ski_descent(seed: int = 8) -> Gen:
     g.leg("ski", 14 * 60, 14, -1.2, 200, dt=3.0, wobble=30)
     g.leg("end", 5 * 60, 0, 0.0, 200)
     return g
+
+
+def ski_head_then_flight(seed: int = 9) -> Gen:
+    """Climb 1 000 m, then one fast descent that is first a ski run (3 min, 36 km/h, 2.2 m/s of sink), then a
+    pause in the loss of altitude (80 s, straight, 0.6 m/s), then the flight (9 min, 36 km/h, 2.2 m/s)."""
+    g = Gen(seed=seed, alt=1400.0)
+    g.leg("up", 3 * 3600, 2.4, 1000 / 10800, 60, wobble=12)
+    g.leg("summit_pause", 20 * 60, 0, 0.0, 60)
+    g.leg("ski", 3 * 60, 36, -2.2, 200, dt=3.0, wobble=15, ramp=10)
+    g.leg("pause", 80, 40, -0.6, 200, dt=3.0)
+    g.leg("flight", 9 * 60, 36, -2.2, 200, dt=3.0, wobble=15)
+    g.leg("landing_walk", 5 * 60, 3.0, 0.0, 200)
+    return g
