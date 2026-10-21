@@ -119,4 +119,13 @@ def test_a_pause_alone_does_not_cut_the_start_of_a_flight_that_is_in_the_air():
     s = sample_flights(p.track, p.seg)
     r = with_terrain(p, ground_like(s, below=300))["outing"]
     assert r["status"] == "ok" and r["flights"][0]["drop_m"] > 1500
-    assert not any("pause" in w for w in r["warnings"])
+    assert not any("follow the ground" in w for w in r["warnings"])
+
+
+def test_a_pause_in_the_air_is_explained_with_the_height_of_the_head():
+    from synth import ski_head_then_flight
+
+    p = prepare_bytes("a.gpx", data(ski_head_then_flight()))
+    s = sample_flights(p.track, p.seg)
+    r = with_terrain(p, ground_like(s, below=300))["outing"]
+    assert any("pause follows" in w and "300 m above the ground" in w for w in r["warnings"])

@@ -96,10 +96,10 @@ function outingDetail(o) {
       stat(fmtKm(o.flight_free_km), 'Free distance (FAI, total)'),
       stat(fmtDur(o.duration_s), 'Duration')),
     h('dl', { class: 'places' },
+      place('Country', o.country_name || o.country_code),
       place('Start on foot', [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
       place('Highest point on foot', `${o.summit_name || coords(o.summit_lat, o.summit_lon) || '–'}${o.summit_alt != null ? ` · ${fmtInt(o.summit_alt)} m` : ''}`),
-      place('Take-off', `${o.takeoff_name || coords(o.takeoff_lat, o.takeoff_lon) || '–'}${o.takeoff_alt != null ? ` · ${fmtInt(o.takeoff_alt)} m` : ''}`),
-      place('Country', o.country_name || o.country_code)),
+      place('Take-off', `${o.takeoff_name || coords(o.takeoff_lat, o.takeoff_lon) || '–'}${o.takeoff_alt != null ? ` · ${fmtInt(o.takeoff_alt)} m` : ''}`)),
     mapView ? mapView.element : null,
     trace ? legend() : null,
     trace ? buildProfile(trace) : null);

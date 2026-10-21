@@ -174,6 +174,10 @@ def apply_terrain(
                     changed = True
                     notes.append(f"The first {minutes:.0f} min of this descent follow the ground (ski or walk), up to a pause: "
                                  "the flight starts at the end of that pause.")
+                elif len(hs) >= cfg.min_head_samples:
+                    minutes = (track.points[end].t - track.points[s.i_start].t).total_seconds() / 60
+                    notes.append(f"A pause follows the first {minutes:.0f} min of this descent, but that part is a median "
+                                 f"{hs[len(hs) // 2]:.0f} m above the ground: counted as flight.")
         if st["share"] >= cfg.min_air_share:
             notes.append(line)
         elif st["share"] < cfg.ground_share and st["p90"] < cfg.ground_p90_m:

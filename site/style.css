@@ -73,7 +73,7 @@ td.score { font-weight: 700; }
 .stat b { display: block; font-size: 1.35rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: .82rem; }
 .stat.big { background: #2a1f1a; border-color: #6a3f2b; }
-.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .5rem 1rem; margin: .5rem 0 1rem; }
+.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .5rem 1rem; margin: .5rem 0 1rem; }
 .places div { font-size: .92rem; }
 .places dt { color: var(--muted); font-size: .8rem; }
 .places dd { margin: 0; font-weight: 600; }
