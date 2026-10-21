@@ -28,6 +28,11 @@ from typing import Optional
 from .models import Track
 from .segment import FLIGHT, VEHICLE, SegmentationResult, _build_segments
 
+# Shown with a rejected "flight" that follows the ground: a real flight glued to the slope almost always comes
+# from a file whose altitudes were replaced by the map's ground altitude (issue #7: a Strava GPX export).
+GROUND_ADVICE = ("If it was a flight, the file's altitudes were probably replaced by the map's ground altitude "
+                 "(Strava's GPX export, track editors): upload the original recording.")
+
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 MAX_COORDINATES = 100  # the service takes at most 100 per request
 USER_AGENT = "mbhf-hikeandfly/0.3 (https://github.com/danibach/montblanc_HF)"
@@ -160,7 +165,8 @@ def apply_terrain(
             for i in range(s.i_start, s.i_end + 1):
                 labels[i] = VEHICLE
             changed = True
-            notes.append("A fast descent follows the ground (ski, bike or run), so it is not counted as a flight. " + line)
+            notes.append("A fast descent follows the ground (ski, bike or run), so it is not counted as a flight. " + line
+                         + " " + GROUND_ADVICE)
         else:
             notes.append(line + " It stays close to the ground: counted as a flight, to be checked.")
     if not changed:
