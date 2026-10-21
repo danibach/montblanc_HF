@@ -73,10 +73,11 @@ td.score { font-weight: 700; }
 .stat b { display: block; font-size: 1.35rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: .82rem; }
 .stat.big { background: #2a1f1a; border-color: #6a3f2b; }
-.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .5rem 1rem; margin: .5rem 0 1rem; }
+.places { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem 1rem; margin: .5rem 0 1rem; }
+@media (max-width: 480px) { .places { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .places div { font-size: .92rem; }
 .places dt { color: var(--muted); font-size: .8rem; }
-.places dd { margin: 0; font-weight: 600; }
+.places dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 
 .map { height: 380px; border: 1px solid var(--line); border-radius: 8px; background: #1b2a31; z-index: 0; }
 .leaflet-tile-pane { filter: brightness(.78) contrast(1.05) saturate(.9); }
