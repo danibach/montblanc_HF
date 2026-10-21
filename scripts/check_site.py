@@ -95,9 +95,14 @@ def supabase(route, request):
         if body.get("p_year") != 2025:
             rows.append({"user_id": OTHER, "display_name": "Bruno", "outings": 1, "dplus": ROW2["dplus_m"], "dminus": ROW2["dminus_m"], "score": ROW2["score"]})
         return j(route, sorted(rows, key=lambda r: -r["score"]))
-    if u.path == "/rest/v1/rpc/takeoff_heat":
+    if u.path == "/rest/v1/rpc/map_outings":
         # like the SQL function: only the verified outings (ROW1), not the one waiting for the server (ROW2)
-        return j(route, [[r["takeoff_lat"], r["takeoff_lon"], 1] for r in ROWS if r["verified"] and r["takeoff_lat"] is not None])
+        return j(route, [[r["id"], r["takeoff_lat"], r["takeoff_lon"], r["takeoff_alt"], r["takeoff_name"], r["title"], r["outing_date"],
+                          r["dplus_m"], r["walk_km"], r["start_place"], r["profiles"]["display_name"], r["summit_alt"]]
+                         for r in ROWS if r["verified"] and r["takeoff_lat"] is not None])
+    if u.path == "/rest/v1/outings" and request.method == "GET" and q.get("id", [""])[0].startswith("in."):
+        ids = q["id"][0][4:-1].replace('"', "").split(",")
+        return j(route, [{"id": r["id"], "trace": r["trace"], "flights": r["flights"]} for r in ROWS if r["id"] in ids])
     if u.path == "/rest/v1/profiles":
         pid = q.get("id", [""])[0].replace("eq.", "")
         name = {UID: "Alice", OTHER: "Bruno"}.get(pid)
@@ -224,8 +229,14 @@ with sync_playwright() as p:
 
     page.goto(BASE + "#/map")
     page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
-    check("1 confirmed outing from 1 take-off spot" in page.inner_text("main"), "map page counts only the verified outing: " + page.inner_text("main .sub")[:90])
-    check(page.locator(".leaflet-control-layers input[type=checkbox]").is_checked(), "map: heat layer on, with a switch")
+    check("1 take-off spot, 1 confirmed outing" in page.inner_text(".side"), "map counts only the verified outing: " + page.inner_text(".side")[:90])
+    check(page.locator(".leaflet-control-layers input[type=checkbox]").count() == 2, "map: heat map and take-offs can be switched")
+    page.locator(".tk.spot").first.click()
+    page.wait_for_selector(".out-list li", timeout=15000)
+    check(page.locator(".out-list li").count() == 1 and "Alice" in page.inner_text(".out-list"), "take-off clicked: its outing is listed")
+    check(page.locator(".leaflet-overlay-pane path.leaflet-interactive").count() == 1, "take-off clicked: one climb drawn, no flight")
+    page.locator(".out-list li").first.click()
+    check(page.locator(".out-list li.on").count() == 1, "outing clicked: kept lit")
     page.screenshot(path=f"{SHOTS}/3b-map.png")
 
     page.goto(BASE + f"#/user/{UID}")

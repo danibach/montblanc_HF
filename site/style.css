@@ -86,9 +86,25 @@ td.score { font-weight: 700; }
 .leaflet-control-attribution { background: rgba(14, 26, 32, .75) !important; color: var(--muted) !important; }
 .leaflet-control-attribution a { color: var(--accent) !important; }
 .leaflet-control-layers { background: var(--card); color: var(--ink); border: 1px solid var(--line) !important; }
-/* map page: the map takes the width of the window and most of its height */
+/* map page: the map takes the width of the window and most of its height, the list of a take-off beside it */
 body.wide main { max-width: none; }
-.map-wide { height: calc(100vh - 12rem); min-height: 320px; margin-top: .8rem; }
+.explorer { display: grid; grid-template-columns: minmax(0, 7fr) minmax(16rem, 3fr); gap: .8rem; margin-top: .8rem; }
+.map-wide { height: calc(100vh - 11rem); min-height: 320px; }
+.side { height: calc(100vh - 11rem); min-height: 320px; overflow-y: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .8rem; }
+.side h2 { margin: 0 0 .2rem; }
+.side-head { display: flex; justify-content: space-between; align-items: start; gap: .5rem; }
+.side-head .close { font-size: 1.6rem; line-height: 1; text-decoration: none; color: var(--muted); }
+.out-list { list-style: none; margin: .4rem 0 0; padding: 0; }
+.out-list li { display: flex; flex-direction: column; gap: .1rem; padding: .6rem .6rem; border: 1px solid var(--line); border-radius: 8px; margin-bottom: .5rem; cursor: pointer; font-size: .92rem; }
+.out-list li:hover, .out-list li:focus { background: var(--hover); outline: none; }
+.out-list li.on { border-color: var(--orange); background: var(--hover); }
+.out-list .nums { display: flex; gap: .9rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+.out-list a { font-size: .85rem; align-self: start; }
+/* take-off markers: a round badge with the number of outings */
+.tk { display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: 700; font-size: .8rem; color: var(--on-accent); box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+.tk.spot { background: var(--orange); }
+.tk.spot.on { background: #fff; color: var(--orange); box-shadow: 0 0 0 3px var(--orange); }
+.tk.group { background: var(--accent); box-shadow: 0 0 0 5px rgba(74, 163, 200, .35); }
 .profile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .5rem; margin-top: .8rem; }
 .profile-svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
 .readout { margin: .2rem .4rem; min-height: 1.4em; }
@@ -103,6 +119,10 @@ body.wide main { max-width: none; }
   main { padding: .7rem; }
   .map { height: 300px; }
   .map-wide { height: calc(100svh - 11rem); }
+  /* phone: the map fills the screen; the list of a take-off slides up from the bottom */
+  .explorer { display: block; }
+  .side { display: none; }
+  .explorer.has-spot .side { display: block; position: fixed; left: 0; right: 0; bottom: 0; height: auto; max-height: 48svh; min-height: 0; z-index: 1100; border-radius: 12px 12px 0 0; box-shadow: 0 -6px 20px rgba(0, 0, 0, .45); }
   th, td { padding: .45rem .5rem; }
 }
 

@@ -3,14 +3,15 @@
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
 //   #/ranking          ranking of participants (by year or all time)
-//   #/map              map of the take-offs (heat map)
+//   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
 //   #/login            sign in
 
 import { CONFIG } from './config.js';
 import * as api from './api.js';
 import { analyseFile, checkTerrain, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
-import { buildMap, buildHeatMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
+import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
+import { buildExplorer } from './explorer.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
@@ -223,14 +224,12 @@ async function pageRanking(token) {
 
 async function pageMap(token) {
   setNav('map');
-  const points = await api.getTakeoffHeat();
+  const rows = await api.getMapOutings();
   if (token !== routeToken) return;
-  const total = points.reduce((a, p) => a + p[2], 0);
-  const plural = (n, word) => `${fmtInt(n)} ${word}${n === 1 ? '' : 's'}`;
-  const mapView = buildHeatMap(points);
+  const mapView = buildExplorer(rows, api.getTraces);
   show(
     h('h1', null, 'Take-off map'),
-    h('p', { class: 'sub' }, `Where pilots took off after the climb: ${plural(total, 'confirmed outing')} from ${plural(points.length, 'take-off spot')}. The warmer the colour, the more outings.`),
+    h('p', { class: 'sub' }, 'Where pilots took off after the climb, and the ways up on foot. The warmer the colour, the more outings.'),
     mapView.element);
   requestAnimationFrame(() => mapView.start());
 }

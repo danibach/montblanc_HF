@@ -206,23 +206,22 @@ language sql stable as $$
   )
 $$;
 
--- take-offs of the public, verified outings for the heat map: [[lat, lon, outings], …], rounded to about
--- 10 m. One JSON value rather than rows, so the API row limit (1,000) does not cut the map.
-create or replace function public.takeoff_heat() returns json
+-- the public, verified outings for the take-off map, as one JSON array of [id, take-off lat, lon, alt, take-off
+-- name, title, date, D+ on foot, km on foot, start place, pilot, highest point]. One JSON value rather than rows,
+-- so the API row limit (1,000) does not cut the map. The tracks are read only for the take-off that is clicked.
+create or replace function public.map_outings() returns json
 language sql stable as $$
-  select coalesce(json_agg(json_build_array(lat, lon, n)), '[]'::json) from (
-    select round(takeoff_lat::numeric, 4)::double precision as lat,
-           round(takeoff_lon::numeric, 4)::double precision as lon,
-           count(*) as n
-    from public.outings
-    where status = 'published' and verified and not hidden
-      and takeoff_lat is not null and takeoff_lon is not null
-    group by 1, 2) t
+  select coalesce(json_agg(json_build_array(o.id, o.takeoff_lat, o.takeoff_lon, o.takeoff_alt, o.takeoff_name, o.title,
+           o.outing_date, o.dplus_m, o.walk_km, o.start_place, p.display_name, o.summit_alt)
+         order by o.outing_date desc), '[]'::json)
+  from public.outings o join public.profiles p on p.id = o.user_id
+  where o.status = 'published' and o.verified and not o.hidden
+    and o.takeoff_lat is not null and o.takeoff_lon is not null
 $$;
 
 grant execute on function public.ranking(int, text, int) to anon, authenticated;
 grant execute on function public.outing_filters() to anon, authenticated;
-grant execute on function public.takeoff_heat() to anon, authenticated;
+grant execute on function public.map_outings() to anon, authenticated;
 
 -- ---------------------------------------------------------------------------------------------
 -- delete my account: the site first deletes the person's files, then calls this.
