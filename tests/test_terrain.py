@@ -92,3 +92,31 @@ def test_a_descent_close_to_the_slope_is_kept_but_flagged():
     r = with_terrain(p, elev)
     assert r["outing"]["status"] == "ok"
     assert any("to be checked" in w for w in r["outing"]["warnings"])
+
+
+def test_the_ski_run_before_the_pause_of_the_take_off_is_cut_off_the_flight():
+    """A descent that starts on skis, pauses (the pilot prepares the wing) and then flies: the part before the
+    pause follows the ground, the rest is in the air. The flight starts where the pause ends."""
+    from synth import ski_head_then_flight
+
+    g = ski_head_then_flight()
+    p = prepare_bytes("a.gpx", data(g))
+    s = sample_flights(p.track, p.seg)
+    t_fly = g.marks["flight"]
+    elev = [x["alt"] - (3 if p.track.points[x["i"]].t < t_fly else 300) for x in s]
+    r = with_terrain(p, elev)["outing"]
+    assert r["status"] == "ok"
+    fl = r["flights"][0]
+    assert abs((__import__("datetime").datetime.fromisoformat(fl["takeoff"]["t"]) - t_fly).total_seconds()) < 60
+    assert abs(fl["drop_m"] - 9 * 60 * 2.2) < 120  # about 1 190 m, not 1 190 + 400 (the ski run)
+    assert any("follow the ground" in w and "pause" in w for w in r["warnings"])
+
+
+def test_a_pause_alone_does_not_cut_the_start_of_a_flight_that_is_in_the_air():
+    from synth import ski_head_then_flight
+
+    p = prepare_bytes("a.gpx", data(ski_head_then_flight()))
+    s = sample_flights(p.track, p.seg)
+    r = with_terrain(p, ground_like(s, below=300))["outing"]
+    assert r["status"] == "ok" and r["flights"][0]["drop_m"] > 1500
+    assert not any("pause" in w for w in r["warnings"])

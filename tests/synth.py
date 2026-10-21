@@ -145,3 +145,39 @@ def steep_flight_then_bike(seed: int = 6, sink: float = 2.5) -> Gen:
     g.leg("flight", 15 * 60, 38, -sink, 230, dt=2.0, wobble=10, ramp=20)
     g.leg("bike", 10 * 60, 30, 0.0, 250, dt=5.0, wobble=5)
     return g
+
+
+def ski_then_fly(seed: int = 7) -> Gen:
+    """Skins up 1 000 m, a long stop on the summit, a slow jerky ski descent of 720 m (labelled walking: 6 km/h),
+    a stop at the take-off 700 m lower, then a 5-minute glide of 550 m under a mini-wing (38 km/h, 1.8 m/s)."""
+    g = Gen(seed=seed, alt=1400.0)
+    g.leg("up", 3 * 3600, 2.4, 1000 / 10800, 60, wobble=12)
+    g.leg("summit_pause", 40 * 60, 0, 0.0, 60)
+    g.leg("ski", 24 * 60, 6, -0.5, 200, dt=3.0, wobble=40)
+    g.leg("pause", 20 * 60, 0, 0.0, 200, dt=3.0)
+    g.leg("flight", 5 * 60, 38, -1.8, 20, dt=3.0, wobble=8, ramp=10)
+    g.leg("landing_walk", 5 * 60, 3.0, 0.0, 20)
+    return g
+
+
+def slow_ski_descent(seed: int = 8) -> Gen:
+    """Skins up 1 000 m, then one 14-minute ski descent at 14 km/h, 1.2 m/s of sink: not a flight."""
+    g = Gen(seed=seed, alt=1400.0)
+    g.leg("up", 3 * 3600, 2.4, 1000 / 10800, 60, wobble=12)
+    g.leg("summit_pause", 10 * 60, 0, 0.0, 60)
+    g.leg("ski", 14 * 60, 14, -1.2, 200, dt=3.0, wobble=30)
+    g.leg("end", 5 * 60, 0, 0.0, 200)
+    return g
+
+
+def ski_head_then_flight(seed: int = 9) -> Gen:
+    """Climb 1 000 m, then one fast descent that is first a ski run (3 min, 36 km/h, 2.2 m/s of sink), then a
+    pause in the loss of altitude (80 s, straight, 0.6 m/s), then the flight (9 min, 36 km/h, 2.2 m/s)."""
+    g = Gen(seed=seed, alt=1400.0)
+    g.leg("up", 3 * 3600, 2.4, 1000 / 10800, 60, wobble=12)
+    g.leg("summit_pause", 20 * 60, 0, 0.0, 60)
+    g.leg("ski", 3 * 60, 36, -2.2, 200, dt=3.0, wobble=15, ramp=10)
+    g.leg("pause", 80, 40, -0.6, 200, dt=3.0)
+    g.leg("flight", 9 * 60, 36, -2.2, 200, dt=3.0, wobble=15)
+    g.leg("landing_walk", 5 * 60, 3.0, 0.0, 200)
+    return g

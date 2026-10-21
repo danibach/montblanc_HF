@@ -68,6 +68,23 @@ class SegmenterConfig:
     # end of a flight is the ground, not the air.
     landing_band_m: float = 20.0
     landing_tail_s: float = 120.0
+    # A wing flies at 25-45 km/h and does not stop: a "flight" whose median ground speed is lower is a
+    # ski or a walk down (on seven real winter tracks: flights 27-38 km/h, a ski descent 14 km/h).
+    flight_min_median_kmh: float = 18.0
+    # The launch rule above must not throw out a glide that is clearly a flight: steady, never stopping
+    # (10th percentile of the speed), sinking at least ``sure_sink_ms`` and gliding no flatter than
+    # ``sure_glide`` over the ground. A ski descent stops, a road is flatter than 10:1.
+    sure_p10_kmh: float = 12.0
+    sure_sink_ms: float = 1.0
+    sure_glide: float = 10.0
+    # A pilot who skis or walks down before taking off stops to prepare the wing: the altitude stops dropping.
+    # In a "flight" that starts with a descent of at least ``pause_head_drop_m``, the last stretch in its
+    # first half where the sink stays under ``pause_sink_ms`` (10 s average) for ``pause_min_s``, going
+    # straight (a thermal circles), is that pause: the flight starts where it ends (see ``launch_after_pause``).
+    pause_sink_ms: float = 1.5
+    pause_min_s: float = 40.0
+    pause_head_drop_m: float = 100.0
+    pause_max_sinuosity: float = 1.3
 
 
 @dataclass
@@ -175,8 +192,10 @@ def _cost_flight(f: _Feat, c: SegmenterConfig) -> float:
             cost += min(1.5, (f.v - c.flight_max_kmh) * 0.05)
         if f.vz is not None:
             sink = -f.vz
-            # sinking faster than the steepest glide allowed: a steep slope under the feet, not a wing
-            if sink > 2.0 and sink > (f.v / 3.6) / c.flight_min_glide:
+            # sinking faster than the steepest glide allowed: a steep slope under the feet, not a wing.
+            # The glide is measured along the path flown: a spiral loses height over little ground.
+            path_v = f.v * min(f.sinu, 3.0)
+            if sink > 2.0 and sink > (path_v / 3.6) / c.flight_min_glide:
                 cost += 0.8
             # climbing in a straight line: a lift, not a thermal
             if f.vz > 0.5 and f.sinu < 1.2:
@@ -245,6 +264,7 @@ def segment_track(track: Track, cfg: Optional[SegmenterConfig] = None) -> Segmen
 
     _drop_short_flights(pts, labels, cfg)
     _trim_landing(pts, labels, cfg)
+    _demote_slow_flights(pts, labels, cfg)
     _demote_unlaunched_flights(pts, labels, cfg)
     segments = _build_segments(pts, labels)
     return SegmentationResult(segments=segments, labels=labels)
@@ -294,16 +314,100 @@ def _runs(labels: list[int]) -> list[tuple[int, int, int]]:
     return out
 
 
+def _speeds_kmh(pts: list[Point], i: int, j: int, step_s: float = 3.0) -> list[float]:
+    """Ground speeds along fixes i..j, measured over chords of about ``step_s`` seconds."""
+    out: list[float] = []
+    a = i
+    for k in range(i + 1, j + 1):
+        dt = (pts[k].t - pts[a].t).total_seconds()
+        if dt >= step_s:
+            d = haversine_m(pts[a].lat, pts[a].lon, pts[k].lat, pts[k].lon)
+            out.append(d / dt * 3.6)
+            a = k
+    return out
+
+
+def _percentile(xs: list[float], q: float) -> float:
+    xs = sorted(xs)
+    return xs[min(len(xs) - 1, int(q * len(xs)))]
+
+
+def _demote_slow_flights(pts: list[Point], labels: list[int], cfg: SegmenterConfig) -> None:
+    """A "flight" whose median ground speed is below ``flight_min_median_kmh`` is a ski or a walk down."""
+    for label, i, j in _runs(labels):
+        if label != FLIGHT:
+            continue
+        v = _speeds_kmh(pts, i, j)
+        if v and _percentile(v, 0.5) < cfg.flight_min_median_kmh:
+            for k in range(i, j + 1):
+                labels[k] = VEHICLE
+
+
+def launch_after_pause(pts: list[Point], i: int, j: int, cfg: Optional[SegmenterConfig] = None) -> Optional[int]:
+    """Index of the fix where a take-off that follows a ski (or walk) down would be, for the flight i..j.
+
+    A pilot who comes down on skis or on foot stops to prepare the wing: the altitude stops dropping. Where
+    the flight starts with a descent of at least ``pause_head_drop_m`` followed by such a pause, the take-off
+    is where the last pause in the first half of the flight ends. None when there is no such pause.
+    A pause alone is not proof (a ridge or a thermal also stops the sink): the caller must check that the
+    head of the flight really is on the ground (``terrain.apply_terrain`` does).
+    """
+    cfg = cfg or SegmenterConfig()
+    ts = [p.t.timestamp() for p in pts]
+    half = (ts[j] - ts[i]) / 2.0
+    flat: list[bool] = []
+    for k in range(i, j + 1):
+        if ts[k] - ts[i] > half:
+            break
+        a, b = _window(ts, k, 10.0, cfg.gap_s)
+        vz = None
+        if ts[b] > ts[a] and pts[a].alt is not None and pts[b].alt is not None:
+            vz = (pts[b].alt - pts[a].alt) / (ts[b] - ts[a])
+        c, d = _window(ts, k, cfg.speed_window_s, cfg.gap_s)
+        chord = haversine_m(pts[c].lat, pts[c].lon, pts[d].lat, pts[d].lon)
+        path = sum(haversine_m(pts[m].lat, pts[m].lon, pts[m + 1].lat, pts[m + 1].lon) for m in range(c, d))
+        sinu = path / chord if chord > 0.5 * (ts[d] - ts[c]) and path > 0 else 1.0
+        flat.append(vz is not None and vz > -cfg.pause_sink_ms and sinu < cfg.pause_max_sinuosity)
+    k = len(flat) - 1
+    while k >= 0:
+        if not flat[k]:
+            k -= 1
+            continue
+        e = k
+        while k >= 0 and flat[k]:
+            k -= 1
+        s = k + 1
+        if ts[i + e] - ts[i + s] >= cfg.pause_min_s:
+            a0, a1 = pts[i].alt, pts[i + e].alt
+            if a0 is not None and a1 is not None and a0 - a1 >= cfg.pause_head_drop_m:
+                return i + e
+    return None
+
+
+def _is_sure_flight(pts: list[Point], i: int, j: int, cfg: SegmenterConfig) -> bool:
+    """Steady glide, never stopping, steep enough for a wing and not flatter than a road."""
+    v = _speeds_kmh(pts, i, j)
+    dur = (pts[j].t - pts[i].t).total_seconds()
+    if len(v) < 10 or dur <= 0 or pts[i].alt is None or pts[j].alt is None:
+        return False
+    sink = (pts[i].alt - pts[j].alt) / dur
+    if sink < cfg.sure_sink_ms or _percentile(v, 0.10) < cfg.sure_p10_kmh:
+        return False
+    return (_percentile(v, 0.5) / 3.6) / sink <= cfg.sure_glide
+
+
 def _demote_unlaunched_flights(pts: list[Point], labels: list[int], cfg: SegmenterConfig) -> None:
-    """A take-off follows a climb on foot. A "flight" that starts far below the top of the walk
-    before it is a ride down (car, bike, skis...): call it a vehicle."""
+    """A take-off follows a climb on foot, but not always at the top: wind or wind direction often send the
+    pilot down, on foot or on skis, to another take-off far below the summit. So a flight that starts far
+    below the top is only demoted when it does not look like a flight (stops, or flatter than a road): then it
+    is a ride down (car, bike...) and becomes a vehicle. A steady glide is kept (``_is_sure_flight``)."""
     last_top: Optional[float] = None
     for label, i, j in _runs(labels):
         if label == WALK and (pts[j].t - pts[i].t).total_seconds() >= cfg.launch_walk_s:
             alts = [p.alt for p in pts[i : j + 1] if p.alt is not None]
             last_top = max(alts) if alts else last_top
         elif label == FLIGHT and last_top is not None and pts[i].alt is not None:
-            if pts[i].alt < last_top - cfg.launch_tolerance_m:
+            if pts[i].alt < last_top - cfg.launch_tolerance_m and not _is_sure_flight(pts, i, j, cfg):
                 for k in range(i, j + 1):
                     labels[k] = VEHICLE
 

@@ -53,3 +53,19 @@ def test_the_ride_after_landing_is_not_part_of_the_flight():
 def test_a_descent_steeper_than_any_wing_glides_is_not_a_flight():
     """4.5 m/s of sink at 38 km/h is a glide of 2.3:1: a slope under the feet (ski, bike)."""
     assert "flight" not in modes(steep_flight_then_bike(sink=4.5))
+
+
+def test_a_flight_after_a_ski_descent_is_found():
+    """The ski descent is labelled walking, which lowers the take-off far below the summit: the launch rule
+    must not throw out a steady glide for that."""
+    from synth import ski_then_fly
+
+    m = modes(ski_then_fly())
+    assert m.count("flight") == 1
+
+
+def test_a_slow_descent_is_not_a_flight():
+    """14 km/h is a ski or a walk, not a wing: a flight has a median ground speed of at least 18 km/h."""
+    from synth import slow_ski_descent
+
+    assert "flight" not in modes(slow_ski_descent())
