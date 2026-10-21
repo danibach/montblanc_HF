@@ -179,7 +179,10 @@ def _cost_flight(f: _Feat, c: SegmenterConfig) -> float:
         if f.v < 1.0:
             cost += 1.0  # hovering on the ground is not flying
         elif f.v < c.flight_min_kmh:
-            cost += min(1.0, (c.flight_min_kmh - f.v) * 0.08)
+            # Circling over a landing field: the chord over the window is short, the path flown is not.
+            # Judge the speed along the path (sinuosity capped, so noise at a standstill does not pass for flying).
+            v_path = f.v * min(f.sinu, 3.0) if f.v >= 2.0 else f.v
+            cost += min(1.0, max(0.0, c.flight_min_kmh - v_path) * 0.08)
         elif f.v > c.flight_max_kmh:
             cost += min(1.5, (f.v - c.flight_max_kmh) * 0.05)
         if f.vz is not None:
