@@ -60,6 +60,37 @@ export function buildMap(trace, markers) {
   return { element: box, start };
 }
 
+// Heat layer: each take-off weighs its number of outings. Below HEAT.maxZoom the weight is halved at each zoom
+// level out, while nearby spots add up; minOpacity keeps a lone take-off visible on the world view.
+const HEAT = {
+  radius: 18, blur: 15, maxZoom: 8, max: 5, minOpacity: 0.35,
+  gradient: { 0.4: '#4aa3c8', 0.65: '#5fbf68', 0.85: '#f0c870', 1: '#f0693d' },
+};
+
+/** The map of all take-offs, with a heat layer that can be switched off. ``points`` is [[lat, lon, outings], …]. */
+export function buildHeatMap(points) {
+  const box = h('div', { class: 'map map-wide', role: 'img', 'aria-label': 'Map of the take-offs' });
+  if (!window.L || !window.L.heatLayer) {
+    box.append(h('p', { class: 'hint pad' }, 'The map could not be loaded.'));
+    return { element: box, start() {} };
+  }
+  const L = window.L;
+  const start = () => {
+    const map = L.map(box, { worldCopyJump: true });
+    L.tileLayer(CONFIG.TILES_URL, {
+      subdomains: CONFIG.TILES_SUBDOMAINS,
+      maxZoom: CONFIG.TILES_MAX_ZOOM,
+      attribution: CONFIG.TILES_ATTRIBUTION,
+    }).addTo(map);
+    const heat = L.heatLayer(points, HEAT).addTo(map);
+    L.control.layers(null, { 'Take-off heat map': heat }, { collapsed: false }).addTo(map);
+    if (points.length) map.fitBounds(L.latLngBounds(points.map((p) => [p[0], p[1]])), { padding: [40, 40], maxZoom: 11 });
+    else map.setView([45.92, 6.87], 9); // Mont Blanc, until the first outing is confirmed
+    box._map = map;
+  };
+  return { element: box, start };
+}
+
 // ---------- profile
 
 function niceStep(range, target) {

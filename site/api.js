@@ -119,6 +119,13 @@ export async function listUserOutings(userId) {
   return data || [];
 }
 
+/** Take-offs of the verified public outings: [[lat, lon, outings], …]. */
+export async function getTakeoffHeat() {
+  const { data, error } = await sb.rpc('takeoff_heat');
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 export async function getRanking({ year, country }) {
   const { data, error } = await sb.rpc('ranking', { p_year: year || null, p_country: country || null, p_limit: 200 });
   if (error) throw new Error(error.message);

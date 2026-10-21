@@ -95,6 +95,9 @@ def supabase(route, request):
         if body.get("p_year") != 2025:
             rows.append({"user_id": OTHER, "display_name": "Bruno", "outings": 1, "dplus": ROW2["dplus_m"], "dminus": ROW2["dminus_m"], "score": ROW2["score"]})
         return j(route, sorted(rows, key=lambda r: -r["score"]))
+    if u.path == "/rest/v1/rpc/takeoff_heat":
+        # like the SQL function: only the verified outings (ROW1), not the one waiting for the server (ROW2)
+        return j(route, [[r["takeoff_lat"], r["takeoff_lon"], 1] for r in ROWS if r["verified"] and r["takeoff_lat"] is not None])
     if u.path == "/rest/v1/profiles":
         pid = q.get("id", [""])[0].replace("eq.", "")
         name = {UID: "Alice", OTHER: "Bruno"}.get(pid)
@@ -219,6 +222,12 @@ with sync_playwright() as p:
     page.wait_for_function("location.hash.includes('year=2026')")
     page.screenshot(path=f"{SHOTS}/3-ranking.png")
 
+    page.goto(BASE + "#/map")
+    page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
+    check("1 confirmed outing from 1 take-off spot" in page.inner_text("main"), "map page counts only the verified outing: " + page.inner_text("main .sub")[:90])
+    check(page.locator(".leaflet-control-layers input[type=checkbox]").is_checked(), "map: heat layer on, with a switch")
+    page.screenshot(path=f"{SHOTS}/3b-map.png")
+
     page.goto(BASE + f"#/user/{UID}")
     page.wait_for_selector(".stat.big", timeout=15000)
     check(page.inner_text("h1") == "Alice" and page.inner_text(".stat.big b") == comma(ROW1["score"]), "user page: name and total score")
@@ -293,6 +302,10 @@ with sync_playwright() as p:
     page.wait_for_selector(".stat.big", timeout=30000)
     check(page.evaluate("document.documentElement.scrollWidth") <= 390, "phone: outing page has no sideways scroll")
     page.screenshot(path=f"{SHOTS}/7-phone-outing.png", full_page=True)
+    page.goto(BASE + "#/map")
+    page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
+    check(page.evaluate("document.documentElement.scrollWidth") <= 390, "phone: map page has no sideways scroll")
+    page.screenshot(path=f"{SHOTS}/8-phone-map.png")
     b.close()
 
 print("\nRESULT:", "all good" if not problems else f"{len(problems)} problem(s): " + "; ".join(problems))

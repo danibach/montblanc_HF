@@ -85,6 +85,10 @@ td.score { font-weight: 700; }
 .leaflet-bar a, .leaflet-bar a:hover { background: var(--card); color: var(--ink); border-color: var(--line); }
 .leaflet-control-attribution { background: rgba(14, 26, 32, .75) !important; color: var(--muted) !important; }
 .leaflet-control-attribution a { color: var(--accent) !important; }
+.leaflet-control-layers { background: var(--card); color: var(--ink); border: 1px solid var(--line) !important; }
+/* map page: the map takes the width of the window and most of its height */
+body.wide main { max-width: none; }
+.map-wide { height: calc(100vh - 12rem); min-height: 320px; margin-top: .8rem; }
 .profile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .5rem; margin-top: .8rem; }
 .profile-svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
 .readout { margin: .2rem .4rem; min-height: 1.4em; }
@@ -98,6 +102,7 @@ td.score { font-weight: 700; }
 @media (max-width: 640px) {
   main { padding: .7rem; }
   .map { height: 300px; }
+  .map-wide { height: calc(100svh - 11rem); }
   th, td { padding: .45rem .5rem; }
 }
 
