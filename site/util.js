@@ -52,7 +52,7 @@ export function pilotName(profile) {
 export function table(headers, rows, cls) {
   return h('div', { class: 'table-wrap' },
     h('table', { class: cls },
-      h('thead', null, h('tr', null, headers.map((x) => h('th', { class: x.num ? 'num' : null }, x.label)))),
+      h('thead', null, h('tr', null, headers.map((x) => h('th', { class: [x.num ? 'num' : '', x.cls || ''].join(' ').trim() || null }, x.label)))),
       h('tbody', null, rows)));
 }
 
