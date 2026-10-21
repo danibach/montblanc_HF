@@ -109,8 +109,9 @@ def process_pending(api: Api) -> None:
     from mbhf.analyse import AnalysisError, analyse_bytes
     from mbhf.rows import outing_row
     from mbhf.terrain import fetch_elevations
+    from mbhf.duplicates import duplicate_message, same_flight
 
-    for row in api.select(f"{TO_CHECK}&select=id,file_path,file_format&order=created_at.asc&limit={BATCH}"):
+    for row in api.select(f"{TO_CHECK}&select=id,user_id,created_at,file_path,file_format&order=created_at.asc&limit={BATCH}"):
         print(f"outing {row['id']} ({row['file_path']})")
         try:
             data = api.download(row["file_path"])
@@ -143,6 +144,14 @@ def process_pending(api: Api) -> None:
             if outing["reason"] == "no_flight" and any("follows the ground" in w for w in outing["warnings"]):
                 reason = next(w for w in outing["warnings"] if "follows the ground" in w)
             reject(api, row["id"], reason)
+            continue
+        # The same flight sent from another file (the watch's FIT and its Strava export): it counts once, in the
+        # outing sent first.
+        others = api.select(f"user_id=eq.{row['user_id']}&outing_date=eq.{outing['date']}&status=in.(pending,published)"
+                            f"&created_at=lt.{urllib.parse.quote(row['created_at'])}&select=id,title,outing_date,flights")
+        twin = next((o for o in others if same_flight(outing["flights"], o.get("flights"))), None)
+        if twin:
+            reject(api, row["id"], duplicate_message(twin.get("title"), twin.get("outing_date")))
             continue
 
         values = outing_row(result, look_up_places(outing))

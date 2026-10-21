@@ -467,6 +467,7 @@ async function analyseBatch(fileList, out) {
       return true;
     } catch (e) {
       if (/already submitted/i.test(e.message)) set(it, 'duplicate', 'Already submitted before', 'warn-text');
+      else if (/flight is already in/i.test(e.message)) set(it, 'duplicate', e.message, 'warn-text');
       else if (/daily upload limit/i.test(e.message)) { limitReached = true; set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); }
       else set(it, 'error', e.message, 'error-text');
       return false;

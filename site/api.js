@@ -140,8 +140,41 @@ const WRITABLE = ['status', 'engine_version', 'score_version', 'title', 'outing_
   'landing_lat', 'landing_lon', 'landing_alt', 'dplus_m', 'dminus_m', 'walk_km', 'flight_free_km', 'flight_path_km',
   'score', 'flights', 'trace', 'warnings', 'places_pending'];
 
+/** Two flights are the same when they overlap for at least half of the shorter one (src/mbhf/duplicates.py). */
+function sameFlight(a, b) {
+  const span = (f) => {
+    const t0 = Date.parse(f && f.takeoff && f.takeoff.t);
+    const t1 = Date.parse(f && f.landing && f.landing.t);
+    return t1 > t0 ? [t0, t1] : null;
+  };
+  const sb2 = (b || []).map(span).filter(Boolean);
+  return (a || []).map(span).filter(Boolean).some((x) => sb2.some((y) => {
+    const overlap = Math.min(x[1], y[1]) - Math.max(x[0], y[0]);
+    return overlap > 0 && overlap >= 0.5 * Math.min(x[1] - x[0], y[1] - y[0]);
+  }));
+}
+
+/** The pilot's outing (still counted) that already holds a flight of this result, or null. One pilot cannot
+ * fly twice at the same time: the same flight sent from another file (a watch's FIT and its Strava export)
+ * has another fingerprint, so the file hash does not catch it. */
+export async function sameFlightAs(result) {
+  if (!result || !result.outing_date || !(result.flights || []).length) return null;
+  const { data, error } = await sb.from('outings').select('id,title,outing_date,flights')
+    .eq('user_id', state.user.id).eq('outing_date', result.outing_date).in('status', ['pending', 'published']);
+  if (error) return null; // not essential: the server job checks it again
+  return (data || []).find((o) => sameFlight(result.flights, o.flights)) || null;
+}
+
+export function duplicateMessage(o) {
+  const what = o && o.title ? `“${o.title}”` : 'another of your outings';
+  const when = o && o.outing_date ? ` (${o.outing_date})` : '';
+  return `This flight is already in ${what}${when}, sent from another file. The same flight counts once: to replace it, delete that outing first.`;
+}
+
 export async function submitTrack(file, onProgress, result) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const twin = await sameFlightAs(result);
+  if (twin) throw new Error(duplicateMessage(twin));
   const buffer = await file.arrayBuffer();
   const hash = await sha256Hex(buffer);
   const fields = {};
