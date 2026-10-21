@@ -71,7 +71,7 @@ export async function setDisplayName(name) {
 // ---------- reading
 
 const LIST_COLUMNS =
-  'id,title,outing_date,country_code,country_name,dplus_m,dminus_m,score,flight_free_km,walk_km,user_id,status,verified,reject_reason,profiles(display_name)';
+  'id,title,summit_alt,outing_date,country_code,country_name,dplus_m,dminus_m,score,flight_free_km,walk_km,user_id,status,verified,reject_reason,profiles(display_name)';
 
 export async function getFilters() {
   const { data, error } = await sb.rpc('outing_filters');

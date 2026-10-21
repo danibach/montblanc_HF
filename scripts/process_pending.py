@@ -147,10 +147,10 @@ def process_pending(api: Api) -> None:
 
 
 def retry_places(api: Api) -> None:
-    from mbhf.rows import outing_row
+    from mbhf.rows import has_names, place_title
 
     for row in api.select(
-        "verified=is.true&status=eq.published&places_pending=is.true&select=id,start_lat,start_lon,summit_lat,summit_lon,summit_alt,"
+        "verified=is.true&status=eq.published&places_pending=is.true&select=id,outing_date,start_lat,start_lon,summit_lat,summit_lon,summit_alt,"
         f"takeoff_lat,takeoff_lon,takeoff_alt&limit={BATCH}"
     ):
         outing = {
@@ -159,14 +159,14 @@ def retry_places(api: Api) -> None:
             "takeoff": {"lat": row["takeoff_lat"], "lon": row["takeoff_lon"], "alt": row["takeoff_alt"]} if row["takeoff_lat"] is not None else None,
         }
         places = look_up_places(outing)
-        if not places:
-            continue
+        if not has_names(places):
+            continue  # Overpass answered without any name: stays pending, retried at the next run
         summit = places.get("summit") or {}
         takeoff = places.get("takeoff") or {}
         country = places.get("country") or {}
         api.patch(row["id"], {
             "places_pending": False,
-            "title": summit.get("name") or places.get("start_place") or "Hike & Fly outing",
+            "title": place_title(places, row["outing_date"], row["summit_alt"]),
             "country_code": country.get("code"), "country_name": country.get("name"),
             "start_place": places.get("start_place"), "start_commune": places.get("commune"),
             "summit_name": summit.get("name"), "summit_osm_id": summit.get("osm_id"),
