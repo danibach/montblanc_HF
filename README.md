@@ -17,11 +17,11 @@ The rules and the concept stay in Notion (source of truth): *Projet // Mont-Blan
 | score | D+ on foot + D− in flight (`score_version` 1) |
 
 An outing counts if it has at least one flight and at least 200 m of climb on foot. Otherwise it is rejected with a reason (`no_flight`, `too_little_climb`).
-Rides (car, bike, lift, skis) are detected and left out. A descent is a flight only if it is above the terrain: the engine asks Open-Meteo for the ground altitude under a few dozen points of each flight (`src/mbhf/terrain.py`), and a descent that follows the ground (ski, bike, run) is not counted. If the service is unreachable, the flight is kept and a warning says so. Accepted files: IGC, GPX, KML, FIT, with timestamps and altitude, up to 10 MB.
+Rides (car, bike, lift, skis) are detected and left out. A descent is a flight only if it is above the terrain: the engine asks Open-Meteo for the ground altitude under a few dozen points of each flight (`src/mbhf/terrain.py`), and a descent that follows the ground (ski, bike, run) is not counted. If the service is unreachable, the flight is kept and a warning says so. Accepted files: IGC, GPX, KML, TCX, FIT, with timestamps and altitude, up to 10 MB. Altitude readings that are plainly wrong (exactly 0 m because the receiver had no altitude fix, or a one-fix spike) are ignored and a warning says how many (`clean_altitudes` in `src/mbhf/parsers/common.py`); without this, a block of zeros in the mountains counted as thousands of metres climbed.
 
 ## Pages
 
-List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · upload · sign in.
+List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account) · sign in.
 
 ## How it works
 
@@ -52,6 +52,7 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 ## Set-up (once)
 
 1. **Database**: Supabase > SQL Editor > run `supabase/schema-v2.sql`.
+   On a database created before 2026-10-21, also run `supabase/migration-2026-10-21-tcx.sql` (accepts TCX files).
 2. **Secrets** (GitHub > Settings > Secrets and variables > Actions): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service role key, never in the site).
 3. **Supabase Auth**:
    - URL configuration: add `https://danibach.github.io/montblanc_HF/**` as redirect URL.

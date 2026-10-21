@@ -14,7 +14,7 @@ def test_result_is_json_and_marked_as_browser():
 
 def test_errors_are_short_and_without_internals():
     out = json.loads(analyse_json("virus.exe", b"MZ"))
-    assert out["ok"] is False and "IGC, GPX, KML or FIT" in out["error"]
+    assert out["ok"] is False and "IGC, GPX, KML, TCX or FIT" in out["error"]
     out = json.loads(analyse_json("vide.gpx", b"<gpx"))
     assert out["ok"] is False and "Traceback" not in out["error"]
 

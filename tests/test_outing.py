@@ -122,7 +122,7 @@ def test_file_without_altitude_is_refused():
 
 
 def test_wrong_extension_and_empty_and_huge():
-    with pytest.raises(AnalysisError, match="IGC, GPX, KML or FIT"):
+    with pytest.raises(AnalysisError, match="IGC, GPX, KML, TCX or FIT"):
         analyse_bytes("virus.exe", b"MZ")
     with pytest.raises(AnalysisError, match="empty"):
         analyse_bytes("a.gpx", b"")
@@ -135,3 +135,10 @@ def test_thinning_keeps_ends_and_spacing():
     th = thin(pts)
     assert th[0] is pts[0] and th[-1] is pts[-1]
     assert all((b.t - a.t).total_seconds() >= 3 for a, b in zip(th[:-2], th[1:-1]))
+
+
+def test_free_distance_is_added_up_over_the_flights():
+    o = run(two_flights())["outing"]
+    assert len(o["flights"]) == 2
+    assert o["flight_free_km"] == pytest.approx(sum(f["free_km"] for f in o["flights"]), abs=0.02)
+    assert o["flight_free_km"] > max(f["free_km"] for f in o["flights"])

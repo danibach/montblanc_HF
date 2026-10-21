@@ -28,7 +28,7 @@ class Point:
 class Track:
     points: list[Point]
     source: str                      # file name
-    fmt: str                         # "gpx" | "kml" | "igc" | "fit" | "merged"
+    fmt: str                         # "gpx" | "kml" | "igc" | "tcx" | "fit" | "merged"
     hint: Optional[str] = None
     warnings: list[str] = field(default_factory=list)
 

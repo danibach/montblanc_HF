@@ -95,3 +95,8 @@ td.score { font-weight: 700; }
 
 .publish-bar { margin: 12px 0 20px; }
 .publish-bar .hint { margin-top: 6px; }
+
+/* batch upload: result column */
+.ok-text { color: var(--ok); }
+.warn-text { color: var(--warn); }
+.error-text { color: var(--error); }

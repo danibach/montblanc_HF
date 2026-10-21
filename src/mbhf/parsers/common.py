@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -65,3 +66,59 @@ def finish_track(
         warnings.append(f"{source}: {invalid} points with invalid coordinates were dropped")
     points = sorted(points, key=lambda p: p.t)
     return Track(points=points, source=source, fmt=fmt, hint=hint, warnings=warnings)
+
+
+def clean_altitudes(
+    points: list[Point], zero_jump_m: float = 50.0, spike_m: float = 80.0, spike_return_m: float = 30.0
+) -> tuple[list[Point], int]:
+    """Blank the altitudes that are plainly recording errors; returns (points, how many were blanked).
+
+    Two kinds of error are removed, nothing else is touched:
+
+    * a reading of exactly 0 m (the receiver had no altitude fix) when the nearest real altitudes on
+      both sides are more than ``zero_jump_m`` away: a block of zeros in the mountains would otherwise
+      count as thousands of metres of climbing. A track genuinely recorded near sea level is kept.
+    * a single fix that jumps more than ``spike_m`` from its neighbour and falls back within
+      ``spike_return_m`` of it at the next fix.
+
+    A blanked fix keeps its position and time; only its altitude becomes unknown.
+    """
+    alts = [p.alt for p in points]
+    n = len(alts)
+    blank = 0
+
+    def is_zero(a: Optional[float]) -> bool:
+        return a is not None and abs(a) < 0.5
+
+    prev_real: list[Optional[float]] = [None] * n
+    last = None
+    for i in range(n):
+        prev_real[i] = last
+        if alts[i] is not None and not is_zero(alts[i]):
+            last = alts[i]
+    next_real: list[Optional[float]] = [None] * n
+    nxt = None
+    for i in range(n - 1, -1, -1):
+        next_real[i] = nxt
+        if alts[i] is not None and not is_zero(alts[i]):
+            nxt = alts[i]
+    for i in range(n):
+        a = alts[i]
+        if not is_zero(a):
+            continue
+        refs = [r for r in (prev_real[i], next_real[i]) if r is not None]
+        if refs and all(abs(r - a) > zero_jump_m for r in refs):
+            alts[i] = None
+            blank += 1
+
+    for i in range(1, n - 1):
+        a, b, c = alts[i - 1], alts[i], alts[i + 1]
+        if a is None or b is None or c is None:
+            continue
+        if abs(b - a) > spike_m and abs(c - a) < spike_return_m:
+            alts[i] = None
+            blank += 1
+
+    if not blank:
+        return points, 0
+    return [p if p.alt == al else replace(p, alt=al) for p, al in zip(points, alts)], blank

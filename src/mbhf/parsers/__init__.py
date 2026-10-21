@@ -1,4 +1,4 @@
-"""Track file parsers: IGC, GPX, KML and FIT. Timestamps are mandatory."""
+"""Track file parsers: IGC, GPX, KML, TCX and FIT. Timestamps are mandatory."""
 
 from __future__ import annotations
 
@@ -10,10 +10,11 @@ from .fit import parse_fit
 from .gpx import parse_gpx
 from .igc import parse_igc
 from .kml import parse_kml
+from .tcx import parse_tcx
 
 MAX_FILE_BYTES = 200 * 1024 * 1024  # generous; uploads should be limited lower by the web layer
 
-_PARSERS = {".gpx": parse_gpx, ".kml": parse_kml, ".igc": parse_igc, ".fit": parse_fit}
+_PARSERS = {".gpx": parse_gpx, ".kml": parse_kml, ".igc": parse_igc, ".fit": parse_fit, ".tcx": parse_tcx}
 
 
 def load_track(path: str, hint: Optional[str] = None, src: int = 0) -> Track:
@@ -23,7 +24,7 @@ def load_track(path: str, hint: Optional[str] = None, src: int = 0) -> Track:
     ext = os.path.splitext(path)[1].lower()
     parser = _PARSERS.get(ext)
     if parser is None:
-        raise TrackError(f"{path}: unsupported format {ext!r}; use IGC, GPX, KML or FIT")
+        raise TrackError(f"{path}: unsupported format {ext!r}; use IGC, GPX, KML, TCX or FIT")
     try:
         size = os.path.getsize(path)
     except OSError as exc:
