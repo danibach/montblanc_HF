@@ -73,6 +73,7 @@ pytest -q                                   # engine tests (synthetic tracks)
 mbhf analyse day.gpx --places               # analysis of one file, JSON
 python scripts/build_site.py --out _site    # site (downloads pinned Pyodide and supabase-js)
 pip install playwright && python scripts/check_site.py _site --shots shots   # end-to-end check with mocks
+python scripts/preview_map.py --real        # the take-off map with the live public outings (read-only), http://127.0.0.1:8765/#/map
 ```
 
 ## Known limits

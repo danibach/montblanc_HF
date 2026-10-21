@@ -141,6 +141,23 @@ function routePoints(spots) {
   return pts;
 }
 
+// Leaflet.heat 0.2 draws on the next frame and expects to be on a visible map by then, but it can lose track of
+// that frame: a layer taken off the map (zoom switch) or a hidden map (no size) made it throw. It now skips the
+// drawing in those cases; a layer that is not shown only keeps its points.
+if (window.L && window.L.HeatLayer && !window.L.HeatLayer.prototype._safe) {
+  const draw = window.L.HeatLayer.prototype._redraw;
+  window.L.HeatLayer.prototype._redraw = function redraw() {
+    if (this._map && this._map.getContainer().clientWidth && this._map.getContainer().clientHeight) draw.call(this);
+    else this._frame = null;
+  };
+  window.L.HeatLayer.prototype._safe = true;
+}
+
+function setPoints(layer, pts) {
+  if (layer._map) layer.setLatLngs(pts);
+  else layer._latlngs = pts;
+}
+
 function season(o) {
   const month = Number(String(o.outing_date || '').slice(5, 7));
   return Object.keys(SEASONS).find((k) => SEASONS[k].months.includes(month)) || '';
@@ -228,7 +245,8 @@ export function buildExplorer(rows, loadTraces) {
 
   // the heat map of the take-offs zoomed out, of the ways up zoomed in
   function pickHeat() {
-    if (!map.getSize().x) return; // a hidden map has no size: Leaflet.heat cannot draw it (called again on resize)
+    // a hidden map has no size: Leaflet.heat cannot draw it (called again on resize)
+    if (!mapBox.clientWidth || !mapBox.clientHeight) return;
     const routes = map.getZoom() >= ROUTES_ZOOM;
     const want = routes ? heatRoutes : heatSpots;
     if (!heat.hasLayer(want)) {
@@ -243,8 +261,8 @@ export function buildExplorer(rows, loadTraces) {
     const y = yearPick.value;
     shown = rows.filter((o) => (!s || season(o) === s) && (!y || String(o.outing_date || '').startsWith(y)));
     spots = groupTakeoffs(shown);
-    heatSpots.setLatLngs(spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
-    heatRoutes.setLatLngs(routePoints(spots));
+    setPoints(heatSpots, spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
+    setPoints(heatRoutes, routePoints(spots));
     overview();
   }
 
