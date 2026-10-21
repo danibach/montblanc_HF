@@ -122,7 +122,7 @@ def test_file_without_altitude_is_refused():
 
 
 def test_wrong_extension_and_empty_and_huge():
-    with pytest.raises(AnalysisError, match="IGC, GPX, KML or FIT"):
+    with pytest.raises(AnalysisError, match="IGC, GPX, KML, TCX or FIT"):
         analyse_bytes("virus.exe", b"MZ")
     with pytest.raises(AnalysisError, match="empty"):
         analyse_bytes("a.gpx", b"")

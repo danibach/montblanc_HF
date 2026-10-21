@@ -13,7 +13,7 @@ from .places import fetch_overpass, overpass_query, resolve_places
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="mbhf", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    an = sub.add_parser("analyse", help="analyse one track file (IGC, GPX, KML or FIT)")
+    an = sub.add_parser("analyse", help="analyse one track file (IGC, GPX, KML, TCX or FIT)")
     an.add_argument("file")
     an.add_argument("--places", action="store_true", help="also look up place names on OpenStreetMap")
     an.add_argument("--no-trace", action="store_true", help="leave the drawing arrays out of the output")

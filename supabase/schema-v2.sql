@@ -63,7 +63,7 @@ create table if not exists public.outings (
 
   -- the file, as announced by the browser (the job recomputes the hash)
   file_path text not null,
-  file_format text not null check (file_format in ('gpx', 'fit', 'kml', 'igc')),
+  file_format text not null check (file_format in ('gpx', 'fit', 'kml', 'igc', 'tcx')),
   file_size integer,
   file_sha256 text,
 

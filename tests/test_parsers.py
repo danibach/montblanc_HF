@@ -100,3 +100,31 @@ def test_xml_entity_bomb_is_rejected(tmp_path):
     )
     with pytest.raises(TrackError):
         load_track(_write(tmp_path, "bomb.gpx", bomb))
+
+
+TCX = """<?xml version="1.0" encoding="UTF-8" ?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+ <Activities><Activity Sport="Running"><Id>2026-09-12T05:00:00Z</Id>
+  <Lap StartTime="2026-09-12T05:00:00Z"><Track>
+   <Trackpoint><Time>2026-09-12T05:00:00Z</Time><DistanceMeters>0.0</DistanceMeters></Trackpoint>
+   <Trackpoint><Time>2026-09-12T05:00:05Z</Time>
+    <Position><LatitudeDegrees>45.9000</LatitudeDegrees><LongitudeDegrees>6.8000</LongitudeDegrees></Position>
+    <AltitudeMeters>1000.5</AltitudeMeters></Trackpoint>
+   <Trackpoint><Time>2026-09-12T07:00:10+02:00</Time>
+    <Position><LatitudeDegrees>45.9002</LatitudeDegrees><LongitudeDegrees>6.8002</LongitudeDegrees></Position>
+    <AltitudeMeters>1002.0</AltitudeMeters></Trackpoint>
+  </Track></Lap></Activity></Activities></TrainingCenterDatabase>"""
+
+
+def test_tcx_parses_and_skips_points_without_position(tmp_path):
+    tr = load_track(_write(tmp_path, "a.tcx", TCX))
+    assert tr.fmt == "tcx"
+    assert len(tr.points) == 2                      # the first trackpoint has no position
+    assert tr.points[0].alt == 1000.5
+    assert tr.points[1].t == datetime(2026, 9, 12, 5, 0, 10, tzinfo=timezone.utc)
+
+
+def test_tcx_without_any_position_is_refused(tmp_path):
+    empty = TCX.split("<Trackpoint>")[0] + "<Trackpoint><Time>2026-09-12T05:00:00Z</Time></Trackpoint></Track></Lap></Activity></Activities></TrainingCenterDatabase>"
+    with pytest.raises(TrackError):
+        load_track(_write(tmp_path, "e.tcx", empty))

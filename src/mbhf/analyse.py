@@ -13,10 +13,11 @@ from . import __version__
 from .models import Point, Track, TrackError
 from .outing import OutingConfig, build_outing, build_trace
 from .parsers import load_track
+from .parsers.common import clean_altitudes
 from .segment import SegmenterConfig, segment_track
 from .terrain import apply_terrain, elevation_query, sample_flights
 
-ALLOWED_EXTENSIONS = (".igc", ".gpx", ".kml", ".fit")
+ALLOWED_EXTENSIONS = (".igc", ".gpx", ".kml", ".tcx", ".fit")
 MAX_FILE_BYTES = 10 * 1024 * 1024
 MIN_SPACING_S = 3.0          # a 1 Hz recording is thinned to one fix every 3 s: same result, faster
 MIN_FIXES = 60
@@ -60,7 +61,7 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
     shown = _display_name(name)
     ext = os.path.splitext(shown)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise AnalysisError(f"{shown}: use an IGC, GPX, KML or FIT file.")
+        raise AnalysisError(f"{shown}: use an IGC, GPX, KML, TCX or FIT file.")
     if not data:
         raise AnalysisError(f"{shown} is empty.")
     if len(data) > max_bytes:
@@ -75,6 +76,9 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
         except TrackError as exc:
             raise AnalysisError(str(exc).replace(path, shown)) from exc
     track.source = shown
+    cleaned, blanked = clean_altitudes(track.points)
+    if blanked:
+        track = Track(points=cleaned, source=track.source, fmt=track.fmt, hint=track.hint, warnings=track.warnings)
 
     if sum(1 for p in track.points if p.alt is not None) < 0.5 * len(track.points):
         raise AnalysisError("This track has no altitude: climbs and descents cannot be measured.")
@@ -86,6 +90,8 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
 
     seg = segment_track(track, SegmenterConfig())
     info = {"name": shown, "format": ext[1:], "size": len(data), "sha256": sha256_hex(data), "fixes": fixes}
+    if blanked:
+        info["altitude_ignored"] = blanked
     return Prepared(info, track, seg)
 
 
@@ -93,6 +99,9 @@ def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
     """The analysis result for a prepared file (with the segmentation the terrain check settled on)."""
     seg = seg or prepared.seg
     outing = build_outing(prepared.track, seg, OutingConfig())
+    ignored = prepared.info.get("altitude_ignored")
+    if ignored:
+        notes = list(notes or []) + [f"{ignored} altitude reading{'s were' if ignored != 1 else ' was'} obviously wrong (0 m or a one-fix spike) and ignored"]
     if notes:
         outing["warnings"] = list(outing["warnings"]) + [n for n in notes if n not in outing["warnings"]]
     return {
