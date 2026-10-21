@@ -20,6 +20,8 @@ const subscribers = new Set();
 export const onSession = (fn) => subscribers.add(fn);
 
 export async function refreshSession() {
+  const before = state.user ? state.user.id : null;
+  const beforeName = state.profile ? state.profile.display_name : null;
   const { data } = await sb.auth.getSession();
   state.user = data.session ? data.session.user : null;
   state.profile = null;
@@ -27,7 +29,11 @@ export async function refreshSession() {
     const { data: p } = await sb.from('profiles').select('id,display_name').eq('id', state.user.id).maybeSingle();
     state.profile = p || { id: state.user.id, display_name: null };
   }
-  subscribers.forEach((f) => f());
+  // Supabase fires "signed in" again each time the tab comes back to the front. Tell the pages only when
+  // something really changed: re-drawing the Upload page would wipe a batch in progress.
+  const after = state.user ? state.user.id : null;
+  const afterName = state.profile ? state.profile.display_name : null;
+  if (after !== before || afterName !== beforeName) subscribers.forEach((f) => f());
 }
 
 sb.auth.onAuthStateChange((event) => {
@@ -121,7 +127,7 @@ export async function getRanking({ year, country }) {
 
 // ---------- writing
 
-async function sha256Hex(buffer) {
+export async function sha256Hex(buffer) {
   const digest = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -156,6 +162,18 @@ export async function submitTrack(file, onProgress, result) {
     throw new Error(ins.error.message);
   }
   return ins.data.id;
+}
+
+/** Which of these file fingerprints (SHA-256) this account already sent and that still count. */
+export async function alreadySent(hashes) {
+  const found = new Set();
+  for (let i = 0; i < hashes.length; i += 50) {
+    const { data, error } = await sb.from('outings').select('file_sha256')
+      .eq('user_id', state.user.id).in('status', ['pending', 'published']).in('file_sha256', hashes.slice(i, i + 50));
+    if (error) return found; // not essential: the insert refuses duplicates anyway
+    for (const r of data) found.add(r.file_sha256);
+  }
+  return found;
 }
 
 export async function deleteOuting(outing) {
