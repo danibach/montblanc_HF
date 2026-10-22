@@ -144,26 +144,62 @@ def test_free_distance_is_added_up_over_the_flights():
     assert o["flight_free_km"] > max(f["free_km"] for f in o["flights"])
 
 
-def _with_gap(g, after_s, gap_s, climb_m):
-    """Cut the recording ``after_s`` seconds into the track for ``gap_s``, coming back ``climb_m`` higher."""
+def _with_gap(g, after_s, gap_s, climb_m, moved_m=0.0):
+    """Cut the recording ``after_s`` seconds into the track for ``gap_s``, coming back ``climb_m`` higher
+    and ``moved_m`` metres further north (a car or a lift moves; a short walk does not)."""
     from dataclasses import replace
     from datetime import timedelta
 
     t_cut = g.points[0].t + timedelta(seconds=after_s)
-    g.points = [p if p.t < t_cut else replace(p, t=p.t + timedelta(seconds=gap_s), alt=p.alt + climb_m) for p in g.points]
+    g.points = [
+        p if p.t < t_cut else replace(p, t=p.t + timedelta(seconds=gap_s), alt=p.alt + climb_m, lat=p.lat + moved_m / 111_320.0)
+        for p in g.points
+    ]
     return g
 
 
 def test_nothing_on_foot_across_a_recording_gap():
-    """Issue #9: the recorder was off 67 min (a ride up) and came back 600 m higher: those 600 m are not
-    climbed on foot. Distance across the gap is not counted either."""
+    """Issue #9: the recorder was off 67 min (a drive, 20 km further and 600 m higher): a walker could not
+    have done that, so those 600 m are not climbed on foot. Distance across the gap is not counted either."""
     from synth import hike_and_fly
 
     plain = run(hike_and_fly())["outing"]
-    gapped = run(_with_gap(hike_and_fly(), 30 * 60, 67 * 60, 600))["outing"]
+    gapped = run(_with_gap(hike_and_fly(), 30 * 60, 67 * 60, 600, moved_m=20_000))["outing"]
     assert abs(gapped["dplus_m"] - plain["dplus_m"]) < 40
     assert abs(gapped["walk_km"] - plain["walk_km"]) < 0.2
-    assert any("recording gap of 67 min" in w for w in gapped["warnings"])
+    assert any("recording gap of 67 min" in w and "nothing on foot counted" in w for w in gapped["warnings"])
+
+
+def test_a_recording_gap_a_walker_could_cover_counts():
+    """The recorder was off 25 min while walking: 150 m higher and 800 m further is about 360 m/h and
+    2 km/h, a walk. The climb and the distance count, and a warning says so."""
+    from synth import hike_and_fly
+
+    plain = run(hike_and_fly())["outing"]
+    gapped = run(_with_gap(hike_and_fly(), 30 * 60, 25 * 60, 150, moved_m=800))["outing"]
+    assert abs(gapped["dplus_m"] - (plain["dplus_m"] + 150)) < 40
+    assert gapped["walk_km"] > plain["walk_km"] + 0.5
+    assert any("recording gap of 25 min" in w and "plausible on foot" in w for w in gapped["warnings"])
+
+
+def test_a_rest_with_the_recorder_off_loses_nothing():
+    """15 min in a hut with the recorder off, same place and same height: everything before still counts."""
+    from synth import hike_and_fly
+
+    plain = run(hike_and_fly())["outing"]
+    gapped = run(_with_gap(hike_and_fly(), 30 * 60, 15 * 60, 0))["outing"]
+    assert gapped["status"] == "ok"
+    assert abs(gapped["dplus_m"] - plain["dplus_m"]) < 40
+    assert abs(gapped["walk_km"] - plain["walk_km"]) < 0.2
+
+
+def test_a_gap_too_fast_or_too_steep_for_a_walker_does_not_count():
+    """The same 25 min, but 600 m higher with no distance (a lift, 1 440 m/h): not a walk."""
+    from synth import hike_and_fly
+
+    plain = run(hike_and_fly())["outing"]
+    gapped = run(_with_gap(hike_and_fly(), 30 * 60, 25 * 60, 600, moved_m=300))["outing"]
+    assert abs(gapped["dplus_m"] - plain["dplus_m"]) < 40
 
 
 def test_a_pause_with_the_recorder_on_changes_nothing():
@@ -201,8 +237,9 @@ def test_a_climb_given_up_does_not_count():
     assert any("did not lead to a take-off" in w for w in o["warnings"])
 
 
-def test_a_climb_after_the_last_flight_does_not_count():
-    """Two flights, then a third climb without a take-off (the pilot walked back up and came down on foot)."""
+def test_a_climb_after_the_last_flight_counts():
+    """Two flights, then a third climb with no take-off (back up to the bivouac, or to fetch the car):
+    it is climbed on foot and the file holds a flight, so it counts."""
     from synth import two_flights
 
     base = run(two_flights())["outing"]
@@ -211,4 +248,29 @@ def test_a_climb_after_the_last_flight_does_not_count():
     g.leg("down3", 30 * 60, 3.0, -400 / 1800, 200, wobble=12)
     o = run(g)["outing"]
     assert len(o["flights"]) == 2
-    assert abs(o["dplus_m"] - base["dplus_m"]) < 40
+    assert abs(o["dplus_m"] - (base["dplus_m"] + 400)) < 60, (o["dplus_m"], base["dplus_m"])
+    assert not any("did not lead to a take-off" in w for w in o["warnings"])
+
+
+def test_a_climb_after_the_last_flight_counts_even_when_a_ride_follows():
+    """Same, but a ride follows the climb (car, lift): the climb was still done on foot."""
+    from synth import two_flights
+
+    base = run(two_flights())["outing"]
+    g = two_flights()
+    g.leg("up3", 40 * 60, 2.4, 400 / 2400, 20, wobble=12)
+    g.leg("drive", 25 * 60, 45, 900 / 1500, 120, dt=3.0)
+    o = run(g)["outing"]
+    assert len(o["flights"]) == 2
+    assert abs(o["dplus_m"] - (base["dplus_m"] + 400)) < 60, (o["dplus_m"], base["dplus_m"])
+
+
+def test_a_track_with_no_flight_at_all_still_shows_its_climbing():
+    from synth import Gen
+
+    g = Gen(seed=9, alt=900.0)
+    g.leg("up", 60 * 60, 2.6, 600 / 3600, 60, wobble=12)
+    g.leg("down", 45 * 60, 3.0, -600 / 2700, 240, wobble=12)
+    o = run(g)["outing"]
+    assert o["status"] == "rejected" and o["reason"] == "no_flight"
+    assert o["dplus_m"] > 500
