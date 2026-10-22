@@ -93,3 +93,11 @@ def test_a_descent_close_to_the_slope_is_kept_but_flagged():
     assert r["outing"]["status"] == "ok"
     assert any("to be checked" in w for w in r["outing"]["warnings"])
 
+
+
+def test_a_flight_glued_to_the_ground_tells_how_to_fix_the_file():
+    """Issue #7: the rejection says what to do when it was a real flight (altitudes replaced by the ground's)."""
+    p = prepare_bytes("a.gpx", data(hike_and_fly()))
+    s = sample_flights(p.track, p.seg)
+    r = with_terrain(p, ground_like(s, below=3))
+    assert any("follows the ground" in w and "upload the original recording" in w for w in r["outing"]["warnings"])

@@ -77,6 +77,12 @@ class SegmenterConfig:
     sure_p10_kmh: float = 12.0
     sure_sink_ms: float = 1.0
     sure_glide: float = 10.0
+    # A "vehicle" stretch straight after a walk is a flight when it glides like a wing: never stopping,
+    # sinking at least ``sure_sink_ms`` and gliding between ``flight_min_glide`` and ``promote_glide`` over
+    # the ground. No road is steeper than about 12 % for minutes on end (a glide flatter than 8). On three real
+    # Strava tracks (issues #8 and #9) the scoring alone took such glides for a car: 5.4, 6.8 and 7.3.
+    # The terrain check still turns a stretch that follows the ground back into a vehicle.
+    promote_glide: float = 8.0
 
 
 @dataclass
@@ -257,6 +263,7 @@ def segment_track(track: Track, cfg: Optional[SegmenterConfig] = None) -> Segmen
         labels[i] = state
         state = back[i][state]
 
+    _promote_gliding_rides(pts, labels, cfg)
     _drop_short_flights(pts, labels, cfg)
     _trim_landing(pts, labels, cfg)
     _demote_slow_flights(pts, labels, cfg)
@@ -338,16 +345,37 @@ def _demote_slow_flights(pts: list[Point], labels: list[int], cfg: SegmenterConf
                 labels[k] = VEHICLE
 
 
-def _is_sure_flight(pts: list[Point], i: int, j: int, cfg: SegmenterConfig) -> bool:
-    """Steady glide, never stopping, steep enough for a wing and not flatter than a road."""
+def _glide(pts: list[Point], i: int, j: int, cfg: SegmenterConfig) -> Optional[float]:
+    """Glide over the ground of a steady descent i..j (median speed / mean sink), or None when the stretch
+    stops, sinks too slowly or is too short to tell."""
     v = _speeds_kmh(pts, i, j)
     dur = (pts[j].t - pts[i].t).total_seconds()
     if len(v) < 10 or dur <= 0 or pts[i].alt is None or pts[j].alt is None:
-        return False
+        return None
     sink = (pts[i].alt - pts[j].alt) / dur
     if sink < cfg.sure_sink_ms or _percentile(v, 0.10) < cfg.sure_p10_kmh:
-        return False
-    return (_percentile(v, 0.5) / 3.6) / sink <= cfg.sure_glide
+        return None
+    return (_percentile(v, 0.5) / 3.6) / sink
+
+
+def _is_sure_flight(pts: list[Point], i: int, j: int, cfg: SegmenterConfig) -> bool:
+    """Steady glide, never stopping, steep enough for a wing and not flatter than a road."""
+    g = _glide(pts, i, j, cfg)
+    return g is not None and g <= cfg.sure_glide
+
+
+def _promote_gliding_rides(pts: list[Point], labels: list[int], cfg: SegmenterConfig) -> None:
+    """A "vehicle" stretch that follows a walk and glides like a wing (never stops, sinks at least
+    ``sure_sink_ms``, glide between ``flight_min_glide`` and ``promote_glide``) is a flight: no road is that
+    steep for minutes, and a car does not glide at 30 km/h without stopping down a mountainside."""
+    prev: Optional[int] = None
+    for label, i, j in _runs(labels):
+        if label == VEHICLE and prev == WALK and (pts[j].t - pts[i].t).total_seconds() >= cfg.min_flight_s:
+            g = _glide(pts, i, j, cfg)
+            if g is not None and cfg.flight_min_glide <= g <= cfg.promote_glide:
+                for k in range(i, j + 1):
+                    labels[k] = FLIGHT
+        prev = label
 
 
 def _demote_unlaunched_flights(pts: list[Point], labels: list[int], cfg: SegmenterConfig) -> None:
