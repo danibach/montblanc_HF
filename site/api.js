@@ -71,7 +71,20 @@ export async function setDisplayName(name) {
 // ---------- reading
 
 const LIST_COLUMNS =
-  'id,title,summit_alt,outing_date,country_code,country_name,dplus_m,dminus_m,score,flight_free_km,walk_km,user_id,status,verified,reject_reason,profiles(display_name)';
+  'id,title,summit_alt,outing_date,country_code,country_name,dplus_m,dminus_m,score,flight_free_km,flight_path_km,walk_km,user_id,status,verified,reject_reason,profiles(display_name)';
+
+// The columns the home list can be sorted by (a name from the address -> the database column).
+export const SORT_COLUMNS = {
+  date: 'outing_date',
+  pilot: 'profiles(display_name)',
+  outing: 'title',
+  country: 'country_name',
+  dplus: 'dplus_m',
+  dminus: 'dminus_m',
+  hike: 'walk_km',
+  fly: 'flight_path_km',
+  score: 'score',
+};
 
 export async function getFilters() {
   const { data, error } = await sb.rpc('outing_filters');
@@ -83,13 +96,16 @@ function yearRange(q, year) {
   return year ? q.gte('outing_date', `${year}-01-01`).lte('outing_date', `${year}-12-31`) : q;
 }
 
-export async function listOutings({ year, country, offset = 0, limit = CONFIG.PAGE_SIZE }) {
+export async function listOutings({ year, country, sort = 'date', dir = 'desc', offset = 0, limit = CONFIG.PAGE_SIZE }) {
   let q = sb.from('outings').select(LIST_COLUMNS, { count: 'exact' }).eq('status', 'published').eq('hidden', false);
   q = yearRange(q, year);
   if (country) q = q.eq('country_code', country);
+  const column = SORT_COLUMNS[sort] || SORT_COLUMNS.date;
+  // Empty values go last in both directions; the date and the id then keep the pages stable.
   const { data, error, count } = await q
+    .order(column, { ascending: dir === 'asc', nullsFirst: false })
     .order('outing_date', { ascending: false })
-    .order('created_at', { ascending: false })
+    .order('id', { ascending: true })
     .range(offset, offset + limit - 1);
   if (error) throw new Error(error.message);
   return { rows: data || [], total: count || 0 };
@@ -117,6 +133,27 @@ export async function listUserOutings(userId) {
     .limit(1000);
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_name', 'title', 'outing_date',
+  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb'];
+
+/** The verified public outings for the take-off map (no track): the order of MAP_FIELDS, as in map_outings(). */
+export async function getMapOutings() {
+  const { data, error } = await sb.rpc('map_outings');
+  if (error) throw new Error(error.message);
+  return (data || []).map((a) => Object.fromEntries(MAP_FIELDS.map((k, i) => [k, a[i]])));
+}
+
+/** The tracks and flights of these outings, read only when their take-off is clicked. */
+export async function getTraces(ids) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += 25) {
+    const { data, error } = await sb.from('outings').select('id,trace,flights').in('id', ids.slice(i, i + 25));
+    if (error) throw new Error(error.message);
+    out.push(...data);
+  }
+  return out;
 }
 
 export async function getRanking({ year, country }) {

@@ -18,11 +18,16 @@ on:
         description: "Look the place names up again for every published outing"
         type: boolean
         default: false
+      climbs:
+        description: "Compute the climb (take-off map) of published outings that have none yet"
+        type: boolean
+        default: false
   repository_dispatch:
     types: [new-outing]
 
+# The relabel run has its own queue: a normal run waiting behind it (or it behind a normal one) used to replace it.
 concurrency:
-  group: process-outings
+  group: process-outings${{ inputs.relabel && '-relabel' || '' }}
   cancel-in-progress: false
 
 permissions:
@@ -49,12 +54,12 @@ jobs:
         run: python3 scripts/process_pending.py --count-only
 
       - uses: actions/setup-python@v5
-        if: inputs.relabel || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
+        if: inputs.relabel || inputs.climbs || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
         with:
           python-version: "3.13"
 
       - name: Analyse and publish
-        if: inputs.relabel || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
+        if: inputs.relabel || inputs.climbs || (steps.todo.outputs.count != '' && steps.todo.outputs.count != '0')
         run: |
           pip install --quiet .
-          python scripts/process_pending.py ${{ inputs.relabel && '--relabel' || '' }}
+          RELABEL_BUDGET_S=19800 python scripts/process_pending.py ${{ inputs.relabel && '--relabel' || '' }} ${{ inputs.climbs && '--climbs' || '' }}

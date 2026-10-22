@@ -49,10 +49,25 @@ export function pilotName(profile) {
   return (profile && profile.display_name) || 'Anonymous';
 }
 
-export function table(headers, rows, cls) {
+/**
+ * A table. With `sorting` ({ key, dir, onSort(key) }), a header that has a `key` becomes a button
+ * that sorts the table by that column; the current column shows an arrow.
+ */
+export function table(headers, rows, cls, sorting) {
+  const head = (x) => {
+    const sortable = sorting && x.key;
+    const active = sortable && sorting.key === x.key;
+    const arrow = active ? (sorting.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return h('th', {
+      class: [x.num ? 'num' : '', x.cls || ''].join(' ').trim() || null,
+      'aria-sort': active ? (sorting.dir === 'asc' ? 'ascending' : 'descending') : null,
+    }, sortable
+      ? h('button', { class: 'sort', type: 'button', title: `Sort by ${x.label}`, onclick: () => sorting.onSort(x.key) }, x.label + arrow)
+      : x.label);
+  };
   return h('div', { class: 'table-wrap' },
     h('table', { class: cls },
-      h('thead', null, h('tr', null, headers.map((x) => h('th', { class: [x.num ? 'num' : '', x.cls || ''].join(' ').trim() || null }, x.label)))),
+      h('thead', null, h('tr', null, headers.map(head))),
       h('tbody', null, rows)));
 }
 

@@ -83,3 +83,44 @@ def test_landing_spirals_belong_to_the_flight():
     seg = segment_track(as_track(g), SegmenterConfig())
     fl = [s for s in seg.segments if s.mode == "flight"][0]
     assert (g.marks["landing_walk"] - fl.t_end).total_seconds() < 15
+
+
+def _labelled(legs, seed=21):
+    """A walk, then one descent the scoring labelled "vehicle": run only the promotion rule on it."""
+    from synth import Gen
+
+    from mbhf.segment import VEHICLE, WALK, _promote_gliding_rides
+
+    g = Gen(alt=1800.0, seed=seed)
+    g.leg("walk", 20 * 60, 3.0, 0.0, 60, wobble=10)
+    n_walk = len(g.points)
+    for leg in legs:
+        g.leg(*leg)
+    labels = [WALK] * n_walk + [VEHICLE] * (len(g.points) - n_walk)
+    _promote_gliding_rides(g.points, labels, SegmenterConfig())
+    return labels[n_walk:]
+
+
+def test_a_glide_taken_for_a_ride_becomes_a_flight():
+    """Issues #8 and #9: real glides of 5.4-7.3:1 at 30 km/h were scored as a car (straight legs in lift,
+    sharp turns). No road is that steep for minutes: after a walk, such a stretch is a flight."""
+    from mbhf.segment import FLIGHT
+
+    got = _labelled([("glide", 12 * 60, 30, -1.4, 230, 3.0, 8)])  # glide 6:1
+    assert set(got) == {FLIGHT}
+
+
+def test_a_car_down_a_mountain_road_stays_a_vehicle():
+    """45 km/h losing 0.7 m/s is an 18:1 slope: a road."""
+    from mbhf.segment import VEHICLE
+
+    assert set(_labelled([("drive", 20 * 60, 45, -0.7, 200, 3.0, 6)])) == {VEHICLE}
+
+
+def test_a_cable_car_down_stays_a_vehicle():
+    """A cabin sinks steeper than any wing glides (2:1) and stops in the stations."""
+    from mbhf.segment import VEHICLE
+
+    legs = [("down1", 6 * 60, 20, -3.0, 200, 3.0), ("station", 2 * 60, 0, 0.0, 200, 3.0),
+            ("down2", 6 * 60, 20, -3.0, 200, 3.0)]
+    assert set(_labelled(legs)) == {VEHICLE}

@@ -3,6 +3,7 @@
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
 //   #/ranking          ranking of participants (by year or all time)
+//   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
 //   #/login            sign in
 
@@ -10,6 +11,7 @@ import { CONFIG } from './config.js';
 import * as api from './api.js';
 import { analyseFile, checkTerrain, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
+import { buildExplorer } from './explorer.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
@@ -116,8 +118,15 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
     h('td', null, r.country_name || r.country_code || ''),
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
+    h('td', { class: 'num' }, fmtDist(r.walk_km)),
+    h('td', { class: 'num' }, fmtDist(r.flight_path_km)),
     h('td', { class: 'num score' }, fmtInt(r.score)),
     showStatus ? h('td', null, statusBadge(r)) : null));
+}
+
+// A distance in km for the lists, without the unit (the header has it).
+function fmtDist(n) {
+  return n == null ? '–' : Number(n).toFixed(1);
 }
 
 function statusBadge(r) {
@@ -129,13 +138,15 @@ function statusBadge(r) {
 
 function listHeaders({ showPilot = true, showStatus = false } = {}) {
   return [
-    { label: 'Date' },
-    showPilot ? { label: 'Pilot' } : null,
-    { label: 'Outing' },
-    { label: 'Country' },
-    { label: 'D+ (m)', num: true },
-    { label: 'D− (m)', num: true },
-    { label: 'Score', num: true },
+    { label: 'Date', key: 'date' },
+    showPilot ? { label: 'Pilot', key: 'pilot' } : null,
+    { label: 'Outing', key: 'outing' },
+    { label: 'Country', key: 'country' },
+    { label: 'D+ (m)', key: 'dplus', num: true },
+    { label: 'D− (m)', key: 'dminus', num: true },
+    { label: 'Hike (km)', key: 'hike', num: true },
+    { label: 'Fly (km)', key: 'fly', num: true },
+    { label: 'Score', key: 'score', num: true },
     showStatus ? { label: 'Status' } : null,
   ].filter(Boolean);
 }
@@ -159,10 +170,13 @@ function query() {
   return Object.fromEntries(new URLSearchParams(q));
 }
 
-function goFilters(path, { year, country }) {
+function goFilters(path, { year, country, sort, dir, page }) {
   const p = new URLSearchParams();
   if (year) p.set('year', year);
   if (country) p.set('country', country);
+  // The default order (newest first) stays out of the address.
+  if (sort && !(sort === 'date' && dir !== 'asc')) { p.set('sort', sort); p.set('dir', dir === 'asc' ? 'asc' : 'desc'); }
+  if (page && page > 1) p.set('page', page);
   location.hash = `#/${path}${p.toString() ? `?${p}` : ''}`;
 }
 
@@ -171,31 +185,38 @@ function goFilters(path, { year, country }) {
 async function pageHome(token) {
   setNav('home');
   const q = query();
-  const bar = await filterBar(q, (v) => goFilters('', v));
-  let offset = 0;
-  const body = h('tbody');
-  const wrap = table(listHeaders(), [], '');
-  wrap.querySelector('table').replaceChild(body, wrap.querySelector('tbody'));
-  const more = h('button', null, 'Load more');
-  const count = h('p', { class: 'hint' });
-  const empty = notice('info', h('p', null, 'No outing yet for these filters.'));
-  empty.hidden = true;
+  const sort = api.SORT_COLUMNS[q.sort] ? q.sort : 'date';
+  const dir = q.sort && q.dir === 'asc' ? 'asc' : (q.sort && q.dir === 'desc' ? 'desc' : (sort === 'date' ? 'desc' : 'asc'));
+  const page = Math.max(1, parseInt(q.page, 10) || 1);
+  const size = CONFIG.PAGE_SIZE;
+  // Changing a filter or the order goes back to page 1; the order is kept when a filter changes.
+  const go = (extra) => goFilters('', { year: q.year, country: q.country, sort, dir, ...extra });
+  const bar = await filterBar(q, (v) => go({ ...v, page: 1 }));
 
-  async function load() {
-    more.disabled = true;
-    const { rows, total } = await api.listOutings({ year: q.year, country: q.country, offset });
-    if (token !== routeToken) return;
-    body.append(...outingRows(rows));
-    offset += rows.length;
-    count.textContent = total ? `${offset} of ${total} outings` : '';
-    empty.hidden = total > 0;
-    wrap.hidden = total === 0;
-    more.hidden = offset >= total;
-    more.disabled = false;
-  }
-  more.addEventListener('click', () => load().catch(fail));
-  show(h('h1', null, 'Hike & Fly outings'), bar, empty, wrap, count, more);
-  await load();
+  const { rows, total } = await api.listOutings({ year: q.year, country: q.country, sort, dir, offset: (page - 1) * size });
+  if (token !== routeToken) return;
+  const pages = Math.max(1, Math.ceil(total / size));
+  if (page > pages) return go({ page: pages });   // a page that no longer exists (filters changed): go to the last one
+
+  // A click on a header: the same column flips the order; a new column starts with text A to Z,
+  // numbers from the biggest, dates from the newest.
+  const onSort = (key) => {
+    const text = ['pilot', 'outing', 'country'].includes(key);
+    go({ sort: key, dir: key === sort ? (dir === 'asc' ? 'desc' : 'asc') : (text ? 'asc' : 'desc'), page: 1 });
+  };
+
+  const from = (page - 1) * size;
+  const count = h('p', { class: 'hint' }, total ? `${from + 1}–${from + rows.length} of ${total} outings` : '');
+  const pager = pages > 1 ? h('nav', { class: 'pager', 'aria-label': 'Pages' },
+    h('button', { disabled: page <= 1, onclick: () => go({ page: page - 1 }) }, '‹ Previous'),
+    h('span', { class: 'hint' }, `Page ${page} of ${pages}`),
+    h('button', { disabled: page >= pages, onclick: () => go({ page: page + 1 }) }, 'Next ›')) : null;
+
+  show(
+    h('h1', null, 'Hike & Fly outings'), bar,
+    total
+      ? [table(listHeaders(), outingRows(rows), '', { key: sort, dir, onSort }), count, pager]
+      : notice('info', h('p', null, 'No outing yet for these filters.')));
 }
 
 async function pageRanking(token) {
@@ -218,6 +239,18 @@ async function pageRanking(token) {
     rows.length
       ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Score', num: true }], body)
       : notice('info', h('p', null, 'No outing yet for these filters.')));
+}
+
+async function pageMap(token) {
+  setNav('map');
+  const rows = await api.getMapOutings();
+  if (token !== routeToken) return;
+  const mapView = buildExplorer(rows, api.getTraces);
+  show(
+    h('h1', null, 'Take-off map'),
+    h('p', { class: 'sub' }, 'Where pilots took off after the climb, and the ways up on foot. The warmer the colour, the more outings.'),
+    mapView.element);
+  requestAnimationFrame(() => mapView.start());
 }
 
 async function pageOuting(token, id) {
@@ -295,6 +328,7 @@ async function pageUser(token, id) {
         h('td', null, fmtDate(r.outing_date) === '–' ? fmtDate(r.created_at) : fmtDate(r.outing_date)),
         h('td', { class: 'wrap' }, r.status === 'rejected' ? (r.reject_reason || 'Not counted') : 'Uploaded track'),
         h('td', null, ''), h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
+        h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
         h('td', null, statusBadge(r), ' ', h('button', { class: 'link', onclick: async () => {
           if (!confirm('Delete this upload?')) return;
           try { await api.deleteOuting(r); pageUser(++routeToken, id).catch(fail); } catch (e) { fail(e); }
@@ -635,9 +669,11 @@ async function route() {
   }
   const path = (location.hash.replace(/^#\/?/, '').split('?')[0] || '').split('/');
   window.scrollTo(0, 0);
+  document.body.classList.toggle('wide', path[0] === 'map');
   try {
     if (path[0] === '') { loading(); await pageHome(token); }
     else if (path[0] === 'ranking') { loading(); await pageRanking(token); }
+    else if (path[0] === 'map') { loading(); await pageMap(token); }
     else if (path[0] === 'outing' && path[1]) { loading(); await pageOuting(token, path[1]); }
     else if (path[0] === 'user' && path[1]) { loading(); await pageUser(token, path[1]); }
     else if (path[0] === 'upload') await pageUpload();
