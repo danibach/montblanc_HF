@@ -36,7 +36,7 @@ browser ── analysis in Python (Pyodide) ── preview ──┐
                           fills in places (Overpass), confirms or rejects
 ```
 
-The outing is published at once on the browser's analysis, with a "Validation pending" badge. Within ten minutes the server job recomputes it from the original file (overwriting the numbers if they differ), removes the badge, or rejects the outing (it then disappears from the public lists and the owner sees the reason). The database only accepts plausible values from the browser (D+ 200–30 000 m, the same floor as the engine, score = D+ + D−). Duplicates are detected by file hash.
+The outing is published at once on the browser's analysis, with a "Validation pending" badge. Within ten minutes the server job recomputes it from the original file (overwriting the numbers if they differ), removes the badge, or rejects the outing (it then disappears from the public lists and the owner sees the reason). The database only accepts plausible values from the browser (D+ 200–30 000 m, the same floor as the engine, score = D+ + D−). Duplicates are detected by file hash, and the same flight sent from another file (a watch's FIT and its Strava export) is refused too: a pilot cannot fly twice at the same time, so a flight that overlaps one of their outings already counted for at least half of its time is the same flight (`src/mbhf/duplicates.py`, checked in the browser before sending and again by the server job).
 
 | part | role |
 |---|---|
