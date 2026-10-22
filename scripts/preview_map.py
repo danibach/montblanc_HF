@@ -2,6 +2,7 @@
 
     python3 scripts/preview_map.py           # made-up outings around Annecy and Chamonix
     python3 scripts/preview_map.py --real    # the live site's public outings, read-only
+    python3 scripts/preview_map.py --crowded # plus a made-up take-off with 120 outings
     then open http://127.0.0.1:8765/#/map
 
 A copy of site/ is served with a pretend Supabase on the same address, so the database needs nothing (no
@@ -47,14 +48,17 @@ SITES = [
     ("Plaine Joux", 45.9590, 6.7430, 1360, 3, [(-0.015, -0.010, 640, "Passy")]),
     ("Col des Frêtes", 45.8930, 6.4420, 1500, 2, [(-0.018, 0.006, 900, "Les Clefs")]),
 ]
+# --crowded adds a busy take-off, to see the map past 30 climbs (heat instead of lines, groups, pages of 20)
+CROWDED = ("Pointe de Beauregard", 45.9105, 6.4705, 1636, 120,
+           [(-0.014, -0.010, 1010, "Les Verrier"), (-0.012, 0.016, 1050, "La Clusaz"), (0.018, 0.004, 1100, "Le Grand-Bornand")])
 PILOTS = ["Alice", "Bruno", "Chloé", "Dani", "Sarah"]
 
 
-def made_up() -> tuple[list, dict]:
+def made_up(crowded: bool = False) -> tuple[list, dict]:
     """Outings (the columns of map_outings()) and their tracks, a few with a drive before the walk."""
     rng = random.Random(4)
     outings, tracks = [], {}
-    for name, lat, lon, alt, n, ways in SITES:
+    for name, lat, lon, alt, n, ways in SITES + ([CROWDED] if crowded else []):
         for k in range(n):
             dlat, dlon, alt0, place = ways[k % len(ways)]
             oid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{name}/{k}"))
@@ -138,9 +142,10 @@ def copy_site(dest: Path, port: int) -> Path:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--real", action="store_true", help="the live site's public outings (read-only) instead of made-up ones")
+    ap.add_argument("--crowded", action="store_true", help="add a made-up take-off with 120 outings from 3 start places")
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
-    outings, tracks = live() if args.real else made_up()
+    outings, tracks = live() if args.real else made_up(args.crowded)
     site = copy_site(Path(tempfile.mkdtemp(prefix="hf-preview-")), args.port)
 
     class Handler(http.server.SimpleHTTPRequestHandler):
