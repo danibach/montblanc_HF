@@ -36,7 +36,7 @@ browser ── analysis in Python (Pyodide) ── preview ──┐
                           fills in places (Overpass), confirms or rejects
 ```
 
-The outing is published at once on the browser's analysis, with a "Validation pending" badge. Within ten minutes the server job recomputes it from the original file (overwriting the numbers if they differ), removes the badge, or rejects the outing (it then disappears from the public lists and the owner sees the reason). The database only accepts plausible values from the browser (D+ 100–30 000 m, score = D+ + D−). Duplicates are detected by file hash.
+The outing is published at once on the browser's analysis, with a "Validation pending" badge. Within ten minutes the server job recomputes it from the original file (overwriting the numbers if they differ), removes the badge, or rejects the outing (it then disappears from the public lists and the owner sees the reason). The database only accepts plausible values from the browser (D+ 200–30 000 m, the same floor as the engine, score = D+ + D−). Duplicates are detected by file hash.
 
 | part | role |
 |---|---|
