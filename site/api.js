@@ -136,8 +136,16 @@ export async function listUserOutings(userId) {
 }
 
 const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_name', 'title', 'outing_date',
-  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb', 'takeoff_site_id', 'takeoff_site_status'];
+  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb', 'takeoff_site_id', 'takeoff_site_status', 'route_id'];
 const SITE_FIELDS = ['id', 'name', 'lat', 'lon', 'alt', 'source', 'wind_ok', 'hike_and_fly'];
+const ROUTE_FIELDS = ['id', 'site_id', 'name', 'line'];
+
+/** The routes of the map's outings (the climbs that follow the same way up); none before the routes table exists. */
+export async function getMapRoutes() {
+  const { data, error } = await sb.rpc('map_routes');
+  if (error) return []; // migration-2026-10-23-routes.sql not run yet: the outings are grouped by start place
+  return (data || []).map((a) => Object.fromEntries(ROUTE_FIELDS.map((k, i) => [k, a[i]])));
+}
 
 /** The take-offs of the register the map's outings are tied to; none before the register exists. */
 export async function getMapSites() {
