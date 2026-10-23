@@ -178,6 +178,37 @@ function setPoints(layer, pts) {
   else layer._latlngs = pts;
 }
 
+// Filters on the climb itself (brief, section 7): bands of D+, distance and time. The stored climb's own numbers
+// when there is one, otherwise the engine's D+ and distance on foot; an outing with no known climb time is left out
+// by the time filter.
+const CLIMB_FILTERS = {
+  dplus: {
+    label: 'Climb D+',
+    bands: [['', 'Any D+'], ['0-500', 'Under 500 m'], ['500-1000', '500–1,000 m'], ['1000-1500', '1,000–1,500 m'], ['1500-', 'Over 1,500 m']],
+    value: (o) => climbDplus(o, storedClimb(o)),
+  },
+  km: {
+    label: 'Climb distance',
+    bands: [['', 'Any distance'], ['0-5', 'Under 5 km'], ['5-10', '5–10 km'], ['10-', 'Over 10 km']],
+    value: (o) => (storedClimb(o) ? storedClimb(o).km : o.walk_km),
+  },
+  time: {
+    label: 'Climb time',
+    bands: [['', 'Any time'], ['0-5400', 'Under 1 h 30'], ['5400-10800', '1 h 30–3 h'], ['10800-', 'Over 3 h']],
+    value: (o) => (storedClimb(o) ? storedClimb(o).duration_s : null),
+  },
+};
+
+function inBand(value, band) {
+  if (!band) return true;
+  if (value == null) return false;
+  const [lo, hi] = band.split('-');
+  return value >= Number(lo) && (hi === '' || value < Number(hi));
+}
+
+// for search: no accents, no case ("Frêtes" is found by "fretes")
+const fold = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 function season(o) {
   const month = Number(String(o.outing_date || '').slice(5, 7));
   return Object.keys(SEASONS).find((k) => SEASONS[k].months.includes(month)) || '';
@@ -198,10 +229,21 @@ export function buildExplorer(rows, loadTraces) {
   // current one has no outing yet.
   const now = season({ outing_date: new Date().toISOString() });
   if (rows.some((o) => season(o) === now)) seasonPick.value = now;
+  const climbPicks = Object.fromEntries(Object.entries(CLIMB_FILTERS).map(([k, f]) => [k,
+    h('select', { id: `m-${k}`, 'aria-label': f.label }, f.bands.map(([v, text]) => h('option', { value: v }, text)))]));
+  const climbBox = h('details', { class: 'climb-filters' },
+    h('summary', null, 'Climb filters'),
+    h('div', { class: 'filters' }, Object.entries(CLIMB_FILTERS).map(([k, f]) =>
+      h('div', { class: 'field' }, h('label', { for: `m-${k}` }, f.label), climbPicks[k]))));
+  // search a take-off, or a start place (a village, a car park): the results open under the field
+  const searchBox = h('input', { type: 'search', id: 'm-search', placeholder: 'Take-off, summit, village…', autocomplete: 'off',
+    'aria-controls': 'm-results', 'aria-expanded': 'false' });
+  const results = h('ul', { class: 'search-results', id: 'm-results', role: 'listbox', hidden: true });
   const bar = h('div', { class: 'filters' },
+    h('div', { class: 'field search' }, h('label', { for: 'm-search' }, 'Search'), searchBox, results),
     h('div', { class: 'field' }, h('label', { for: 'm-season' }, 'Season'), seasonPick),
     h('div', { class: 'field' }, h('label', { for: 'm-year' }, 'Year'), yearPick));
-  const element = h('div', null, bar, h('div', { class: 'explorer' }, mapBox, side));
+  const element = h('div', null, bar, climbBox, h('div', { class: 'explorer' }, mapBox, side));
   const L = window.L;
   if (!L || !L.heatLayer) {
     mapBox.append(h('p', { class: 'hint pad' }, 'The map could not be loaded.'));
@@ -283,11 +325,73 @@ export function buildExplorer(rows, loadTraces) {
   function applyFilters() {
     const s = seasonPick.value;
     const y = yearPick.value;
-    shown = rows.filter((o) => (!s || season(o) === s) && (!y || String(o.outing_date || '').startsWith(y)));
+    shown = rows.filter((o) => (!s || season(o) === s) && (!y || String(o.outing_date || '').startsWith(y))
+      && Object.entries(CLIMB_FILTERS).every(([k, f]) => inBand(f.value(o), climbPicks[k].value)));
     spots = groupTakeoffs(shown);
     setPoints(heatSpots, spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
     setPoints(heatRoutes, routePoints(spots));
+    const active = Object.values(climbPicks).filter((p) => p.value).length;
+    climbBox.querySelector('summary').textContent = active ? `Climb filters (${active})` : 'Climb filters';
+    if (searchBox.value) showResults(); // the results follow the filters
     overview();
+  }
+
+  // ---- search: the take-offs whose name matches, and the start places (villages, car parks) that match, among
+  // the outings the filters keep
+  function matches(query) {
+    const q = fold(query.trim());
+    if (q.length < 2) return [];
+    const rank = (text) => (fold(text).startsWith(q) ? 0 : fold(text).split(/[\s'’-]+/).some((w) => w.startsWith(q)) ? 1 : 2);
+    const found = [];
+    for (const sp of spots) {
+      const hit = [sp.name, ...sp.outings.map((o) => o.title)].find((t) => fold(t).includes(q));
+      if (hit) found.push({ kind: 'spot', text: sp.name, spot: sp, rank: rank(hit), n: sp.outings.length });
+    }
+    const places = new Map();
+    for (const sp of spots) {
+      for (const o of sp.outings) {
+        if (o.start_place && fold(o.start_place).includes(q)) {
+          const p = places.get(o.start_place) || { kind: 'place', text: o.start_place, spots: new Set(), n: 0, rank: rank(o.start_place) };
+          p.spots.add(sp);
+          p.n += 1;
+          places.set(o.start_place, p);
+        }
+      }
+    }
+    return [...found, ...places.values()].sort((a, b) => a.rank - b.rank || b.n - a.n).slice(0, 8);
+  }
+
+  function choose(m) {
+    hideResults();
+    if (m.kind === 'spot') {
+      map.setView([m.spot.lat, m.spot.lon], Math.max(map.getZoom(), 13));
+      openSpot(m.spot);
+    } else {
+      overview();
+      map.fitBounds(L.latLngBounds([...m.spots].map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 13 });
+    }
+  }
+
+  function showResults() {
+    const found = matches(searchBox.value);
+    results.replaceChildren(...(found.length ? found.map((m) => {
+      const li = h('li', { role: 'option', tabindex: '-1' },
+        h('b', null, m.text),
+        h('span', { class: 'hint' }, m.kind === 'spot'
+          // the altitude tells apart two take-offs of the same name
+          ? ` · take-off${m.spot.alt != null ? ` at ${fmtInt(m.spot.alt)} m` : ''} · ${plural(m.n, 'outing')}`
+          : ` · start · ${plural(m.spots.size, 'take-off')}, ${plural(m.n, 'outing')}`));
+      li.addEventListener('mousedown', (ev) => { ev.preventDefault(); choose(m); }); // before the field loses focus
+      li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') choose(m); });
+      return li;
+    }) : [h('li', { class: 'hint' }, searchBox.value.trim().length < 2 ? 'Type at least 2 letters' : 'Nothing found with these filters')]));
+    results.hidden = false;
+    searchBox.setAttribute('aria-expanded', 'true');
+  }
+
+  function hideResults() {
+    results.hidden = true;
+    searchBox.setAttribute('aria-expanded', 'false');
   }
 
   async function openSpot(sp) {
@@ -451,6 +555,21 @@ export function buildExplorer(rows, loadTraces) {
     pickHeat();
     seasonPick.addEventListener('change', applyFilters);
     yearPick.addEventListener('change', applyFilters);
+    for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);
+    searchBox.addEventListener('input', () => (searchBox.value ? showResults() : hideResults()));
+    searchBox.addEventListener('focus', () => { if (searchBox.value) showResults(); });
+    // close the results when the focus leaves both the field and the list (arrow down moves it into the list)
+    const closeIfAway = () => setTimeout(() => {
+      if (document.activeElement !== searchBox && !results.contains(document.activeElement)) hideResults();
+    }, 0);
+    searchBox.addEventListener('blur', closeIfAway);
+    results.addEventListener('focusout', closeIfAway);
+    searchBox.addEventListener('keydown', (ev) => {
+      const first = results.querySelector('li[role=option]');
+      if (ev.key === 'Escape') hideResults();
+      else if (ev.key === 'Enter' && first) { ev.preventDefault(); first.dispatchEvent(new MouseEvent('mousedown')); }
+      else if (ev.key === 'ArrowDown' && first) { ev.preventDefault(); first.focus(); }
+    });
     mapBox._map = map;
   };
   return { element, start };
