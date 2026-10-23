@@ -136,7 +136,15 @@ export async function listUserOutings(userId) {
 }
 
 const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_name', 'title', 'outing_date',
-  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb'];
+  'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb', 'takeoff_site_id', 'takeoff_site_status'];
+const SITE_FIELDS = ['id', 'name', 'lat', 'lon', 'alt', 'source', 'wind_ok', 'hike_and_fly'];
+
+/** The take-offs of the register the map's outings are tied to; none before the register exists. */
+export async function getMapSites() {
+  const { data, error } = await sb.rpc('map_takeoff_sites');
+  if (error) return []; // migration-2026-10-23-takeoff-sites.sql not run yet: the map groups the outings itself
+  return (data || []).map((a) => Object.fromEntries(SITE_FIELDS.map((k, i) => [k, a[i]])));
+}
 
 /** The verified public outings for the take-off map (no track): the order of MAP_FIELDS, as in map_outings(). */
 export async function getMapOutings() {

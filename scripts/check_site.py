@@ -102,6 +102,8 @@ def supabase(route, request):
                           r["dplus_m"], r["walk_km"], r["start_place"], r["profiles"]["display_name"], r["summit_alt"],
                           r["user_id"], None]  # no stored climb: the page reads the track
                          for r in ROWS if r["verified"] and r["takeoff_lat"] is not None])
+    if u.path == "/rest/v1/rpc/map_takeoff_sites":
+        return j(route, [])  # no take-off register: the map groups the outings itself
     if u.path == "/rest/v1/outings" and request.method == "GET" and q.get("id", [""])[0].startswith("in."):
         ids = q["id"][0][4:-1].replace('"', "").split(",")
         return j(route, [{"id": r["id"], "trace": r["trace"], "flights": r["flights"]} for r in ROWS if r["id"] in ids])

@@ -165,6 +165,27 @@ def process_pending(api: Api) -> None:
             continue
         print(f"  published: score {outing['score']} (D+ {outing['dplus_m']}, D- {outing['dminus_m']})")
         save_climb(api, row["id"], values["trace"], outing["flights"])
+        tie_takeoff(api, row["id"], values)
+
+
+def tie_takeoff(api: Api, outing_id: str, values: dict) -> None:
+    """Tie the outing to its take-off in the register (scripts/sync_sites.py), with the take-offs already known
+    around it. Apart from the rest: an error here (for example the register is not there yet,
+    migration-2026-10-23-takeoff-sites.sql not run) must never reject an outing."""
+    try:
+        from sync_sites import Register, tie_outing
+        from mbhf.sites import SiteIndex
+
+        lat, lon = values.get("takeoff_lat"), values.get("takeoff_lon")
+        if lat is None or lon is None:
+            return
+        register = Register(api)
+        near = register.select("takeoff_sites", f"select=*&lat=gte.{lat - 0.01}&lat=lte.{lat + 0.01}"
+                                                f"&lon=gte.{lon - 0.015}&lon=lte.{lon + 0.015}")
+        status, site = tie_outing({**values, "id": outing_id}, SiteIndex(near), register)
+        print(f"  take-off: {site['name']} ({status})")
+    except Exception as exc:
+        print(f"  take-off not tied: {exc}")
 
 
 def save_climb(api: Api, outing_id: str, trace, flights) -> None:

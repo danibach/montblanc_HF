@@ -62,12 +62,27 @@ function metres(lat1, lon1, lat2, lon2) {
 
 const pilotOf = (o) => o.user_id || o.pilot || o.id;
 
-/** Outings whose take-offs are within SAME_SPOT_M of each other form one spot: [{lat, lon, alt, name, outings, pilots}]. */
-export function groupTakeoffs(rows) {
+/**
+ * The spots of the map: [{lat, lon, alt, name, outings, pilots, site}]. An outing tied to a take-off of the register
+ * (FFVL, OpenStreetMap or provisional: ``sites`` from map_takeoff_sites()) is shown at that take-off, under its name;
+ * the others (not tied yet) are grouped when their take-offs are within SAME_SPOT_M of each other.
+ */
+export function groupTakeoffs(rows, sites = []) {
+  const byId = new Map(sites.map((s) => [s.id, s]));
+  const registered = new Map();
+  const loose = [];
+  for (const o of rows) {
+    const site = byId.get(o.takeoff_site_id);
+    if (!site) { loose.push(o); continue; }
+    if (!registered.has(site.id)) registered.set(site.id, { lat: site.lat, lon: site.lon, alt: site.alt, name: site.name, site, outings: [] });
+    registered.get(site.id).outings.push(o);
+  }
+  for (const sp of registered.values()) sp.pilots = new Set(sp.outings.map(pilotOf)).size;
+
   const spots = [];
   const grid = new Map(); // cells of about 1 km, so each outing is compared with nearby spots only
   const cell = (lat, lon) => `${Math.floor(lat * 100)}:${Math.floor(lon * 100)}`;
-  for (const o of rows) {
+  for (const o of loose) {
     const [ci, cj] = cell(o.takeoff_lat, o.takeoff_lon).split(':').map(Number);
     let best = null;
     let bestD = SAME_SPOT_M;
@@ -99,7 +114,26 @@ export function groupTakeoffs(rows) {
     sp.name = [...names.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0])[0]
       || `Take-off${sp.alt != null ? ` · ${fmtInt(sp.alt)} m` : ''}`;
   }
-  return spots;
+  return [...registered.values(), ...spots];
+}
+
+const SOURCES = {
+  ffvl: 'Official FFVL take-off',
+  osm: 'Take-off from OpenStreetMap',
+  provisional: 'Take-off found from the outings',
+};
+
+/** Where the take-off comes from, its good winds, the FFVL's hike & fly notes, and the ties left to confirm. */
+function siteFacts(sp) {
+  const site = sp.site;
+  if (!site) return null;
+  const toConfirm = sp.outings.filter((o) => o.takeoff_site_status === 'to_confirm').length;
+  return h('div', { class: 'site-facts' },
+    h('span', { class: `badge ${site.source}` }, SOURCES[site.source] || 'Take-off'),
+    // the FFVL writes French directions (O for ouest): shown in English like the site
+    site.wind_ok ? h('span', { class: 'hint' }, ` · good winds ${site.wind_ok.split(/[;,\s]+/).filter(Boolean).map((w) => w.toUpperCase().replace(/O/g, 'W')).join(', ')}`) : null,
+    toConfirm ? h('p', { class: 'hint' }, `${plural(toConfirm, 'outing')} took off 100 to 200 m away: tied to this take-off, to be confirmed.`) : null,
+    site.hike_and_fly ? h('details', null, h('summary', null, 'Hike & fly notes (FFVL)'), h('p', { class: 'hint' }, site.hike_and_fly)) : null);
 }
 
 /**
@@ -206,8 +240,11 @@ function inBand(value, band) {
   return value >= Number(lo) && (hi === '' || value < Number(hi));
 }
 
-// for search: no accents, no case ("Frêtes" is found by "fretes")
+// for search: no accents, no case ("Frêtes" is found by "fretes"); and without spaces or hyphens, so that
+// "plan praz" finds Planpraz
 const fold = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const squash = (text) => fold(text).replace(/[\s'’-]+/g, '');
+const hasText = (text, query) => fold(text).includes(fold(query)) || squash(text).includes(squash(query));
 
 function season(o) {
   const month = Number(String(o.outing_date || '').slice(5, 7));
@@ -216,9 +253,10 @@ function season(o) {
 
 /**
  * The page's filters, map and side panel. ``rows`` are the outings of getMapOutings(); ``loadTraces(ids)`` reads
- * full tracks. Returns {element, start}: start() is called once the element is in the page.
+ * full tracks; ``sites`` are the take-offs of the register (getMapSites()). Returns {element, start}: start() is
+ * called once the element is in the page.
  */
-export function buildExplorer(rows, loadTraces) {
+export function buildExplorer(rows, loadTraces, sites = []) {
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': 'Map of the take-offs' });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
@@ -327,7 +365,7 @@ export function buildExplorer(rows, loadTraces) {
     const y = yearPick.value;
     shown = rows.filter((o) => (!s || season(o) === s) && (!y || String(o.outing_date || '').startsWith(y))
       && Object.entries(CLIMB_FILTERS).every(([k, f]) => inBand(f.value(o), climbPicks[k].value)));
-    spots = groupTakeoffs(shown);
+    spots = groupTakeoffs(shown, sites);
     setPoints(heatSpots, spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
     setPoints(heatRoutes, routePoints(spots));
     const active = Object.values(climbPicks).filter((p) => p.value).length;
@@ -344,13 +382,13 @@ export function buildExplorer(rows, loadTraces) {
     const rank = (text) => (fold(text).startsWith(q) ? 0 : fold(text).split(/[\s'’-]+/).some((w) => w.startsWith(q)) ? 1 : 2);
     const found = [];
     for (const sp of spots) {
-      const hit = [sp.name, ...sp.outings.map((o) => o.title)].find((t) => fold(t).includes(q));
+      const hit = [sp.name, ...sp.outings.map((o) => o.title)].find((t) => hasText(t, q));
       if (hit) found.push({ kind: 'spot', text: sp.name, spot: sp, rank: rank(hit), n: sp.outings.length });
     }
     const places = new Map();
     for (const sp of spots) {
       for (const o of sp.outings) {
-        if (o.start_place && fold(o.start_place).includes(q)) {
+        if (o.start_place && hasText(o.start_place, q)) {
           const p = places.get(o.start_place) || { kind: 'place', text: o.start_place, spots: new Set(), n: 0, rank: rank(o.start_place) };
           p.spots.add(sp);
           p.n += 1;
@@ -408,7 +446,7 @@ export function buildExplorer(rows, loadTraces) {
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, `${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
-      status, list);
+      siteFacts(sp), status, list);
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
@@ -532,6 +570,8 @@ export function buildExplorer(rows, loadTraces) {
       maxZoom: CONFIG.TILES_MAX_ZOOM,
       attribution: CONFIG.TILES_ATTRIBUTION,
     }).addTo(map);
+    // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL)
+    if (sites.length) map.attributionControl.addAttribution('Take-offs: FFVL (Licence Ouverte), OpenStreetMap (ODbL)');
     heatSpots = L.heatLayer([], HEAT_SPOTS);
     heatRoutes = L.heatLayer([], HEAT_ROUTES);
     heat = L.layerGroup().addTo(map);
