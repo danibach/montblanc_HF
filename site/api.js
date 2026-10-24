@@ -96,9 +96,10 @@ function yearRange(q, year) {
   return year ? q.gte('outing_date', `${year}-01-01`).lte('outing_date', `${year}-12-31`) : q;
 }
 
-export async function listOutings({ year, country, sort = 'date', dir = 'desc', offset = 0, limit = CONFIG.PAGE_SIZE }) {
+export async function listOutings({ userId, year, country, sort = 'date', dir = 'desc', offset = 0, limit = CONFIG.PAGE_SIZE }) {
   let q = sb.from('outings').select(LIST_COLUMNS, { count: 'exact' }).eq('status', 'published').eq('hidden', false);
   q = yearRange(q, year);
+  if (userId) q = q.eq('user_id', userId);
   if (country) q = q.eq('country_code', country);
   const column = SORT_COLUMNS[sort] || SORT_COLUMNS.date;
   // Empty values go last in both directions; the date and the id then keep the pages stable.
