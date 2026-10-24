@@ -21,7 +21,7 @@ Rides (car, bike, lift, skis) are detected and left out. A descent is a flight o
 
 ## Pages
 
-List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · take-off map (heat map of the take-offs zoomed out and of the ways up on foot zoomed in, weighted by pilots; take-off markers; filters by season and year, opening on the current season, and by D+, distance and time of the climb; search for a take-off, a summit or a start place; a click shows the climbs on foot that reached the take-off (past 30, only their heat map, and one outing's climb on hover) and its outings, grouped by start place, sorted, 20 at a time, never the flights; `map_outings()` in the database, `site/explorer.js`; the climbs are stored by the server job, `src/mbhf/climb.py`) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account) · sign in.
+List of outings (filter by year and country) · outing page (map, profile, stats, GPX download) · user page · user ranking (sum of scores, by year or all time) · take-off map (heat map of the take-offs zoomed out and of the ways up on foot zoomed in, weighted by pilots; take-off markers; filters by season and year, opening on the current season, and by D+, distance and time of the climb; outings shown at the take-off of the register (`takeoff_sites`: FFVL open data, Licence Ouverte 2.0, and OpenStreetMap, ODbL, refreshed weekly by `scripts/sync_sites.py`; under 100 m tied at once, 100–200 m to confirm, farther a provisional take-off), with its source, good winds and FFVL hike & fly notes; search for a take-off, a summit or a start place; a click shows the climbs on foot that reached the take-off (past 30, only their heat map, and one outing's climb on hover) and its outings, grouped by start place, sorted, 20 at a time, never the flights; `map_outings()` in the database, `site/explorer.js`; the climbs are stored by the server job, `src/mbhf/climb.py`) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account) · sign in.
 
 ## How it works
 
@@ -54,7 +54,8 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 1. **Database**: Supabase > SQL Editor > run `supabase/schema-v2.sql`.
    On a database created before 2026-10-21, also run `supabase/migration-2026-10-21-tcx.sql` (accepts TCX files)
    and `supabase/migration-2026-10-21-map-outings.sql` (take-off map), then run the "Process new outings" action
-   once with "climbs" ticked (climbs of the outings already published).
+   once with "climbs" ticked (climbs of the outings already published). Then `supabase/migration-2026-10-23-takeoff-sites.sql`
+   and the "Take-off register" action once (fills the register, ties the published outings).
 2. **Secrets** (GitHub > Settings > Secrets and variables > Actions): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service role key, never in the site).
 3. **Supabase Auth**:
    - URL configuration: add `https://danibach.github.io/montblanc_HF/**` as redirect URL.
@@ -75,6 +76,7 @@ python scripts/build_site.py --out _site    # site (downloads pinned Pyodide and
 pip install playwright && python scripts/check_site.py _site --shots shots   # end-to-end check with mocks
 python scripts/preview_map.py --real        # the take-off map with the live public outings (read-only), http://127.0.0.1:8765/#/map
 python scripts/preview_map.py --crowded     # the same with made-up outings, one take-off with 120 of them
+python scripts/preview_map.py --real --sites   # live outings tied to the take-off register, in memory (--no-osm when Overpass is down)
 ```
 
 ## Known limits

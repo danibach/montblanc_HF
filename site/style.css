@@ -110,6 +110,14 @@ body.wide main { max-width: none; }
 .climb-filters { margin: -.4rem 0 .2rem; }
 .climb-filters summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
 .climb-filters .filters { margin: .4rem 0 .2rem; }
+/* where a take-off comes from (register), its winds and the FFVL's hike & fly notes */
+.site-facts { margin: .3rem 0 .4rem; font-size: .88rem; }
+.site-facts p { margin: .3rem 0; }
+.site-facts details summary { cursor: pointer; color: var(--accent); font-size: .85rem; margin-top: .3rem; }
+.badge { display: inline-block; padding: .05rem .5rem; border-radius: 99px; font-size: .75rem; border: 1px solid var(--line); background: var(--card-2); }
+.badge.ffvl { border-color: #2f5a3a; color: var(--ok); }
+.badge.osm { border-color: #2c5568; color: var(--info); }
+.badge.provisional { border-color: #6b5a24; color: var(--warn); }
 /* the outings of a take-off, grouped by start place */
 .sort-row { margin: .4rem 0; }
 .sort-row label { margin: 0; }

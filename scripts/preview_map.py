@@ -3,6 +3,7 @@
     python3 scripts/preview_map.py           # made-up outings around Annecy and Chamonix
     python3 scripts/preview_map.py --real    # the live site's public outings, read-only
     python3 scripts/preview_map.py --crowded # plus a made-up take-off with 120 outings
+    python3 scripts/preview_map.py --real --sites  # and tied to the take-off register (FFVL, OSM), in memory
     then open http://127.0.0.1:8765/#/map
 
 A copy of site/ is served with a pretend Supabase on the same address, so the database needs nothing (no
@@ -109,7 +110,7 @@ def live_get(path: str):
 def live() -> tuple[list, dict]:
     """The live site's verified public outings, read-only, with the climbs the server job will store."""
     cols = ("id,user_id,takeoff_lat,takeoff_lon,takeoff_alt,takeoff_name,title,outing_date,dplus_m,walk_km,"
-            "start_place,summit_alt,profiles(display_name)")
+            "start_place,summit_alt,summit_name,country_code,profiles(display_name)")
     rows = live_get(f"outings?select={cols}&status=eq.published&verified=is.true&hidden=is.false"
                     "&takeoff_lat=not.is.null&order=outing_date.desc&limit=5000")
     tracks = {}
@@ -124,7 +125,36 @@ def live() -> tuple[list, dict]:
                         r["outing_date"], r["dplus_m"], r["walk_km"], r["start_place"],
                         (r.get("profiles") or {}).get("display_name"), r["summit_alt"], r["user_id"],
                         climb_of(t.get("trace"), t.get("flights")) or {}])
+    live.rows = rows  # for --sites
     return outings, tracks
+
+
+def register_in_memory(rows: list[dict], outings: list, with_osm: bool = True) -> list:
+    """--sites: the take-off register as scripts/sync_sites.py will fill it (FFVL and OpenStreetMap, read only), and
+    every outing tied by the same rule, in memory only. Adds the take-off id and tie status to ``outings``."""
+    from sync_sites import Register, ffvl_file, osm_around, tie_outing
+    from mbhf.sites import SiteIndex, ffvl_takeoffs, without_doubles
+
+    register = Register(None, dry_run=True)
+    ties = {}
+    register.tie = lambda outing_id, site_id, status, metres: ties.__setitem__(outing_id, (site_id, status))
+    ffvl = ffvl_takeoffs(ffvl_file())
+    osm = osm_around([(r["takeoff_lat"], r["takeoff_lon"]) for r in rows]) if with_osm else None
+    print(f"FFVL take-offs: {len(ffvl)}; OpenStreetMap: {'unavailable' if osm is None else len(osm)}", flush=True)
+    index = SiteIndex(register.upsert(ffvl + without_doubles(ffvl, osm or [])))
+    used = {}
+    for r in sorted(rows, key=lambda r: r["outing_date"] or ""):
+        status, site = tie_outing(r, index, register)
+        used[site["id"]] = site
+    counts = {}
+    for o in outings:
+        site_id, status = ties[o[0]]
+        o += [site_id, status]
+        key = f"{used[site_id]['source']} {status}"
+        counts[key] = counts.get(key, 0) + 1
+    print("outings tied: " + ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())), flush=True)
+    return [[s["id"], s["name"], s["lat"], s["lon"], s["alt"], s["source"], s.get("wind_ok"), s.get("hike_and_fly")]
+            for s in used.values()]
 
 
 def copy_site(dest: Path, port: int) -> Path:
@@ -143,9 +173,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--real", action="store_true", help="the live site's public outings (read-only) instead of made-up ones")
     ap.add_argument("--crowded", action="store_true", help="add a made-up take-off with 120 outings from 3 start places")
+    ap.add_argument("--sites", action="store_true", help="with --real: tie the outings to the take-off register (FFVL, OSM), in memory")
+    ap.add_argument("--no-osm", action="store_true", help="with --sites: FFVL only (when Overpass is down)")
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
     outings, tracks = live() if args.real else made_up(args.crowded)
+    sites = register_in_memory(live.rows, outings, not args.no_osm) if args.real and args.sites else []
     site = copy_site(Path(tempfile.mkdtemp(prefix="hf-preview-")), args.port)
 
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -165,7 +198,9 @@ def main() -> int:
 
         def do_POST(self):
             self.rfile.read(int(self.headers.get("content-length") or 0))
-            self.send_json(outings if self.path.startswith("/rest/v1/rpc/map_outings") else {})
+            if self.path.startswith("/rest/v1/rpc/map_outings"):
+                return self.send_json(outings)
+            self.send_json(sites if self.path.startswith("/rest/v1/rpc/map_takeoff_sites") else {})
 
         def do_GET(self):
             u = urllib.parse.urlparse(self.path)
