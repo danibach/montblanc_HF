@@ -27,9 +27,9 @@ const HEAT_SPOTS = { radius: 20, blur: 15, maxZoom: 8, max: 4, minOpacity: 0.45,
 // Heat of the ways up: each pilot counts once per take-off, spread along their climbs; 2 pilots on the same
 // path make it hot.
 const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35, gradient: GRADIENT };
-const CLIMB = { color: '#d7192d', weight: 3, opacity: 0.9 };
-const CLIMB_HOT = { color: '#f0693d', weight: 5, opacity: 1 };
-const CLIMB_BACK = { color: '#d7192d', weight: 2, opacity: 0.25 };
+const CLIMB = { color: '#1f4fff', weight: 3, opacity: 0.9 };
+const CLIMB_HOT = { color: '#e0161b', weight: 5, opacity: 1 };
+const CLIMB_BACK = { color: '#1f4fff', weight: 2, opacity: 0.25 };
 const SEASONS = {
   summer: { label: 'Summer (May–Oct)', months: [5, 6, 7, 8, 9, 10] },
   winter: { label: 'Winter (Nov–Apr)', months: [11, 12, 1, 2, 3, 4] },
