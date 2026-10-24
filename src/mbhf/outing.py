@@ -64,6 +64,42 @@ class OutingConfig:
     # no further than this and no higher or lower: a pause, not a move
     gap_pause_m: float = 150.0
     gap_pause_dz_m: float = 30.0
+    # a gap not walked that goes down: a flight with the recorder off, or a ride, a lift (flight_gap_verdict).
+    # Before any clue, one in five is taken to be a flight; a straight-line speed outside this range is
+    # unlike a wing (this many times less likely)
+    gapfly_prior: float = 0.2
+    gapfly_speed_kmh: tuple = (5.0, 80.0)
+    gapfly_speed_lr: float = 0.05
+    # losing height faster than this on average (m/s) is more like a lift down or skis than a wing (a glide sinks
+    # 1-2 m/s, less with thermals; a cable car 5-10): this many times less likely a flight
+    gapfly_sink_ms: float = 4.0
+    gapfly_sink_lr: float = 0.1
+    # it starts within this of the highest point reached on foot so far (H&F: up on foot, off from the top)
+    gapfly_top_m: float = 30.0
+    gapfly_top_lr: float = 3.0
+    # a fix at either end this far above the ground (terrain check) is in the air: all but proof
+    gapfly_air_m: float = 150.0
+    gapfly_air_lr: float = 1000.0
+    # by ground: walk from the take-off to the nearest road or lift station (access.py), ride the straight line
+    # stretched by gapfly_ride_factor at gapfly_ride_kmh, walk from the nearest one to the other end; the share
+    # of people that fast (as for walkers) says how likely a ride is, a flight fitting it gapfly_ground_like
+    gapfly_ride_kmh: float = 50.0
+    gapfly_ride_factor: float = 1.3
+    gapfly_ground_like: float = 0.3
+    # an average skier, along the ground of the straight line (terrain check) stretched by gap_path_factor:
+    # down a slope of at least gapfly_ski_slope at gapfly_ski_kmh across, no faster than gapfly_ski_down_m_h
+    # down; gentler or flat, pushing on the poles at gapfly_ski_flat_kmh; up, skinning at gap_walk_kmh and
+    # gapfly_ski_up_m_h. Paces spread as the walkers' (gap_pace_sigma)
+    gapfly_ski_slope: float = 0.08
+    gapfly_ski_kmh: float = 35.0
+    gapfly_ski_down_m_h: float = 4000.0
+    gapfly_ski_flat_kmh: float = 8.0
+    gapfly_ski_up_m_h: float = 500.0
+    # less snow than this (metres) at the lower end that day: it could not be skied down to there; believed only
+    # below gapfly_snow_trust_m (the snow model's cells are 10 km wide and blind to glaciers)
+    gapfly_snow_m: float = 0.05
+    gapfly_snow_trust_m: float = 2500.0
+    gapfly_max_gaps: int = 2  # gaps looked up (OpenStreetMap, ground, snow) per track
     # a ride at least this long ends the climb on foot that led to it (shorter: a misread step, ignored)
     ride_break_m: float = 500.0
     max_trace_points: int = 1200
@@ -219,8 +255,129 @@ def gap_verdict(pts: list[Point], salt: list[Optional[float]], labels: list[int]
             "need_min": need_h * 60.0, "able": able, "vehicle_near": near}
 
 
-def _gap_note(pts: list[Point], i: int, v: dict) -> str:
-    """The warning that says what was decided about a recording gap, and why."""
+def flight_gap_candidates(track: Track, seg: SegmentationResult, cfg: Optional[OutingConfig] = None) -> list[int]:
+    """The recording gaps (index of the fix after each) that may be a flight: not walked, going down."""
+    cfg = cfg or OutingConfig()
+    pts = track.points
+    salt = smooth_altitudes(pts, cfg.smooth_s)
+    out = []
+    for i in range(1, len(pts)):
+        if ((pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and seg.labels[i - 1] == WALK
+                and seg.labels[i] == WALK and pts[i - 1].alt is not None and pts[i].alt is not None
+                and pts[i - 1].alt - pts[i].alt >= cfg.min_flight_drop_m
+                and not gap_verdict(pts, salt, seg.labels, i, cfg)["on_foot"]):
+            out.append(i)
+    return out[: cfg.gapfly_max_gaps]
+
+
+def _ski_minutes(ground: list[float], d_km: float, cfg: OutingConfig) -> float:
+    """Minutes an average skier needs along these ground altitudes, evenly spread over ``d_km``."""
+    step_km = d_km * cfg.gap_path_factor / max(len(ground) - 1, 1)
+    hours = 0.0
+    for z0, z1 in zip(ground, ground[1:]):
+        dz = z1 - z0
+        if dz <= -cfg.gapfly_ski_slope * step_km * 1000.0:
+            hours += max(step_km / cfg.gapfly_ski_kmh, -dz / cfg.gapfly_ski_down_m_h)
+        elif dz <= 0:
+            hours += step_km / cfg.gapfly_ski_flat_kmh
+        else:
+            hours += step_km / cfg.gap_walk_kmh + dz / cfg.gapfly_ski_up_m_h
+    return hours * 60.0
+
+
+def _share_that_fast(need_min: float, minutes: float, cfg: OutingConfig) -> float:
+    """Share of people doing in ``minutes`` what takes an average one ``need_min`` (log-normal paces)."""
+    pace = max(need_min / max(minutes, 1e-6), 1e-6)
+    return 0.5 * math.erfc(math.log(pace) / (cfg.gap_pace_sigma * math.sqrt(2.0)))
+
+
+def flight_gap_verdict(pts: list[Point], salt: list[Optional[float]], labels: list[int], i: int,
+                       ground: Optional[dict] = None, cfg: Optional[OutingConfig] = None,
+                       access: Optional[dict] = None, profile: Optional[list] = None,
+                       snow_m: Optional[float] = None) -> dict:
+    """A recording gap not walked (``gap_verdict``) between fixes ``i - 1`` and ``i``: a flight with the
+    recorder off, or a ride, a lift? The same way, clues weighed into the probability of a flight:
+
+    * it must go down by at least ``min_flight_drop_m``, or it is no flight;
+    * a ride recorded just before or after: the same ride going on (``gap_context_lr``, the other way);
+    * the straight-line speed, from the walker's 5 km/h to a fast wing's 80 (outside: ``gapfly_speed_lr``);
+    * the height lost per second: faster than ``gapfly_sink_ms``, more like a lift down or skis;
+    * it starts at the highest point reached on foot so far (``gapfly_top_lr``): up on foot, off from the top;
+    * a fix at either end high above the ground (``ground``, from the terrain check): in the air, all but proof;
+    * could a ride do it in the time (``access``: how far the nearest road or lift station is from each end,
+      from OpenStreetMap)? Walk to it, ride, walk from it: the time this takes and the share of people that
+      fast, as for walkers; the rarer, the likelier a flight;
+    * could it be skied in the time? An average skier along the ground of the straight line (``profile``,
+      from the terrain check; without it, the two ends): a valley to cross means climbing back up, a long flat
+      means pushing on the poles; the share of skiers that fast. No snow at the lower end that day
+      (``snow_m``): not skied down to there.
+      The flight wins only when neither a ride nor skis fit (a road unknown: skis can only weigh against it).
+      Without a fix in the air or this, a lift down or a road cannot be told from a glide by the two ends
+      only: the flight stays below even odds, a doubt.
+
+    The drop counted is the altitude before the gap minus the altitude after it: when the recorder came back
+    on in the air, the true landing was lower, so it is never more than was flown.
+    Returns ``flight``, ``p_flight``, ``doubt``, ``drop_m``, ``speed_kmh``, ``sink_ms``, ``from_top``, ``air_m`` (the
+    greatest height above the ground at the two ends, None if unknown), ``vehicle_near``, ``access_m`` (no road
+    nor station closer to the take-off), ``ride_min`` and ``ride_able`` (minutes by road or lift at best, share
+    of people that fast; None if unknown), ``ski_min`` and ``ski_able`` (the same on skis) and ``no_snow``."""
+    cfg = cfg or OutingConfig()
+    ground = ground or {}
+    p0, p1 = pts[i - 1], pts[i]
+    hours = max((p1.t - p0.t).total_seconds() / 3600.0, 1e-6)
+    a0 = p0.alt if p0.alt is not None else salt[i - 1]
+    a1 = p1.alt if p1.alt is not None else salt[i]
+    drop = (a0 - a1) if a0 is not None and a1 is not None else 0.0
+    speed = haversine_m(p0.lat, p0.lon, p1.lat, p1.lon) / 1000.0 / hours
+    sink = drop / (hours * 3600.0)
+    near = _vehicle_near(pts, labels, i, cfg.gap_context_s)
+    top = max((salt[k] for k in range(i) if labels[k] == WALK and salt[k] is not None), default=None)
+    from_top = top is not None and salt[i - 1] is not None and salt[i - 1] >= top - cfg.gapfly_top_m
+    heights = [p.alt - ground[k] for k, p in ((i - 1, p0), (i, p1)) if k in ground and p.alt is not None]
+    air = max(heights) if heights else None
+    access = access or {}
+    d_km = haversine_m(p0.lat, p0.lon, p1.lat, p1.lon) / 1000.0
+    ride_min = ride_able = None
+    if i - 1 in access and i in access:
+        walk_km = (access[i - 1] + access[i]) / 1000.0 * cfg.gap_path_factor
+        ride_min = 60.0 * (walk_km / cfg.gap_walk_kmh + d_km * cfg.gapfly_ride_factor / cfg.gapfly_ride_kmh)
+        ride_able = _share_that_fast(ride_min, hours * 60.0, cfg)
+    if profile and len(profile) >= 2 and all(z is not None for z in profile):
+        line = list(profile)
+    else:
+        line = [a0 if a0 is not None else 0.0, a1 if a1 is not None else 0.0]
+    ski_min = _ski_minutes(line, d_km, cfg)
+    ski_able = _share_that_fast(ski_min, hours * 60.0, cfg)
+    no_snow = snow_m is not None and snow_m < cfg.gapfly_snow_m and line[-1] <= cfg.gapfly_snow_trust_m
+    if no_snow:
+        ski_able = 0.0
+    out = {"flight": False, "p_flight": 0.0, "doubt": False, "drop_m": max(drop, 0.0), "speed_kmh": speed,
+           "sink_ms": sink, "from_top": from_top, "air_m": air, "vehicle_near": near,
+           "access_m": access.get(i - 1), "ride_min": ride_min, "ride_able": ride_able,
+           "ski_min": ski_min, "ski_able": ski_able, "no_snow": no_snow}
+    if drop < cfg.min_flight_drop_m:
+        return out
+    low, high = cfg.gapfly_speed_kmh
+    if ride_able is None:  # roads unknown: a flight cannot be shown, skis can only weigh against it
+        by_ground = min(1.0, cfg.gapfly_ground_like / max(ski_able, 1e-9))
+    else:
+        by_ground = cfg.gapfly_ground_like / max(ride_able, ski_able, 1e-9)
+    odds = (cfg.gapfly_prior / (1.0 - cfg.gapfly_prior)
+            / (cfg.gap_context_lr if near else 1.0)
+            * (1.0 if low <= speed <= high else cfg.gapfly_speed_lr)
+            * (cfg.gapfly_sink_lr if sink > cfg.gapfly_sink_ms else 1.0)
+            * (cfg.gapfly_top_lr if from_top else 1.0)
+            * (cfg.gapfly_air_lr if air is not None and air > cfg.gapfly_air_m else 1.0)
+            * by_ground)
+    p = odds / (1.0 + odds)
+    d_low, d_high = cfg.gap_doubt
+    out.update(flight=p >= 0.5, p_flight=p, doubt=d_low < p < d_high)
+    return out
+
+
+def _gap_note(pts: list[Point], i: int, v: dict, f: Optional[dict] = None) -> str:
+    """The warning that says what was decided about a recording gap, and why (``f``: the flight verdict of a
+    gap not walked)."""
     gap_min = (pts[i].t - pts[i - 1].t).total_seconds() / 60.0
     a0, a1 = pts[i - 1].alt, pts[i].alt
     change = f", {a0:.0f} m to {a1:.0f} m" if a0 is not None and a1 is not None else ""
@@ -230,10 +387,29 @@ def _gap_note(pts: list[Point], i: int, v: dict) -> str:
     why = [f"an average walker needs about {v['need_min']:.0f} min, {v['able']:.0%} of walkers could do it in {gap_min:.0f}"]
     if v["vehicle_near"]:
         why.insert(0, "a ride recorded just before or after")
-    # "not walked": a ride, a lift, or a flight with the recorder off (the 2019 Mont-Blanc track: 15 km in 42 min)
-    head = ("plausible on foot, counted" if v["on_foot"]
-            else "probably not walked (a ride, a lift or a flight), nothing on foot counted across it")
-    tail = " - to be checked" if v["doubt"] else ""
+    if v["on_foot"]:
+        return f"{what}: plausible on foot, counted ({'; '.join(why)}){' - to be checked' if v['doubt'] else ''}"
+    if f is not None and f["flight"]:
+        clues = [f"{f['speed_kmh']:.0f} km/h in a straight line, {f['sink_ms']:.1f} m/s down"]
+        if f["from_top"]:
+            clues.append("off from the highest point on foot")
+        if f["air_m"] is not None and f["air_m"] > 0:
+            clues.append(f"a fix {f['air_m']:.0f} m above the ground")
+        if f["ride_min"] is not None:
+            far = (f"no road nor lift within {f['access_m'] / 1000:.0f} km of the take-off: "
+                   if f["access_m"] and f["access_m"] >= 1000 else "")
+            clues.append(f"{far}by road or lift at least {f['ride_min']:.0f} min, {f['ride_able']:.0%} could do it "
+                         f"in {gap_min:.0f}")
+        clues.append("no snow down there that day: not skied" if f["no_snow"] else
+                     f"an average skier needs about {f['ski_min']:.0f} min, {f['ski_able']:.0%} of skiers could do it")
+        return (f"{what}: probably a flight with the recorder off, counted as a flight of {f['drop_m']:.0f} m "
+                f"down, the drop between its two ends ({'; '.join(clues)}){' - to be checked' if f['doubt'] else ''}")
+    head = "probably not walked (a ride, a lift or a flight), nothing on foot counted across it"
+    if f is not None and f["doubt"]:
+        head = ("perhaps a flight with the recorder off, not counted as one: nothing shows it was not a lift, "
+                "skis or a road (no fix in the air, a road or a lift station near enough), nothing on foot counted "
+                "across it")
+    tail = " - to be checked" if v["doubt"] or (f is not None and f["doubt"]) else ""
     return f"{what}: {head} ({'; '.join(why)}){tail}"
 
 
@@ -250,18 +426,22 @@ def _recorded_pieces(pts: list[Point], salt: list[Optional[float]], labels: list
     return out
 
 
-def _walks_leading_to_a_flight(segments: list[Segment], cfg: OutingConfig) -> set[int]:
+def _walks_leading_to_a_flight(segments: list[Segment], cfg: OutingConfig, flown: frozenset = frozenset()) -> set[int]:
     """The walks (by ``id``) whose climbing counts: those followed by a flight with no ride of at least
     ``ride_break_m`` in between, and every walk after the last flight (back to the car, up to the bivouac).
-    A walk before a ride with a flight nowhere after it in between (a climb given up) is left out."""
+    A walk before a ride with a flight nowhere after it in between (a climb given up) is left out.
+    ``flown``: the walks (by ``id``) holding a flight with the recorder off, which count as one."""
     leads: set[int] = set()
     pending: list[Segment] = []
-    last_flight = max((k for k, s in enumerate(segments) if s.mode == "flight"), default=None)
+    last_flight = max((k for k, s in enumerate(segments) if s.mode == "flight" or id(s) in flown), default=None)
     for k, s in enumerate(segments):
         if s.mode == "walk":
             pending.append(s)
             if last_flight is not None and k > last_flight:
                 leads.add(id(s))
+            if id(s) in flown:
+                leads.update(id(w) for w in pending)
+                pending = []
         elif s.mode == "flight":
             leads.update(id(w) for w in pending)
             pending = []
@@ -279,12 +459,24 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
     walks = [s for s in seg.segments if s.mode == "walk"]
     flights_raw = [s for s in seg.segments if s.mode == "flight"]
 
+    # ---- recording gaps inside a walk: walked, or not; if not, perhaps a flight with the recorder off
+    gaps: list[tuple[int, dict, Optional[dict]]] = []
+    for i in range(1, len(pts)):
+        if (pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and seg.labels[i - 1] == WALK and seg.labels[i] == WALK:
+            v = gap_verdict(pts, salt, seg.labels, i, cfg)
+            f = None if v["on_foot"] else flight_gap_verdict(pts, salt, seg.labels, i, seg.ground, cfg, seg.access,
+                                                                seg.profiles.get(i), seg.snow.get(i))
+            gaps.append((i, v, f))
+            warnings.append(_gap_note(pts, i, v, f))
+    gap_flights = [(i, f) for i, _, f in gaps if f is not None and f["flight"]]
+    flown = frozenset(id(s) for s in walks if any(s.i_start < i <= s.i_end for i, _ in gap_flights))
+
     # ---- on foot
     dplus = 0.0
     walk_m = 0.0
     highest: Optional[int] = None
     lost_climb = 0.0
-    leads = _walks_leading_to_a_flight(seg.segments, cfg)
+    leads = _walks_leading_to_a_flight(seg.segments, cfg, flown)
     for s in walks:
         up = 0.0
         for a, b in _recorded_pieces(pts, salt, seg.labels, s.i_start, s.i_end, cfg):
@@ -298,11 +490,7 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
         for i in range(s.i_start, s.i_end + 1):
             if salt[i] is not None and (highest is None or salt[i] > salt[highest]):
                 highest = i
-    for i in range(1, len(pts)):
-        gap = (pts[i].t - pts[i - 1].t).total_seconds()
-        if gap > cfg.gap_s and seg.labels[i - 1] == WALK and seg.labels[i] == WALK:
-            warnings.append(_gap_note(pts, i, gap_verdict(pts, salt, seg.labels, i, cfg)))
-    if not flights_raw:  # no flight at all: the outing is refused anyway, show the climbing as measured
+    if not flights_raw and not gap_flights:  # no flight at all: the outing is refused anyway, show the climbing as measured
         dplus, lost_climb = dplus + lost_climb, 0.0
     if lost_climb >= cfg.climb_threshold_m:
         warnings.append(f"{lost_climb:.0f} m climbed on foot that did not lead to a take-off: not counted")
@@ -332,6 +520,23 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
                 "i_end": s.i_end,
             }
         )
+    for i, f in gap_flights:  # the two ends only: a straight line, no turnpoint
+        km = round(haversine_m(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon) / 1000, 2)
+        flights.append(
+            {
+                "takeoff": _pt(pts[i - 1]),
+                "landing": _pt(pts[i]),
+                "duration_s": round((pts[i].t - pts[i - 1].t).total_seconds()),
+                "drop_m": round(f["drop_m"]),
+                "path_km": km,
+                "free_km": km,
+                "turnpoints": [],
+                "recorder_off": True,
+                "i_start": i - 1,
+                "i_end": i,
+            }
+        )
+    flights.sort(key=lambda f: f["i_start"])
     dminus = sum(f["drop_m"] for f in flights)
     main = max(flights, key=lambda f: f["drop_m"]) if flights else None
 

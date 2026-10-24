@@ -38,7 +38,7 @@ function renderFooter() {
   const f = $('#footer');
   const lines = [
     h('p', null, 'Published tracks are public: map, profile and statistics. The original file stays private.'),
-    h('p', null, 'Place names come from OpenStreetMap and ground altitudes from Open-Meteo (the preview sends them a few points of the flight). Scores are automatic: D+ on foot plus D− in flight, in metres.'),
+    h('p', null, 'Place names come from OpenStreetMap and ground altitudes from Open-Meteo (the preview sends them a few points of the flight, and of a break in the recording that may be a flight; Open-Meteo also gives the snow there that day). Scores are automatic: D+ on foot plus D− in flight, in metres.'),
   ];
   if (CONFIG.CONTACT_EMAIL) {
     lines.push(h('p', null, 'To remove a track or an account: ', h('a', { href: `mailto:${CONFIG.CONTACT_EMAIL}` }, CONFIG.CONTACT_EMAIL), ' (or use the delete buttons).'));
