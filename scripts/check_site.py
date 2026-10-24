@@ -251,6 +251,7 @@ with sync_playwright() as p:
     page.select_option("#m-season", "winter")
     check(("1 take-off spot," if winter else "0 take-off spots,") in page.inner_text(".side"), "map: season filter")
     page.select_option("#m-season", "")
+    page.click(".climb-filters summary")  # the climb filters sit in a closed <details>
     page.select_option("#m-dplus", "0-500")  # ROW1 climbs more than 500 m
     check("0 take-off spots," in page.inner_text(".side"), "map: climb D+ filter")
     page.select_option("#m-dplus", "")
