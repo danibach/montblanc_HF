@@ -81,20 +81,23 @@ async function fetchJson(url, options, ms) {
 
 /**
  * Tell a flight from a descent on the ground (ski, bike) with the height above the terrain, and a recording
- * gap that may be a flight from a ride with the roads and lifts near it (OpenStreetMap).
+ * gap that may be a flight from a ride or skis with the roads and lifts near it (OpenStreetMap), the ground
+ * along it and the snow that day.
  * Takes the result of analyseFile; resolves to the result again, with the checks applied, or to the
  * same result if neither service can be reached.
  */
 export async function checkTerrain(result) {
   const query = result.terrain && result.terrain.query;
   const access = result.terrain && result.terrain.access;
-  if (!query && !access) return result;
-  const [response, accessResponse] = await Promise.all([
+  const snow = result.terrain && result.terrain.snow; // a full open-meteo.com URL, built by the engine
+  if (!query && !access && !snow) return result;
+  const [response, accessResponse, snowResponse] = await Promise.all([
     query ? fetchJson(`${CONFIG.ELEVATION_URL}?${query}`, {}, 15000) : null,
     access ? fetchJson(CONFIG.OVERPASS_URL, { method: 'POST', body: new URLSearchParams({ data: access }) }, 90000) : null,
+    snow && /^https:\/\/(archive-)?api\.open-meteo\.com\//.test(snow) ? fetchJson(snow, {}, 15000) : null,
   ]);
-  if (!response && !accessResponse) return result; // the server checks again anyway
-  const res = await call({ type: 'terrain', sha256: result.file.sha256, response, access: accessResponse });
+  if (!response && !accessResponse && !snowResponse) return result; // the server checks again anyway
+  const res = await call({ type: 'terrain', sha256: result.file.sha256, response, access: accessResponse, snow: snowResponse });
   return res && res.ok ? res.result : result;
 }
 

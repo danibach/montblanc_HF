@@ -108,7 +108,7 @@ def look_up_places(outing: dict, attempts: int = 2, timeout: float = 40.0):
 def process_pending(api: Api) -> None:
     from mbhf.analyse import AnalysisError, analyse_bytes
     from mbhf.rows import outing_row
-    from mbhf.terrain import fetch_elevations
+    from mbhf.terrain import fetch_elevations, fetch_snow
     from mbhf.access import fetch_access
     from mbhf.duplicates import duplicate_message, same_flight
     from mbhf.advice import OUR_SIDE
@@ -123,7 +123,7 @@ def process_pending(api: Api) -> None:
             continue
         try:
             result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations,
-                                   access_fetch=fetch_access)
+                                   access_fetch=fetch_access, snow_fetch=fetch_snow)
         except AnalysisError as exc:
             reject(api, row["id"], str(exc))
             continue

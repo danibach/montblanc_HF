@@ -103,8 +103,12 @@ class SegmentationResult:
     warnings: list[str] = field(default_factory=list)
     # ground altitude (metres) under the two ends of the recording gaps, by fix index (the terrain check fills it)
     ground: dict = field(default_factory=dict)
+    # the ground (metres) along the straight line of each gap that may be a flight, by the fix after the gap
+    profiles: dict = field(default_factory=dict)
     # how far (metres, a lower bound) the nearest road or lift station is from those ends (access.py fills it)
     access: dict = field(default_factory=dict)
+    # snow depth (metres) at the lower end of those gaps that day, by the fix after the gap (terrain.parse_snow)
+    snow: dict = field(default_factory=dict)
 
 
 @dataclass

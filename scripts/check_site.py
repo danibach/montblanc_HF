@@ -185,7 +185,7 @@ def new_page(browser, signed_in=False, width=1280, height=900):
     page.route(re.compile(r"https://challenges\.cloudflare\.com/.*"), lambda r: r.fulfill(
         status=200, content_type="application/javascript",
         body="window.turnstile={render:function(e,o){e.textContent='[captcha]';o.callback('test-token')},reset:function(){}};"))
-    page.on("request", lambda r: None if r.url.startswith((BASE, "blob:", "data:")) or re.match(r"https://([^/]*supabase\.co|overpass-api\.de|api\.open-meteo\.com|[^/]*tile\.opentopomap\.org|challenges\.cloudflare\.com)/", r.url) else external.append(r.url))
+    page.on("request", lambda r: None if r.url.startswith((BASE, "blob:", "data:")) or re.match(r"https://([^/]*supabase\.co|overpass-api\.de|(archive-)?api\.open-meteo\.com|[^/]*tile\.opentopomap\.org|challenges\.cloudflare\.com)/", r.url) else external.append(r.url))
     page.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
     page.on("pageerror", lambda e: logs.append(f"pageerror: {e}"))
     return page, external, logs

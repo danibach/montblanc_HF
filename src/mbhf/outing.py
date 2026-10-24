@@ -86,9 +86,20 @@ class OutingConfig:
     gapfly_ride_kmh: float = 50.0
     gapfly_ride_factor: float = 1.3
     gapfly_ground_like: float = 0.3
-    # skis: a slope gentler than one metre down for this many across cannot be skied down
-    gapfly_ski_ratio: float = 8.0
-    gapfly_max_gaps: int = 2  # gaps looked up in OpenStreetMap per track
+    # an average skier, along the ground of the straight line (terrain check) stretched by gap_path_factor:
+    # down a slope of at least gapfly_ski_slope at gapfly_ski_kmh across, no faster than gapfly_ski_down_m_h
+    # down; gentler or flat, pushing on the poles at gapfly_ski_flat_kmh; up, skinning at gap_walk_kmh and
+    # gapfly_ski_up_m_h. Paces spread as the walkers' (gap_pace_sigma)
+    gapfly_ski_slope: float = 0.08
+    gapfly_ski_kmh: float = 35.0
+    gapfly_ski_down_m_h: float = 4000.0
+    gapfly_ski_flat_kmh: float = 8.0
+    gapfly_ski_up_m_h: float = 500.0
+    # less snow than this (metres) at the lower end that day: it could not be skied down to there; believed only
+    # below gapfly_snow_trust_m (the snow model's cells are 10 km wide and blind to glaciers)
+    gapfly_snow_m: float = 0.05
+    gapfly_snow_trust_m: float = 2500.0
+    gapfly_max_gaps: int = 2  # gaps looked up (OpenStreetMap, ground, snow) per track
     # a ride at least this long ends the climb on foot that led to it (shorter: a misread step, ignored)
     ride_break_m: float = 500.0
     max_trace_points: int = 1200
@@ -259,9 +270,31 @@ def flight_gap_candidates(track: Track, seg: SegmentationResult, cfg: Optional[O
     return out[: cfg.gapfly_max_gaps]
 
 
+def _ski_minutes(ground: list[float], d_km: float, cfg: OutingConfig) -> float:
+    """Minutes an average skier needs along these ground altitudes, evenly spread over ``d_km``."""
+    step_km = d_km * cfg.gap_path_factor / max(len(ground) - 1, 1)
+    hours = 0.0
+    for z0, z1 in zip(ground, ground[1:]):
+        dz = z1 - z0
+        if dz <= -cfg.gapfly_ski_slope * step_km * 1000.0:
+            hours += max(step_km / cfg.gapfly_ski_kmh, -dz / cfg.gapfly_ski_down_m_h)
+        elif dz <= 0:
+            hours += step_km / cfg.gapfly_ski_flat_kmh
+        else:
+            hours += step_km / cfg.gap_walk_kmh + dz / cfg.gapfly_ski_up_m_h
+    return hours * 60.0
+
+
+def _share_that_fast(need_min: float, minutes: float, cfg: OutingConfig) -> float:
+    """Share of people doing in ``minutes`` what takes an average one ``need_min`` (log-normal paces)."""
+    pace = max(need_min / max(minutes, 1e-6), 1e-6)
+    return 0.5 * math.erfc(math.log(pace) / (cfg.gap_pace_sigma * math.sqrt(2.0)))
+
+
 def flight_gap_verdict(pts: list[Point], salt: list[Optional[float]], labels: list[int], i: int,
                        ground: Optional[dict] = None, cfg: Optional[OutingConfig] = None,
-                       access: Optional[dict] = None) -> dict:
+                       access: Optional[dict] = None, profile: Optional[list] = None,
+                       snow_m: Optional[float] = None) -> dict:
     """A recording gap not walked (``gap_verdict``) between fixes ``i - 1`` and ``i``: a flight with the
     recorder off, or a ride, a lift? The same way, clues weighed into the probability of a flight:
 
@@ -273,16 +306,21 @@ def flight_gap_verdict(pts: list[Point], salt: list[Optional[float]], labels: li
     * a fix at either end high above the ground (``ground``, from the terrain check): in the air, all but proof;
     * could a ride do it in the time (``access``: how far the nearest road or lift station is from each end,
       from OpenStreetMap)? Walk to it, ride, walk from it: the time this takes and the share of people that
-      fast, as for walkers; the rarer, the likelier a flight. A slope steep enough to ski: a ride is possible.
-      Without either of the last two, a lift down or a road cannot be told from a glide by the two ends only:
-      the flight stays below even odds, a doubt.
+      fast, as for walkers; the rarer, the likelier a flight;
+    * could it be skied in the time? An average skier along the ground of the straight line (``profile``,
+      from the terrain check; without it, the two ends): a valley to cross means climbing back up, a long flat
+      means pushing on the poles; the share of skiers that fast. No snow at the lower end that day
+      (``snow_m``): not skied down to there.
+      The flight wins only when neither a ride nor skis fit (a road unknown: skis can only weigh against it).
+      Without a fix in the air or this, a lift down or a road cannot be told from a glide by the two ends
+      only: the flight stays below even odds, a doubt.
 
     The drop counted is the altitude before the gap minus the altitude after it: when the recorder came back
     on in the air, the true landing was lower, so it is never more than was flown.
     Returns ``flight``, ``p_flight``, ``doubt``, ``drop_m``, ``speed_kmh``, ``sink_ms``, ``from_top``, ``air_m`` (the
     greatest height above the ground at the two ends, None if unknown), ``vehicle_near``, ``access_m`` (no road
-    nor station closer to the take-off), ``ride_min`` (minutes by ground at best) and ``ride_able`` (share of
-    people that fast; 1 when it could be skied; None if unknown)."""
+    nor station closer to the take-off), ``ride_min`` and ``ride_able`` (minutes by road or lift at best, share
+    of people that fast; None if unknown), ``ski_min`` and ``ski_able`` (the same on skis) and ``no_snow``."""
     cfg = cfg or OutingConfig()
     ground = ground or {}
     p0, p1 = pts[i - 1], pts[i]
@@ -300,26 +338,37 @@ def flight_gap_verdict(pts: list[Point], salt: list[Optional[float]], labels: li
     access = access or {}
     d_km = haversine_m(p0.lat, p0.lon, p1.lat, p1.lon) / 1000.0
     ride_min = ride_able = None
-    if drop > 0 and d_km * 1000.0 <= cfg.gapfly_ski_ratio * drop:
-        ride_able = 1.0  # steep enough to ski down
-    elif i - 1 in access and i in access:
+    if i - 1 in access and i in access:
         walk_km = (access[i - 1] + access[i]) / 1000.0 * cfg.gap_path_factor
         ride_min = 60.0 * (walk_km / cfg.gap_walk_kmh + d_km * cfg.gapfly_ride_factor / cfg.gapfly_ride_kmh)
-        pace = max(ride_min / (hours * 60.0), 1e-6)
-        ride_able = 0.5 * math.erfc(math.log(pace) / (cfg.gap_pace_sigma * math.sqrt(2.0)))
+        ride_able = _share_that_fast(ride_min, hours * 60.0, cfg)
+    if profile and len(profile) >= 2 and all(z is not None for z in profile):
+        line = list(profile)
+    else:
+        line = [a0 if a0 is not None else 0.0, a1 if a1 is not None else 0.0]
+    ski_min = _ski_minutes(line, d_km, cfg)
+    ski_able = _share_that_fast(ski_min, hours * 60.0, cfg)
+    no_snow = snow_m is not None and snow_m < cfg.gapfly_snow_m and line[-1] <= cfg.gapfly_snow_trust_m
+    if no_snow:
+        ski_able = 0.0
     out = {"flight": False, "p_flight": 0.0, "doubt": False, "drop_m": max(drop, 0.0), "speed_kmh": speed,
            "sink_ms": sink, "from_top": from_top, "air_m": air, "vehicle_near": near,
-           "access_m": access.get(i - 1), "ride_min": ride_min, "ride_able": ride_able}
+           "access_m": access.get(i - 1), "ride_min": ride_min, "ride_able": ride_able,
+           "ski_min": ski_min, "ski_able": ski_able, "no_snow": no_snow}
     if drop < cfg.min_flight_drop_m:
         return out
     low, high = cfg.gapfly_speed_kmh
+    if ride_able is None:  # roads unknown: a flight cannot be shown, skis can only weigh against it
+        by_ground = min(1.0, cfg.gapfly_ground_like / max(ski_able, 1e-9))
+    else:
+        by_ground = cfg.gapfly_ground_like / max(ride_able, ski_able, 1e-9)
     odds = (cfg.gapfly_prior / (1.0 - cfg.gapfly_prior)
             / (cfg.gap_context_lr if near else 1.0)
             * (1.0 if low <= speed <= high else cfg.gapfly_speed_lr)
             * (cfg.gapfly_sink_lr if sink > cfg.gapfly_sink_ms else 1.0)
             * (cfg.gapfly_top_lr if from_top else 1.0)
             * (cfg.gapfly_air_lr if air is not None and air > cfg.gapfly_air_m else 1.0)
-            * (1.0 if ride_able is None else cfg.gapfly_ground_like / max(ride_able, 1e-9)))
+            * by_ground)
     p = odds / (1.0 + odds)
     d_low, d_high = cfg.gap_doubt
     out.update(flight=p >= 0.5, p_flight=p, doubt=d_low < p < d_high)
@@ -349,8 +398,10 @@ def _gap_note(pts: list[Point], i: int, v: dict, f: Optional[dict] = None) -> st
         if f["ride_min"] is not None:
             far = (f"no road nor lift within {f['access_m'] / 1000:.0f} km of the take-off: "
                    if f["access_m"] and f["access_m"] >= 1000 else "")
-            clues.append(f"{far}by ground at least {f['ride_min']:.0f} min, {f['ride_able']:.0%} could do it in "
-                         f"{gap_min:.0f}")
+            clues.append(f"{far}by road or lift at least {f['ride_min']:.0f} min, {f['ride_able']:.0%} could do it "
+                         f"in {gap_min:.0f}")
+        clues.append("no snow down there that day: not skied" if f["no_snow"] else
+                     f"an average skier needs about {f['ski_min']:.0f} min, {f['ski_able']:.0%} of skiers could do it")
         return (f"{what}: probably a flight with the recorder off, counted as a flight of {f['drop_m']:.0f} m "
                 f"down, the drop between its two ends ({'; '.join(clues)}){' - to be checked' if f['doubt'] else ''}")
     head = "probably not walked (a ride, a lift or a flight), nothing on foot counted across it"
@@ -413,7 +464,8 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
     for i in range(1, len(pts)):
         if (pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and seg.labels[i - 1] == WALK and seg.labels[i] == WALK:
             v = gap_verdict(pts, salt, seg.labels, i, cfg)
-            f = None if v["on_foot"] else flight_gap_verdict(pts, salt, seg.labels, i, seg.ground, cfg, seg.access)
+            f = None if v["on_foot"] else flight_gap_verdict(pts, salt, seg.labels, i, seg.ground, cfg, seg.access,
+                                                                seg.profiles.get(i), seg.snow.get(i))
             gaps.append((i, v, f))
             warnings.append(_gap_note(pts, i, v, f))
     gap_flights = [(i, f) for i, _, f in gaps if f is not None and f["flight"]]

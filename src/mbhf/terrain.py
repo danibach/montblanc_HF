@@ -14,6 +14,10 @@ needs a key. If the service cannot be reached, nothing changes: the flight is ke
 
 Thresholds are first guesses (the terrain model has a 30-90 m resolution and GPS altitude drifts by
 10-30 m): ``TerrainConfig``.
+
+For a recording gap that may be a flight, the same request gives the ground along its straight line
+(``gap_lines``), and a second one the snow depth at its lower end that day (``snow_url``, ``parse_snow``):
+could it have been skied?
 """
 
 from __future__ import annotations
@@ -22,7 +26,8 @@ import json
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from typing import Optional
 
 from .models import Track
@@ -54,33 +59,37 @@ class TerrainConfig:
     every_s: float = 40.0
     min_per_flight: int = 8
     max_per_flight: int = 45
-    # recording gaps (as ``OutingConfig.gap_s``) going down at least this much: both ends looked up, for at most
-    # this many gaps
-    gap_s: float = 600.0
-    gap_min_drop_m: float = 30.0
-    max_gaps: int = 5
+    # a recording gap that may be a flight (``outing.flight_gap_candidates``): the ground is looked up at this
+    # many points along the straight line between its two ends, both ends included (is either end in the air?
+    # what would a skier meet on the way?)
+    profile_points: int = 16
 
 
-def gap_ends(track: Track, cfg: Optional[TerrainConfig] = None) -> list[int]:
-    """Fixes on either side of the recording gaps that go down: a flight with the recorder off shows when one
-    of them is in the air (``outing.flight_gap_verdict``)."""
+def gap_lines(track: Track, seg: SegmentationResult, cfg: Optional[TerrainConfig] = None) -> list[dict]:
+    """Points along the straight line of each gap that may be a flight: ``{"gap": i, "k": n, "lat", "lon",
+    "alt"}``, ``i`` the fix after the gap, ``n`` from 0 (the fix before it) to ``profile_points - 1`` (``i``)."""
+    from .outing import flight_gap_candidates
+
     cfg = cfg or TerrainConfig()
     pts = track.points
-    out: list[int] = []
-    for i in range(1, len(pts)):
-        a0, a1 = pts[i - 1].alt, pts[i].alt
-        if ((pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and a0 is not None and a1 is not None
-                and a0 - a1 >= cfg.gap_min_drop_m):
-            out += [i - 1, i]
-    return out[: 2 * cfg.max_gaps]
+    n = cfg.profile_points
+    out: list[dict] = []
+    for i in flight_gap_candidates(track, seg):
+        p0, p1 = pts[i - 1], pts[i]
+        for k in range(n):
+            f = k / (n - 1)
+            alt = p0.alt if k == 0 else p1.alt if k == n - 1 else p0.alt + f * (p1.alt - p0.alt)
+            out.append({"gap": i, "k": k, "lat": p0.lat + f * (p1.lat - p0.lat), "lon": p0.lon + f * (p1.lon - p0.lon),
+                        "alt": alt})
+    return out
 
 
 def sample_flights(track: Track, seg: SegmentationResult, cfg: Optional[TerrainConfig] = None) -> list[dict]:
-    """Fixes spread along each flight: ``[{"flight": k, "i": index, "lat", "lon", "alt"}]``, then the two ends
-    of the recording gaps that go down: ``{"gap": True, "i": index, ...}``."""
+    """Fixes spread along each flight: ``[{"flight": k, "i": index, "lat", "lon", "alt"}]``, then the points
+    along the gaps that may be a flight (``gap_lines``)."""
     cfg = cfg or TerrainConfig()
-    ends = [i for i in gap_ends(track, cfg) if track.points[i].alt is not None]
-    room = MAX_COORDINATES - len(ends)
+    lines = gap_lines(track, seg, cfg)
+    room = MAX_COORDINATES - len(lines)
     flights = [(k, s) for k, s in enumerate(seg.segments) if s.mode == "flight"]
     counts = []
     for _, s in flights:
@@ -97,11 +106,7 @@ def sample_flights(track: Track, seg: SegmentationResult, cfg: Optional[TerrainC
             p = track.points[i]
             if p.alt is not None:
                 out.append({"flight": k, "i": i, "lat": p.lat, "lon": p.lon, "alt": p.alt})
-    out = out[:room]
-    for i in ends:
-        p = track.points[i]
-        out.append({"gap": True, "i": i, "lat": p.lat, "lon": p.lon, "alt": p.alt})
-    return out
+    return out[:room] + lines
 
 
 def elevation_query(samples: list[dict]) -> Optional[str]:
@@ -175,7 +180,15 @@ def apply_terrain(
         if any("flight" in sm for sm in samples):
             return seg, ["Terrain check not available: flights are kept as found."]
         return seg, ["Terrain check not available: a recording gap cannot be shown to be a flight."]
-    ground = {sm["i"]: e for sm, e in zip(samples, elevations) if sm.get("gap") and e is not None}
+    profiles: dict = {}
+    for sm, e in zip(samples, elevations):
+        if "gap" in sm:
+            profiles.setdefault(sm["gap"], []).append(e)
+    ground: dict = {}
+    for i, prof in profiles.items():
+        for k, e in ((i - 1, prof[0]), (i, prof[-1])):
+            if e is not None:
+                ground[k] = e
     labels = list(seg.labels)
     notes: list[str] = []
     changed = False
@@ -199,6 +212,68 @@ def apply_terrain(
         else:
             notes.append(line + " It stays close to the ground: counted as a flight, to be checked.")
     if not changed:
-        return SegmentationResult(segments=seg.segments, labels=seg.labels, warnings=seg.warnings, ground=ground), notes
+        return replace(seg, ground=ground, profiles=profiles), notes
     return SegmentationResult(segments=_build_segments(track.points, labels), labels=labels, warnings=seg.warnings,
-                              ground=ground), notes
+                              ground=ground, profiles=profiles, access=seg.access, snow=seg.snow), notes
+
+
+SNOW_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+SNOW_RECENT_URL = "https://api.open-meteo.com/v1/forecast"
+SNOW_RECENT_DAYS = 80  # the archive lags a few days behind: more recent days come from the forecast service
+
+
+def snow_url(track: Track, seg: SegmentationResult, today: Optional[datetime] = None) -> Optional[str]:
+    """The URL that gives the snow depth, hour by hour, at the lower end of each gap that may be a flight, on
+    its day (None: no such gap). The model's cells are about 10 km wide: a guess at a valley's snow, blind
+    to glaciers."""
+    from .outing import flight_gap_candidates
+
+    gaps = flight_gap_candidates(track, seg)
+    if not gaps:
+        return None
+    pts = track.points
+    days = sorted({pts[i].t.astimezone(timezone.utc).date() for i in gaps})
+    today = (today or datetime.now(timezone.utc)).date()
+    lat = ",".join(f"{pts[i].lat:.4f}" for i in gaps)
+    lon = ",".join(f"{pts[i].lon:.4f}" for i in gaps)
+    query = f"latitude={lat}&longitude={lon}&hourly=snow_depth&timezone=UTC"
+    if (today - days[0]).days > 5:
+        return f"{SNOW_ARCHIVE_URL}?{query}&start_date={days[0].isoformat()}&end_date={days[-1].isoformat()}"
+    return f"{SNOW_RECENT_URL}?{query}&past_days={min(SNOW_RECENT_DAYS, (today - days[0]).days + 1)}&forecast_days=1"
+
+
+def parse_snow(response, track: Track, seg: SegmentationResult) -> dict:
+    """The service's answer as ``{i: metres}``: the snow depth at the hour the recorder came back on, for each
+    gap of ``snow_url`` (missing where unknown)."""
+    from .outing import flight_gap_candidates
+
+    gaps = flight_gap_candidates(track, seg)
+    answers = response if isinstance(response, list) else [response]
+    if len(answers) != len(gaps):
+        return {}
+    out = {}
+    for i, a in zip(gaps, answers):
+        try:
+            hours, depth = a["hourly"]["time"], a["hourly"]["snow_depth"]
+        except (KeyError, TypeError):
+            continue
+        at = track.points[i].t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:00")
+        if at in hours:
+            v = depth[hours.index(at)]
+            if isinstance(v, (int, float)) and v == v:
+                out[i] = float(v)
+    return out
+
+
+def fetch_snow(url: Optional[str], timeout: float = 20.0):
+    """Server side: the snow service's answer (None if it cannot be reached)."""
+    if not url:
+        return None
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read())
+        except (urllib.error.URLError, OSError, ValueError):
+            time.sleep(1.5 * (attempt + 1))
+    return None
