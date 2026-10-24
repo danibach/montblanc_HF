@@ -53,6 +53,39 @@ def test_attach_by_distance_and_altitude():
     assert attach(45.9005, 6.4500, 1800, index)[2] == "provisional"  # close, but 235 m lower: the other side
 
 
+def test_an_official_take_off_within_50_m_wins_whatever_the_altitude():
+    # the Mont Blanc: the FFVL gives 4 800 m, an outing took off at 4 673 m (127 m lower) and used to get a
+    # provisional take-off 7 m away, so its outings and its routes were kept apart from the official one
+    official = ffvl_takeoffs([{"suid": 962, "toponym": "MONT BLANC", "flying_functions_text": "décollage",
+                               "latitude": 45.8327, "longitude": 6.8652, "altitude": 4800}])
+    index = SiteIndex(official)
+    assert attach(45.83276, 6.86522, 4673, index)[2] == "auto"
+    first = {"id": "a", "takeoff_name": "Mont Blanc / Monte Bianco", "summit_name": None, "title": "x",
+             "takeoff_lat": 45.83276, "takeoff_lon": 6.86522, "takeoff_alt": 4673}
+    provisional = provisional_site(first)
+    provisional["id"] = 1451
+    index.add(provisional)  # the outing sits exactly on the provisional take-off, 7 m from the official one
+    site, d, status = attach(45.83276, 6.86522, 4673, index)
+    assert site["source"] == "ffvl" and status == "auto" and d < 50
+    # the altitude test still separates the two sides of a ridge farther than 50 m away
+    assert attach(45.9005, 6.4500, 1800, SiteIndex(ffvl_takeoffs(FFVL)))[2] == "provisional"
+
+
+def test_provisional_twins_end_up_as_one_and_official_neighbours_stay_two():
+    # Tête Pelouse: two provisional take-offs 24 m apart (altitudes 111 m apart): an outing on the younger one is
+    # tied to the older, which leaves the younger unused (the sync removes it)
+    index = SiteIndex()
+    for sid, lat, alt in ((10, 45.9000, 2000), (11, 45.900216, 2111)):
+        index.add({"id": sid, "source": "provisional", "lat": lat, "lon": 6.7000, "alt": alt})
+    site, _, status = attach(45.900216, 6.7000, 2111, index)
+    assert site["id"] == 10 and status == "auto"
+    # the Suchet: two OpenStreetMap summits 40 m apart, mapped on purpose: each outing keeps the nearer one
+    osm = SiteIndex()
+    for sid, lat in ((1, 46.7700), (2, 46.77036)):
+        osm.add({"id": sid, "source": "osm", "lat": lat, "lon": 6.45, "alt": 1590})
+    assert attach(46.77036, 6.45, 1590, osm)[0]["id"] == 2 and attach(46.7700, 6.45, 1590, osm)[0]["id"] == 1
+
+
 def test_a_provisional_take_off_gathers_the_next_outings():
     index = SiteIndex()
     first = {"id": "a", "takeoff_name": None, "summit_name": "Pointe de Beauregard", "title": "x",

@@ -8,6 +8,13 @@ name: Take-off register
 on:
   schedule:
     - cron: "17 3 * * 1"   # Mondays, 03:17 UTC
+  # when the tying rule or the sync itself changes on main, the outings are tied again by the new rule at once
+  push:
+    branches: [main]
+    paths:
+      - src/mbhf/sites.py
+      - src/mbhf/routes.py
+      - scripts/sync_sites.py
   workflow_dispatch:
     inputs:
       dry_run:
