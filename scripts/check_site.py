@@ -9,6 +9,7 @@ nothing leaves the machine. The numbers shown by the page must equal those of th
 analysis of the same track. Screenshots go to the folder given by --shots.
 """
 import base64, functools, http.server, json, os, re, socket, socketserver, sys, tempfile, threading
+from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import sync_playwright
@@ -230,6 +231,12 @@ with sync_playwright() as p:
 
     page.goto(BASE + "#/map")
     page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
+    # the map opens on the current season when it has outings (ROW1's date decides), otherwise on all seasons
+    now_winter = datetime.now().month in (11, 12, 1, 2, 3, 4)
+    row_winter = int(ROW1["outing_date"][5:7]) in (11, 12, 1, 2, 3, 4)
+    expected = ("winter" if now_winter else "summer") if now_winter == row_winter else ""
+    check(page.input_value("#m-season") == expected, f"map opens on the current season ({expected or 'all seasons'})")
+    page.select_option("#m-season", "")
     check("1 take-off spot, 1 confirmed outing" in page.inner_text(".side"), "map counts only the verified outing: " + page.inner_text(".side")[:90])
     check(page.locator(".leaflet-control-layers input[type=checkbox]").count() == 2, "map: heat map and take-offs can be switched")
     check("pilots" in page.inner_text(".heat-legend"), "map: heat map legend")
@@ -239,6 +246,7 @@ with sync_playwright() as p:
     page.select_option("#m-season", "")
     page.locator(".tk.spot").first.click()
     page.wait_for_selector(".out-list li", timeout=15000)
+    check(page.locator(".start-group").count() == 1 and "From " in page.inner_text(".start-group summary"), "take-off clicked: outings grouped by start place")
     check(page.locator(".out-list li").count() == 1 and "Alice" in page.inner_text(".out-list"), "take-off clicked: its outing is listed")
     check(page.locator(".leaflet-overlay-pane path.leaflet-interactive").count() == 1, "take-off clicked: one climb drawn, no flight")
     page.locator(".out-list li").first.click()

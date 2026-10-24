@@ -13,6 +13,10 @@ const GROUP_PX = 56;
 const MAX_TRACES = 60;
 // From this zoom on, the heat map shows the ways up instead of the take-offs.
 const ROUTES_ZOOM = 11;
+// Past this many climbs at one take-off, they are not drawn one by one: the heat map shows them.
+const MANY_CLIMBS = 30;
+// Outings listed at a time in each start-place group ("Show more" for the next ones).
+const PAGE = 20;
 // Points are laid along each climb this far apart for the heat map of the ways up.
 const ROUTE_STEP_M = 40;
 
@@ -32,6 +36,22 @@ const SEASONS = {
 };
 
 const plural = (n, word) => `${fmtInt(n)} ${word}${n === 1 ? '' : 's'}`;
+
+// D+ of the climb when it is known, else the engine's D+ on foot
+const climbDplus = (o, climb) => (climb && climb.dplus_m != null ? climb.dplus_m : o.dplus_m);
+// orders of the list of a take-off's outings; ``climbs`` maps an outing id to its climb
+const SORTS = {
+  recent: { label: 'Most recent', by: (a, b) => String(b.outing_date || '').localeCompare(String(a.outing_date || '')) },
+  climb: { label: 'Most D+', by: (a, b, climbs) => (climbDplus(b, climbs.get(b.id)) || 0) - (climbDplus(a, climbs.get(a.id)) || 0) },
+  fast: {
+    label: 'Fastest climb',
+    by: (a, b, climbs) => {
+      // outings without a known climb time go last
+      const [ta, tb] = [a, b].map((o) => (climbs.get(o.id) || {}).duration_s ?? Infinity);
+      return ta === tb ? 0 : ta < tb ? -1 : 1;
+    },
+  },
+};
 
 function metres(lat1, lon1, lat2, lon2) {
   const r = Math.PI / 180;
@@ -174,6 +194,10 @@ export function buildExplorer(rows, loadTraces) {
   const seasonPick = h('select', { id: 'm-season' }, h('option', { value: '' }, 'All seasons'),
     Object.entries(SEASONS).map(([k, s]) => h('option', { value: k }, s.label)));
   const yearPick = h('select', { id: 'm-year' }, h('option', { value: '' }, 'All years'), years.map((y) => h('option', { value: y }, y)));
+  // The map opens on the current season: summer and winter climbs do not take the same ways. All seasons when the
+  // current one has no outing yet.
+  const now = season({ outing_date: new Date().toISOString() });
+  if (rows.some((o) => season(o) === now)) seasonPick.value = now;
   const bar = h('div', { class: 'filters' },
     h('div', { class: 'field' }, h('label', { for: 'm-season' }, 'Season'), seasonPick),
     h('div', { class: 'field' }, h('label', { for: 'm-year' }, 'Year'), yearPick));
@@ -272,7 +296,7 @@ export function buildExplorer(rows, loadTraces) {
     climbs.clearLayers();
     element.querySelector('.explorer').classList.add('has-spot');
     draw();
-    const list = h('ul', { class: 'out-list' });
+    const list = h('div', { class: 'start-groups' });
     const status = h('p', { class: 'hint' });
     side.replaceChildren(
       h('div', { class: 'side-head' },
@@ -301,40 +325,52 @@ export function buildExplorer(rows, loadTraces) {
       }
       if (mine !== request) return;
     }
+    // Many climbs: the heat map of the ways up (shown from ROUTES_ZOOM on) replaces a tangle of lines, and an
+    // outing's line appears only while it is hovered or kept lit.
+    const crowded = climbOfId.size > MANY_CLIMBS;
     const lines = new Map();
     const bounds = L.latLngBounds([[sp.lat, sp.lon]]);
     let selected = null;
     const restyle = (hot) => {
       for (const [id, line] of lines) {
-        const style = id === hot || id === selected ? CLIMB_HOT : selected ? CLIMB_BACK : CLIMB;
-        line.setStyle(style);
-        if (style === CLIMB_HOT) line.bringToFront();
+        const lit = id === hot || id === selected;
+        if (crowded) {
+          // through the group: a line only taken off the map would stay in it and never come back
+          if (lit) climbs.addLayer(line.setStyle(CLIMB_HOT));
+          else climbs.removeLayer(line);
+          if (lit) line.bringToFront();
+        } else {
+          line.setStyle(lit ? CLIMB_HOT : selected ? CLIMB_BACK : CLIMB);
+          if (lit) line.bringToFront();
+        }
       }
-      for (const li of list.children) li.classList.toggle('on', li.dataset.id === selected);
+      for (const li of list.querySelectorAll('li[data-id]')) li.classList.toggle('on', li.dataset.id === selected);
     };
     const select = (id) => { selected = selected === id ? null : id; restyle(null); };
 
     for (const o of sp.outings) {
       const climb = climbOfId.get(o.id);
-      if (climb) {
-        const line = L.polyline(climb.line, CLIMB).addTo(climbs);
-        line.on('mouseover', () => restyle(o.id));
-        line.on('mouseout', () => restyle(null));
-        line.on('click', () => {
-          select(o.id);
-          const li = list.querySelector(`[data-id="${o.id}"]`);
-          if (li) li.scrollIntoView({ block: 'nearest' });
-        });
-        lines.set(o.id, line);
-        bounds.extend(line.getBounds());
-      }
-      const dplus = climb && climb.dplus_m != null ? climb.dplus_m : o.dplus_m;
-      const li = h('li', { 'data-id': o.id, tabindex: '0' },
+      if (!climb) continue;
+      const line = L.polyline(climb.line, CLIMB);
+      if (!crowded) line.addTo(climbs);
+      line.on('mouseover', () => restyle(o.id));
+      line.on('mouseout', () => restyle(null));
+      line.on('click', () => {
+        select(o.id);
+        const li = list.querySelector(`[data-id="${o.id}"]`);
+        if (li) li.scrollIntoView({ block: 'nearest' });
+      });
+      lines.set(o.id, line);
+      bounds.extend(line.getBounds());
+    }
+
+    function item(o) {
+      const climb = climbOfId.get(o.id);
+      const li = h('li', { 'data-id': o.id, tabindex: '0', class: o.id === selected ? 'on' : null },
         h('b', null, outingTitle(o)),
         h('span', { class: 'hint' }, `${o.pilot || 'Anonymous'} · ${fmtDate(o.outing_date)}`),
-        h('span', null, `From ${o.start_place || 'the valley'} to ${sp.name}`),
         h('span', { class: 'nums' },
-          h('span', { title: climb && climb.dplus_m != null ? 'D+ of the climb' : 'D+ on foot' }, `↗ ${fmtInt(dplus)} m`),
+          h('span', { title: climb && climb.dplus_m != null ? 'D+ of the climb' : 'D+ on foot' }, `↗ ${fmtInt(climbDplus(o, climb))} m`),
           h('span', { title: 'Distance of the climb' }, climb ? fmtKm(climb.km) : fmtKm(o.walk_km)),
           h('span', { title: 'Time of the climb' }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : '')),
         climb ? null : h('span', { class: 'hint' }, 'No climb track to draw.'),
@@ -344,10 +380,45 @@ export function buildExplorer(rows, loadTraces) {
       li.addEventListener('focus', () => restyle(o.id));
       li.addEventListener('click', (ev) => { if (!ev.target.closest('a')) select(o.id); });
       li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target === li) select(o.id); });
-      list.append(li);
+      return li;
     }
-    status.textContent = 'Hover an outing to light its climb; click it to keep it lit.';
+
+    // the list: one group per start place (largest first), sorted as chosen, PAGE outings at a time
+    const groups = new Map();
+    for (const o of sp.outings) {
+      const place = o.start_place || 'an unnamed start';
+      groups.set(place, [...(groups.get(place) || []), o]);
+    }
+    const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const sortPick = h('select', { id: 'm-sort', 'aria-label': 'Sort the outings' },
+      Object.entries(SORTS).map(([k, s]) => h('option', { value: k }, s.label)));
+    const open = new Set(sp.outings.length <= PAGE ? ordered.map((g) => g[0]) : [ordered[0][0]]);
+    const pages = new Map();
+    function renderList() {
+      const by = SORTS[sortPick.value].by;
+      list.replaceChildren(...ordered.map(([place, outings]) => {
+        const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
+        const n = pages.get(place) || PAGE;
+        const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
+        const left = items.length - n;
+        const more = left > 0
+          ? h('button', { class: 'more', onclick: () => { pages.set(place, n + PAGE); renderList(); } },
+            left > PAGE ? `Show ${PAGE} more (${left} left)` : `Show the last ${plural(left, 'outing')}`)
+          : null;
+        const group = h('details', { class: 'start-group', open: open.has(place) },
+          h('summary', null, `From ${place}`, h('span', { class: 'hint' }, ` · ${plural(outings.length, 'outing')}`)), body, more);
+        group.addEventListener('toggle', () => { if (group.open) open.add(place); else open.delete(place); });
+        return group;
+      }));
+    }
+    sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
+    list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, 'Sort'), sortPick));
+    renderList();
+    status.textContent = crowded
+      ? `${plural(climbOfId.size, 'climb')}: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.`
+      : 'Hover an outing to light its climb; click it to keep it lit.';
     if (lines.size) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+    if (crowded && map.getZoom() < ROUTES_ZOOM) map.setZoom(ROUTES_ZOOM); // close enough for the heat of the ways up
   }
 
   const start = () => {
@@ -374,11 +445,10 @@ export function buildExplorer(rows, loadTraces) {
 
     map.on('zoomend', () => { pickHeat(); draw(); });
     map.on('resize', pickHeat);
-    spots = groupTakeoffs(shown);
+    applyFilters();
     if (spots.length) map.fitBounds(L.latLngBounds(spots.map((sp) => [sp.lat, sp.lon])), { padding: [40, 40], maxZoom: 11 });
     else map.setView([45.92, 6.87], 9); // Mont Blanc, until the first outing is confirmed
     pickHeat();
-    applyFilters();
     seasonPick.addEventListener('change', applyFilters);
     yearPick.addEventListener('change', applyFilters);
     mapBox._map = map;
