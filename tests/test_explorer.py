@@ -61,6 +61,24 @@ def test_take_offs_farther_than_50_m_stay_apart(tmp_path):
     assert sorted(s["name"] for s in found) == ["Mont Blanc", "Plus bas"]
 
 
+def test_two_official_take_offs_stay_apart_even_40_m_away(tmp_path):
+    # the Suchet's two summits, both mapped in OpenStreetMap on purpose
+    sud = {"id": 1, "name": "Suchet Sommet sud", "lat": 46.7700, "lon": 6.4500, "alt": 1590, "source": "osm"}
+    nord = {"id": 2, "name": "Suchet Sommet Nord", "lat": 46.7700 + 0.00036, "lon": 6.4500, "alt": 1590, "source": "osm"}  # 40 m
+    rows = [outing("a", 46.7700, 6.4500, 1), outing("b", 46.77036, 6.4500, 2), outing("c", 46.77036, 6.4500, 2)]
+    found = spots(tmp_path, rows, [sud, nord])
+    assert sorted((s["name"], s["n"]) for s in found) == [("Suchet Sommet Nord", 2), ("Suchet Sommet sud", 1)]
+
+
+def test_provisional_twins_become_one_spot(tmp_path):
+    # Tête Pelouse: two provisional take-offs 24 m apart, made because the altitudes differed by 111 m
+    a = {"id": 10, "name": "Tête Pelouse", "lat": 45.9000, "lon": 6.7000, "alt": 2000, "source": "provisional"}
+    b = {"id": 11, "name": "Tête Pelouse", "lat": 45.9000 + 0.000216, "lon": 6.7000, "alt": 2111, "source": "provisional"}
+    rows = [outing("a", 45.9000, 6.7000, 10), outing("b", 45.900216, 6.7000, 11), outing("c", 45.900216, 6.7000, 11)]
+    [spot] = spots(tmp_path, rows, [a, b])
+    assert spot["n"] == 3 and spot["siteIds"] == [10, 11] and spot["name"] == "Tête Pelouse"
+
+
 def test_a_loose_outing_next_to_an_official_take_off_joins_it(tmp_path):
     rows = [outing("a", 45.8327, 6.8652, 962), outing("b", 45.83274, 6.86523, None)]
     [spot] = spots(tmp_path, rows, [MONT_BLANC[0]])

@@ -68,13 +68,18 @@ const pilotOf = (o) => o.user_id || o.pilot || o.id;
 const MERGE_M = 50;
 const SOURCE_ORDER = { ffvl: 0, osm: 1, provisional: 2 };
 
-/** One spot for each set of spots within MERGE_M: the official take-off (else the busiest spot) keeps its name and
- *  point; ``siteIds`` lists the take-offs of the register it stands for, ``pilots`` counts each pilot once. */
+const isOfficial = (sp) => !!sp.site && sp.site.source !== 'provisional';
+
+/** A spot that is not an official take-off (provisional, or not tied yet) within MERGE_M of another spot joins the
+ *  nearest one; the official take-off (else the busiest spot) keeps its name and point. Two official take-offs stay
+ *  apart even 40 m away (the Suchet's two summits are mapped on purpose). ``siteIds`` lists the take-offs of the
+ *  register a spot stands for, ``pilots`` counts each pilot once. */
 function mergeClose(spots) {
   const order = (sp) => (sp.site ? SOURCE_ORDER[sp.site.source] ?? 3 : 4);
   const merged = [];
   for (const sp of spots.slice().sort((a, b) => order(a) - order(b) || b.outings.length - a.outings.length)) {
-    const into = merged.find((m) => metres(m.lat, m.lon, sp.lat, sp.lon) <= MERGE_M);
+    const near = isOfficial(sp) ? [] : merged.map((m) => [metres(m.lat, m.lon, sp.lat, sp.lon), m]).filter(([d]) => d <= MERGE_M);
+    const into = near.length ? near.reduce((a, b) => (b[0] < a[0] ? b : a))[1] : null;
     if (!into) { merged.push(sp); continue; }
     into.outings = into.outings.concat(sp.outings);
     for (const id of sp.siteIds) into.siteIds.add(id);
