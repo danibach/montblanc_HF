@@ -15,14 +15,15 @@ A track counts as a Hike & Fly outing when it holds at least one flight and at l
 What counts on foot, once the track holds a flight: the walk before each flight and every walk after
 the last one (back to the car, up to the bivouac). A climb given up in the middle of the day (a ride
 of ``ride_break_m`` or more comes before any flight) does not count. Across a recording gap (no fix
-for more than ``gap_s``) the climb and the distance count only if a walker could have covered it
-(straight line no faster than ``gap_max_kmh``, height change no faster than ``gap_max_dz_m_h``);
-otherwise the recorder was off in a car or a lift and nothing is counted across it. A pause with
-the recorder on is a standstill and changes nothing.
+for more than ``gap_s``) the climb and the distance count only if the gap was more likely walked than
+driven (``gap_verdict``): no single speed limit can tell a slow car from a fast walker, so several clues
+are weighed into a probability (decided by Dani and Sarah, 24 October 2026). A pause with the
+recorder on is a standstill and changes nothing.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -40,12 +41,29 @@ class OutingConfig:
     climb_threshold_m: float = 15.0   # a dip smaller than this does not end a climb (to calibrate)
     min_walk_climb_m: float = 200.0   # climbing on foot needed for the outing to count
     min_flight_drop_m: float = 30.0   # a flight must lose at least this much height to count
-    # no fix for longer than this: a recording gap, nothing on foot is counted across it ...
+    # no fix for longer than this: a recording gap, walked or driven (see gap_verdict)
     gap_s: float = 600.0
-    # ... and it still counts when a walker could have covered it: straight line no faster than this (km/h)
-    # and height change no faster than this (m/h); a car or a lift is much faster than either
-    gap_max_kmh: float = 6.0
-    gap_max_dz_m_h: float = 1000.0
+    # an average walker (a Naismith-like rule): flat pace, climbing and descending rates; the straight line
+    # between the two fixes is stretched by gap_path_factor, a path is never straight
+    gap_walk_kmh: float = 5.0
+    gap_climb_m_h: float = 600.0
+    gap_descent_m_h: float = 1800.0
+    gap_path_factor: float = 1.25
+    # walkers' paces spread around the average (log-normal): 0.35 makes 1.5 times faster than average ~12 %
+    # of walkers, twice as fast ~2 %
+    gap_pace_sigma: float = 0.35
+    # before any clue, one gap in four is taken to be a ride
+    gap_prior_vehicle: float = 0.25
+    # a ride recorded within this many seconds before or after the gap makes a ride this many times likelier
+    gap_context_s: float = 300.0
+    gap_context_lr: float = 6.0
+    # how likely the gap's duration is for a ride (a ride fits almost any duration: parking, waiting)
+    gap_vehicle_like: float = 0.3
+    # a probability of a ride in this band is a doubt: decided, with "to be checked"
+    gap_doubt: tuple = (0.3, 0.75)
+    # no further than this and no higher or lower: a pause, not a move
+    gap_pause_m: float = 150.0
+    gap_pause_dz_m: float = 30.0
     # a ride at least this long ends the climb on foot that led to it (shorter: a misread step, ignored)
     ride_break_m: float = 500.0
     max_trace_points: int = 1200
@@ -149,26 +167,83 @@ def build_trace(track: Track, labels: list[int], max_points: int = 1200) -> dict
     }
 
 
-def _gap_is_walkable(pts: list[Point], salt: list[Optional[float]], i: int, cfg: OutingConfig) -> bool:
-    """The recording gap between fixes ``i - 1`` and ``i``: could a walker have covered it? The straight line
-    is a lower bound of the real path, so a long loop on foot is judged leniently. A missing altitude
-    leaves only the speed to judge by."""
-    hours = (pts[i].t - pts[i - 1].t).total_seconds() / 3600.0
-    d_km = haversine_m(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon) / 1000.0
-    if d_km / hours > cfg.gap_max_kmh:
-        return False
-    a0 = salt[i - 1] if salt[i - 1] is not None else pts[i - 1].alt
-    a1 = salt[i] if salt[i] is not None else pts[i].alt
-    return a0 is None or a1 is None or abs(a1 - a0) / hours <= cfg.gap_max_dz_m_h
+def _vehicle_near(pts: list[Point], labels: list[int], i: int, within_s: float) -> bool:
+    """A ride recorded within ``within_s`` before fix ``i - 1`` or after fix ``i`` (the two ends of the gap)."""
+    k = i - 1
+    while k >= 0 and (pts[i - 1].t - pts[k].t).total_seconds() <= within_s:
+        if labels[k] == VEHICLE:
+            return True
+        k -= 1
+    k = i
+    while k < len(pts) and (pts[k].t - pts[i].t).total_seconds() <= within_s:
+        if labels[k] == VEHICLE:
+            return True
+        k += 1
+    return False
 
 
-def _recorded_pieces(pts: list[Point], salt: list[Optional[float]], i0: int, i1: int,
+def gap_verdict(pts: list[Point], salt: list[Optional[float]], labels: list[int], i: int,
+                cfg: Optional[OutingConfig] = None) -> dict:
+    """The recording gap between fixes ``i - 1`` and ``i``: walked or driven? With the recorder off, the way
+    taken is unknown: only the two ends, the time and what was recorded around the gap. Clues, weighed into
+    the probability of a ride (Bayes, odds multiplied):
+
+    * a ride recorded just before or after the gap: most likely the same ride going on (``gap_context_lr``);
+    * the time an average walker needs for it (distance stretched by ``gap_path_factor``, climb, descent),
+      and so the share of walkers fast enough (log-normal spread of paces): the rarer such a walker, the
+      likelier a ride;
+    * a gap with no move is a pause, walked.
+
+    Returns ``on_foot``, ``p_vehicle``, ``doubt`` (decided, but to be checked), ``need_min`` (minutes an
+    average walker needs), ``able`` (share of walkers fast enough) and ``vehicle_near``."""
+    cfg = cfg or OutingConfig()
+    p0, p1 = pts[i - 1], pts[i]
+    minutes = (p1.t - p0.t).total_seconds() / 60.0
+    d_m = haversine_m(p0.lat, p0.lon, p1.lat, p1.lon)
+    a0 = salt[i - 1] if salt[i - 1] is not None else p0.alt
+    a1 = salt[i] if salt[i] is not None else p1.alt
+    dz = (a1 - a0) if a0 is not None and a1 is not None else 0.0
+    near = _vehicle_near(pts, labels, i, cfg.gap_context_s)
+    if d_m <= cfg.gap_pause_m and abs(dz) <= cfg.gap_pause_dz_m:
+        return {"on_foot": True, "pause": True, "p_vehicle": 0.0, "doubt": False, "need_min": 0.0, "able": 1.0,
+                "vehicle_near": near}
+    need_h = (d_m / 1000.0 * cfg.gap_path_factor / cfg.gap_walk_kmh
+              + max(dz, 0.0) / cfg.gap_climb_m_h + max(-dz, 0.0) / cfg.gap_descent_m_h)
+    pace = max(need_h * 60.0 / max(minutes, 1e-6), 1e-6)  # how much faster than an average walker
+    able = 0.5 * math.erfc(math.log(pace) / (cfg.gap_pace_sigma * math.sqrt(2.0)))
+    odds = (cfg.gap_prior_vehicle / (1.0 - cfg.gap_prior_vehicle) * (cfg.gap_context_lr if near else 1.0)
+            * cfg.gap_vehicle_like / max(able, 1e-9))
+    p_vehicle = odds / (1.0 + odds)
+    low, high = cfg.gap_doubt
+    return {"on_foot": p_vehicle < 0.5, "pause": False, "p_vehicle": p_vehicle, "doubt": low < p_vehicle < high,
+            "need_min": need_h * 60.0, "able": able, "vehicle_near": near}
+
+
+def _gap_note(pts: list[Point], i: int, v: dict) -> str:
+    """The warning that says what was decided about a recording gap, and why."""
+    gap_min = (pts[i].t - pts[i - 1].t).total_seconds() / 60.0
+    a0, a1 = pts[i - 1].alt, pts[i].alt
+    change = f", {a0:.0f} m to {a1:.0f} m" if a0 is not None and a1 is not None else ""
+    what = f"recording gap of {gap_min:.0f} min ({pts[i - 1].t.strftime('%H:%M')}{change})"
+    if v["pause"]:
+        return f"{what}: a pause, counted"
+    why = [f"an average walker needs about {v['need_min']:.0f} min, {v['able']:.0%} of walkers could do it in {gap_min:.0f}"]
+    if v["vehicle_near"]:
+        why.insert(0, "a ride recorded just before or after")
+    # "not walked": a ride, a lift, or a flight with the recorder off (the 2019 Mont-Blanc track: 15 km in 42 min)
+    head = ("plausible on foot, counted" if v["on_foot"]
+            else "probably not walked (a ride, a lift or a flight), nothing on foot counted across it")
+    tail = " - to be checked" if v["doubt"] else ""
+    return f"{what}: {head} ({'; '.join(why)}){tail}"
+
+
+def _recorded_pieces(pts: list[Point], salt: list[Optional[float]], labels: list[int], i0: int, i1: int,
                      cfg: OutingConfig) -> list[tuple[int, int]]:
-    """Index ranges of i0..i1 split where no fix was recorded for more than ``gap_s`` and a walker could
-    not have covered the gap (a walkable gap stays inside one piece, so its climb and distance count)."""
+    """Index ranges of i0..i1 split where no fix was recorded for more than ``gap_s`` and the gap was more
+    likely driven than walked (a walked gap stays inside one piece, so its climb and distance count)."""
     out, a = [], i0
     for i in range(i0 + 1, i1 + 1):
-        if (pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and not _gap_is_walkable(pts, salt, i, cfg):
+        if (pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and not gap_verdict(pts, salt, labels, i, cfg)["on_foot"]:
             out.append((a, i - 1))
             a = i
     out.append((a, i1))
@@ -212,7 +287,7 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
     leads = _walks_leading_to_a_flight(seg.segments, cfg)
     for s in walks:
         up = 0.0
-        for a, b in _recorded_pieces(pts, salt, s.i_start, s.i_end, cfg):
+        for a, b in _recorded_pieces(pts, salt, seg.labels, s.i_start, s.i_end, cfg):
             series = [x for x in salt[a : b + 1] if x is not None]
             up += climbs(series, cfg.climb_threshold_m)[0]
             walk_m += path_length_m([(pts[i].lat, pts[i].lon) for i in range(a, b + 1)])
@@ -226,13 +301,7 @@ def build_outing(track: Track, seg: SegmentationResult, cfg: Optional[OutingConf
     for i in range(1, len(pts)):
         gap = (pts[i].t - pts[i - 1].t).total_seconds()
         if gap > cfg.gap_s and seg.labels[i - 1] == WALK and seg.labels[i] == WALK:
-            a0, a1 = pts[i - 1].alt, pts[i].alt
-            change = f", {a0:.0f} m to {a1:.0f} m" if a0 is not None and a1 is not None else ""
-            what = (f"recording gap of {gap / 60:.0f} min ({pts[i - 1].t.strftime('%H:%M')}{change})")
-            if _gap_is_walkable(pts, salt, i, cfg):
-                warnings.append(f"{what}: plausible on foot, counted")
-            else:
-                warnings.append(f"{what}: too fast or too steep for a walker, nothing on foot counted across it")
+            warnings.append(_gap_note(pts, i, gap_verdict(pts, salt, seg.labels, i, cfg)))
     if not flights_raw:  # no flight at all: the outing is refused anyway, show the climbing as measured
         dplus, lost_climb = dplus + lost_climb, 0.0
     if lost_climb >= cfg.climb_threshold_m:
