@@ -110,14 +110,15 @@ def process_pending(api: Api) -> None:
     from mbhf.rows import outing_row
     from mbhf.terrain import fetch_elevations
     from mbhf.duplicates import duplicate_message, same_flight
+    from mbhf.advice import OUR_SIDE
 
     for row in api.select(f"{TO_CHECK}&select=id,user_id,created_at,file_path,file_format&order=created_at.asc&limit={BATCH}"):
         print(f"outing {row['id']} ({row['file_path']})")
         try:
             data = api.download(row["file_path"])
         except RuntimeError as exc:
-            reject(api, row["id"], "The file could not be read from storage.")
-            print(f"  {exc}")
+            reject(api, row["id"], OUR_SIDE)
+            print(f"  file not read from storage: {exc}")
             continue
         try:
             result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations)
@@ -126,7 +127,7 @@ def process_pending(api: Api) -> None:
             continue
         except Exception as exc:  # a bug must not block the queue
             print(f"  analysis crashed: {type(exc).__name__}: {exc}")
-            reject(api, row["id"], "This file could not be analysed.")
+            reject(api, row["id"], OUR_SIDE)
             continue
 
         sha = result["file"]["sha256"]
@@ -136,14 +137,8 @@ def process_pending(api: Api) -> None:
             continue
         outing = result["outing"]
         if outing["status"] != "ok":
-            messages = {
-                "no_flight": "No flight found in this track.",
-                "too_little_climb": "Not enough climbing on foot before the flight (at least 200 m).",
-            }
-            reason = messages.get(outing["reason"], "This track does not count.")
-            if outing["reason"] == "no_flight" and any("follows the ground" in w for w in outing["warnings"]):
-                reason = next(w for w in outing["warnings"] if "follows the ground" in w)
-            reject(api, row["id"], reason)
+            # the cause and what to do, in the same words as the participant's browser (src/mbhf/advice.py)
+            reject(api, row["id"], outing.get("reason_text") or "This track does not count.")
             continue
         # The same flight sent from another file (the watch's FIT and its Strava export): it counts once, in the
         # outing sent first.

@@ -9,7 +9,7 @@ import tempfile
 from datetime import datetime, timedelta
 from typing import Optional
 
-from . import __version__
+from . import __version__, advice
 from .models import Point, Track, TrackError
 from .outing import OutingConfig, build_outing, build_trace
 from .parsers import load_track
@@ -65,7 +65,7 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
     if not data:
         raise AnalysisError(f"{shown} is empty.")
     if len(data) > max_bytes:
-        raise AnalysisError(f"{shown} is larger than {max_bytes // (1024 * 1024)} MB.")
+        raise AnalysisError(advice.MAX_SIZE.format(name=shown, mb=max_bytes // (1024 * 1024)))
 
     with tempfile.TemporaryDirectory(prefix="mbhf-") as tmp:
         path = os.path.join(tmp, f"track{ext}")
@@ -74,19 +74,19 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
         try:
             track = load_track(path)
         except TrackError as exc:
-            raise AnalysisError(str(exc).replace(path, shown)) from exc
+            raise AnalysisError(advice.file_problem(shown, str(exc), data)) from exc
     track.source = shown
     cleaned, blanked = clean_altitudes(track.points)
     if blanked:
         track = Track(points=cleaned, source=track.source, fmt=track.fmt, hint=track.hint, warnings=track.warnings)
 
     if sum(1 for p in track.points if p.alt is not None) < 0.5 * len(track.points):
-        raise AnalysisError("This track has no altitude: climbs and descents cannot be measured.")
+        raise AnalysisError(advice.NO_ALTITUDE)
 
     fixes = len(track.points)
     track = Track(points=thin(track.points), source=track.source, fmt=track.fmt, warnings=track.warnings)
     if len(track.points) < MIN_FIXES:
-        raise AnalysisError("This track is too short to analyse.")
+        raise AnalysisError(advice.TOO_SHORT)
 
     seg = segment_track(track, SegmenterConfig())
     info = {"name": shown, "format": ext[1:], "size": len(data), "sha256": sha256_hex(data), "fixes": fixes}
@@ -104,6 +104,8 @@ def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
         notes = list(notes or []) + [f"{ignored} altitude reading{'s were' if ignored != 1 else ' was'} obviously wrong (0 m or a one-fix spike) and ignored"]
     if notes:
         outing["warnings"] = list(outing["warnings"]) + [n for n in notes if n not in outing["warnings"]]
+    # the words shown when the outing does not count (None when it counts)
+    outing["reason_text"] = advice.refusal(outing, prepared.track.points)
     return {
         "file": prepared.info,
         "outing": outing,
