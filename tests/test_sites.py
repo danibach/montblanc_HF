@@ -61,3 +61,24 @@ def test_a_provisional_take_off_gathers_the_next_outings():
     assert site["name"] == "Pointe de Beauregard" and site["source"] == "provisional"
     index.add(site)
     assert attach(45.9106, 6.4706, 1630, index)[0] is site
+
+
+def test_centre_of_is_the_median_so_one_far_outing_does_not_pull_it():
+    from mbhf.sites import centre_of
+    lat, lon, alt = centre_of([(45.9100, 6.4700, 1630), (45.9102, 6.4702, 1640), (45.9104, 6.4698, None),
+                               (45.9130, 6.4740, 1700)])
+    assert abs(lat - 45.9103) < 1e-9 and abs(lon - 6.4701) < 1e-9 and alt == 1640
+    assert centre_of([(45.0, 6.0, None)]) == (45.0, 6.0, None)
+
+
+def test_outings_around_a_provisional_take_off_become_auto_once_it_is_centred():
+    from mbhf.sites import centre_of, metres
+    points = [(45.9105, 6.4705), (45.9112, 6.4712), (45.9098, 6.4698), (45.9106, 6.4711), (45.9101, 6.4702)]
+    first = provisional_site({"id": "a", "takeoff_name": "Pointe", "takeoff_lat": points[1][0],
+                              "takeoff_lon": points[1][1], "takeoff_alt": 1636})
+    # tied to the first point alone, one outing is farther than 100 m
+    assert max(metres(*p, first["lat"], first["lon"]) for p in points) > 90
+    lat, lon, _ = centre_of((a, b, None) for a, b in points)
+    first.update(lat=lat, lon=lon)
+    index = SiteIndex([first])
+    assert all(attach(a, b, 1636, index)[2] == "auto" for a, b in points)

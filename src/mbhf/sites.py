@@ -12,6 +12,8 @@ An outing's take-off point is tied to the nearest known take-off (brief of the m
 * farther, or more than ``MAX_DALT_M`` higher or lower (two take-offs on either side of a ridge): a new
   provisional take-off is made at the outing's point, named as the outing's take-off is today (OSM name of the
   take-off, else summit, else start). Later outings near it are tied to it, so a wild summit gets its take-off.
+  The point of a provisional take-off is then moved to the median of the take-off points of its outings
+  (``centre_of``), so it stops depending on whichever outing came first. Official take-offs never move.
 Nothing here changes the analysis of a track.
 """
 
@@ -19,6 +21,7 @@ from __future__ import annotations
 
 import math
 import re
+import statistics
 from typing import Iterable, Optional
 
 AUTO_M = 100.0
@@ -158,6 +161,15 @@ def provisional_site(outing: dict) -> dict:
         "alt": outing.get("takeoff_alt"), "country_code": outing.get("country_code"),
         "wind_ok": None, "hike_and_fly": None, "ffvl_status": None,
     }
+
+
+def centre_of(points: Iterable[tuple[float, float, Optional[float]]]) -> tuple[float, float, Optional[float]]:
+    """The middle of some take-off points (lat, lon, alt): the median of each, so that one outing that took off
+    far from the others does not pull the take-off away. The altitude is None when none of them has one."""
+    pts = list(points)
+    alts = [a for _, _, a in pts if a is not None]
+    return (statistics.median(p[0] for p in pts), statistics.median(p[1] for p in pts),
+            statistics.median(alts) if alts else None)
 
 
 def overpass_query(south: float, west: float, north: float, east: float) -> str:
