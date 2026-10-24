@@ -244,6 +244,14 @@ with sync_playwright() as p:
     page.select_option("#m-season", "winter")
     check(("1 take-off spot," if winter else "0 take-off spots,") in page.inner_text(".side"), "map: season filter")
     page.select_option("#m-season", "")
+    page.select_option("#m-dplus", "0-500")  # ROW1 climbs more than 500 m
+    check("0 take-off spots," in page.inner_text(".side"), "map: climb D+ filter")
+    page.select_option("#m-dplus", "")
+    name = ROW1.get("takeoff_name") or ROW1["title"]
+    page.fill("#m-search", name[:4])
+    page.wait_for_selector("#m-results li[role=option]", timeout=5000)
+    check(name in page.inner_text("#m-results"), f"map search finds {name!r} from {name[:4]!r}")
+    page.fill("#m-search", "")
     page.locator(".tk.spot").first.click()
     page.wait_for_selector(".out-list li", timeout=15000)
     check(page.locator(".start-group").count() == 1 and "From " in page.inner_text(".start-group summary"), "take-off clicked: outings grouped by start place")
