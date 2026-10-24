@@ -121,7 +121,7 @@ def supabase(route, request):
         uid = q.get("user_id", [""])[0].replace("eq.", "")
         if uid:
             rows = [r for r in ROWS if r["user_id"] == uid] + ([ROW3] if uid == UID else [])
-            return j(route, rows)
+            return j(route, rows, headers={"content-range": f"0-{max(len(rows) - 1, 0)}/{len(rows)}"})
         return j(route, ROWS, headers={"content-range": f"0-{len(ROWS) - 1}/{len(ROWS)}"})
     if u.path == "/rest/v1/outings" and request.method == "POST":
         calls.append(("BODY", "outings", request.post_data))
@@ -214,6 +214,7 @@ with sync_playwright() as p:
     check(page.url.endswith("#/all"), "anonymous: the entry page sends the visitor to All")
     page.click("tbody tr:first-child a[href^='#/outing']")
     page.wait_for_selector(".stat.big", timeout=30000)
+    check(page.locator("#nav a[aria-current]").count() == 0, "outing page: no entry lit in the menu")
     check(page.inner_text(".stat.big b") == comma(NATIVE["score"]), f"outing page score {page.inner_text('.stat.big b')} = Python {comma(NATIVE['score'])}")
     check("Pointe Haute" in page.inner_text("h1"), "title from the summit name: " + page.inner_text("h1"))
     page.wait_for_selector(".leaflet-container path.leaflet-interactive", timeout=15000)
@@ -275,6 +276,11 @@ with sync_playwright() as p:
     page.wait_for_selector(".stat.big", timeout=15000)
     check(page.inner_text("h1") == "Alice" and page.inner_text(".stat.big b") == comma(ROW1["score"]), "user page: name and total score")
     check("Waiting" not in page.inner_text("main"), "user page of someone else: no private uploads")
+    stats_text = page.inner_text(".stats")
+    check("Total distance on flight" in stats_text and "Countries" not in stats_text and "Longest free distance" not in stats_text, "user page: flight distance total, no Countries")
+    check(page.locator("#f-year").count() == 1 and page.locator("#f-country").count() == 1, "user page: year and country filters")
+    check(page.locator("thead button.sort").count() >= 6 and "Country" not in page.inner_text("thead"), "user page: outings sortable, no Country column")
+    check(page.locator("#nav a[aria-current]").count() == 0, "user page: no entry lit in the menu")
 
     page.goto(BASE + "#/upload")
     page.wait_for_selector(".notice-info", timeout=15000)
