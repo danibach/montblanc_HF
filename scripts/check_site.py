@@ -337,6 +337,11 @@ with sync_playwright() as p:
     page.wait_for_selector("h2", timeout=15000)
     check("Processing" in page.inner_text("main"), "own page shows the pending upload")
     check("Delete my account" in page.inner_text("main"), "own page offers account deletion")
+    check(page.locator("#nav a[aria-current]").count() == 1 and page.inner_text("#nav a[aria-current]") == "My H&Fs", "own pilot page: My H&Fs lit in the menu")
+    page.goto(BASE)
+    page.wait_for_selector(".stat.big", timeout=15000)
+    check(page.inner_text("h1") == "Alice" and "Total distance on flight" in page.inner_text(".stats") and page.locator("#f-year").count() == 1, "My H&Fs is the pilot page: name, totals, filters")
+    check(page.locator("#nav a[aria-current]").count() == 1 and page.inner_text("#nav a[aria-current]") == "My H&Fs", "My H&Fs lit in the menu")
     page.screenshot(path=f"{SHOTS}/6-me.png", full_page=True)
     errs = [l for l in logs if l.startswith(("error", "pageerror")) and "404" not in l]
     check(not errs, "no console error (participant)" + ("" if not errs else ": " + " || ".join(errs)[:500]))
