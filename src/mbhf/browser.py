@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from .analyse import AnalysisError, finish, prepare_bytes, terrain_query_for, with_terrain
+from .access import parse_access
+from .analyse import AnalysisError, access_points, access_query_for, finish, prepare_bytes, terrain_query_for, with_terrain
 from .terrain import parse_elevations, sample_flights
 from .places import overpass_query, resolve_places
 
@@ -27,14 +28,15 @@ _LAST: dict = {}  # the file just analysed, kept for the terrain check (one at a
 def analyse_json(name: str, data: bytes) -> str:
     """Returns ``{"ok": true, "result": {...}}`` or ``{"ok": false, "error": "..."}``.
 
-    ``result["terrain"]["query"]`` is what the page may ask the elevation service for; the answer goes to
-    ``terrain_json``, which returns the result again with the check applied."""
+    ``result["terrain"]["query"]`` is what the page may ask the elevation service for, and
+    ``result["terrain"]["access"]`` what it may ask Overpass for (roads and lifts near a gap that may be a
+    flight); the answers go to ``terrain_json``, which returns the result again with the checks applied."""
     try:
         prepared = prepare_bytes(name, bytes(data))
         result = finish(prepared)
         _LAST.clear()
         _LAST[result["file"]["sha256"]] = prepared
-        result["terrain"] = {"query": terrain_query_for(prepared)}
+        result["terrain"] = {"query": terrain_query_for(prepared), "access": access_query_for(prepared)}
     except AnalysisError as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
     except Exception as exc:  # never show internals; the type name helps support
@@ -51,16 +53,18 @@ def resolve_places_json(outing_json: str, overpass_json: str) -> str:
     return json.dumps(resolve_places(json.loads(outing_json), json.loads(overpass_json)), ensure_ascii=False)
 
 
-def terrain_json(sha256: str, response_json: str) -> str:
+def terrain_json(sha256: str, response_json: str, access_json: str = "null") -> str:
     """The result again, after the terrain check. ``response_json`` is the elevation service's answer
-    (``"null"`` when it could not be reached: the flights are then kept)."""
+    (``"null"`` when it could not be reached: the flights are then kept), ``access_json`` Overpass's answer
+    about the roads and lifts (``"null"``: unknown, a gap that may be a flight stays a doubt)."""
     prepared = _LAST.get(sha256)
     if prepared is None:
         return json.dumps({"ok": False, "error": "Analyse the file again."})
     try:
         samples = sample_flights(prepared.track, prepared.seg)
         elevations = parse_elevations(json.loads(response_json), len(samples))
-        result = with_terrain(prepared, elevations)
+        access = parse_access(json.loads(access_json), len(access_points(prepared)))
+        result = with_terrain(prepared, elevations, access)
     except Exception as exc:
         return json.dumps({"ok": False, "error": GENERIC_ERROR, "detail": type(exc).__name__})
     result["engine"]["where"] = "browser"

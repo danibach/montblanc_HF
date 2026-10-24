@@ -4,7 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from synth import gpx_bytes
 
-from mbhf.analyse import prepare_bytes, with_terrain
+from mbhf.access import access_query, parse_access
+from mbhf.analyse import access_points, prepare_bytes, with_terrain
 from mbhf.models import Point, Track
 from mbhf.outing import flight_gap_verdict, gap_verdict
 from mbhf.segment import VEHICLE, WALK
@@ -64,7 +65,7 @@ def test_a_lift_far_too_fast_for_anyone():
 # ---- a flight with the recorder off (the 2019 Mont-Blanc track: off at the summit, back on 3 400 m above the valley)
 
 def summit_then_gap(drop_m=1500.0):
-    """Walk up 1 000 m in 2 h (to 2 000 m), the recorder off for 40 min while moving 12 km and losing
+    """Walk up 1 000 m in 2 h (to 2 000 m), the recorder off for 40 min while moving 15 km and losing
     ``drop_m``, then 10 min of walking on the flat."""
     pts = []
     for k in range(0, 2 * 3600 + 1, 30):
@@ -73,7 +74,7 @@ def summit_then_gap(drop_m=1500.0):
     top = pts[-1]
     t1 = top.t + timedelta(minutes=40)
     for k in range(0, 601, 30):
-        pts.append(Point(t=t1 + timedelta(seconds=k), lat=top.lat, lon=6.7 + (12000 + k) / (111320.0 * 0.6959),
+        pts.append(Point(t=t1 + timedelta(seconds=k), lat=top.lat, lon=6.7 + (15000 + k) / (111320.0 * 0.6959),
                          alt=2000.0 - drop_m))
     return Track(points=pts, source="synthetic", fmt="gpx")
 
@@ -102,6 +103,37 @@ def test_without_a_fix_in_the_air_it_stays_a_doubt_and_does_not_count():
     assert any("perhaps a flight" in w and "to be checked" in w for w in o["warnings"])
     o = with_terrain(p, None)["outing"]  # terrain service unreachable: the same
     assert o["reason"] == "no_flight"
+
+
+def test_far_from_any_road_or_lift_no_ride_fits_the_time_so_a_flight():
+    # no fix in the air, but no road nor station within 4 km of the summit: walk 1 h before riding 15 km
+    p = prepare_bytes("a.gpx", gpx_bytes(summit_then_gap()))
+    keys = access_points(p)
+    assert len(keys) == 2
+    o = with_terrain(p, None, [4000.0, 0.0])["outing"]
+    assert o["status"] == "ok" and o["dminus_m"] == 1500
+    assert any("no road nor lift within 4 km" in w for w in o["warnings"])
+
+
+def test_a_road_near_the_take_off_leaves_it_a_doubt():
+    p = prepare_bytes("a.gpx", gpx_bytes(summit_then_gap()))
+    o = with_terrain(p, None, [250.0, 0.0])["outing"]
+    assert o["reason"] == "no_flight" and not any("perhaps a flight" in w for w in o["warnings"])
+
+
+def test_steep_enough_to_ski_down_a_ride_is_possible():
+    pts = [Point(t=T0, lat=45.9, lon=6.7, alt=3000.0), Point(t=T0 + timedelta(minutes=40), lat=45.9, lon=6.73, alt=1800.0)]
+    f = flight_gap_verdict(pts, [p.alt for p in pts], [WALK, WALK], 1, access={0: 5000.0, 1: 5000.0})
+    assert f["ride_able"] == 1.0 and not f["flight"]
+
+
+def test_the_overpass_answer_gives_a_lower_bound_per_point():
+    def counts(*rows):
+        return {"elements": [{"type": "count", "tags": {"total": str(c)}} for row in rows for c in row]}
+    assert parse_access(counts((0, 0, 0, 0, 0, 2), (5, 9, 9, 9, 9, 9)), 2) == [4000.0, 0.0]
+    assert parse_access(counts((0,) * 6), 1) == [5000.0]
+    assert parse_access({"elements": []}, 1) is None and parse_access(None, 1) is None
+    assert "around:5000,45.83307,6.86524" in access_query([(45.83307, 6.86524)])
 
 
 def test_a_gap_going_up_is_never_a_flight():

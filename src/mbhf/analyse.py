@@ -6,12 +6,14 @@ import hashlib
 import os
 import re
 import tempfile
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Optional
 
 from . import __version__, advice
+from .access import access_query
 from .models import Point, Track, TrackError
-from .outing import OutingConfig, build_outing, build_trace
+from .outing import OutingConfig, build_outing, build_trace, flight_gap_candidates
 from .parsers import load_track
 from .parsers.common import clean_altitudes
 from .segment import SegmenterConfig, segment_track
@@ -119,19 +121,40 @@ def terrain_query_for(prepared: Prepared) -> Optional[str]:
     return elevation_query(sample_flights(prepared.track, prepared.seg))
 
 
-def with_terrain(prepared: Prepared, elevations: Optional[list]) -> dict:
-    """Redo the result after the terrain check, with the elevations the service gave (None: unavailable)."""
+def access_points(prepared: Prepared) -> list[int]:
+    """The fixes at both ends of the gaps that may be a flight: how far is the nearest road or lift (access.py)?"""
+    return [k for i in flight_gap_candidates(prepared.track, prepared.seg) for k in (i - 1, i)]
+
+
+def access_query_for(prepared: Prepared) -> Optional[str]:
+    """What the browser must ask Overpass about the roads and lifts near those gaps (None: no such gap)."""
+    pts = prepared.track.points
+    return access_query([(pts[k].lat, pts[k].lon) for k in access_points(prepared)])
+
+
+def with_terrain(prepared: Prepared, elevations: Optional[list], access: Optional[list] = None) -> dict:
+    """Redo the result after the terrain check, with the elevations the service gave (None: unavailable), and
+    the distances to the nearest road or lift of ``access_points`` (None: unavailable)."""
     samples = sample_flights(prepared.track, prepared.seg)
     seg, notes = apply_terrain(prepared.track, prepared.seg, samples, elevations)
+    keys = access_points(prepared)
+    if access is not None and len(access) == len(keys):
+        seg = replace(seg, access=dict(zip(keys, access)))
     return finish(prepared, seg, notes)
 
 
-def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES, elevation_fetch=None) -> dict:
+def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES, elevation_fetch=None,
+                  access_fetch=None) -> dict:
     """Analyse one track file. ``elevation_fetch(samples) -> [metres] | None`` switches the terrain check on
-    (the server passes ``terrain.fetch_elevations``). Raises ``AnalysisError`` with a message fit to show."""
+    (the server passes ``terrain.fetch_elevations``), ``access_fetch(points) -> [metres] | None`` the look-up of
+    roads and lifts near the gaps that may be a flight (``access.fetch_access``). Raises ``AnalysisError`` with
+    a message fit to show."""
     prepared = prepare_bytes(name, data, max_bytes)
-    if elevation_fetch is None:
+    if elevation_fetch is None and access_fetch is None:
         return finish(prepared)
     samples = sample_flights(prepared.track, prepared.seg)
-    seg, notes = apply_terrain(prepared.track, prepared.seg, samples, elevation_fetch(samples) if samples else None)
-    return finish(prepared, seg, notes)
+    elevations = elevation_fetch(samples) if samples and elevation_fetch else None
+    pts = prepared.track.points
+    keys = access_points(prepared)
+    access = access_fetch([(pts[k].lat, pts[k].lon) for k in keys]) if keys and access_fetch else None
+    return with_terrain(prepared, elevations, access)
