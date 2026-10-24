@@ -116,6 +116,8 @@ def supabase(route, request):
         if oid:
             row = next((r for r in ROWS + [ROW3] if r["id"] == oid), None)
             return j(route, [row] if row else [])
+        if q.get("outing_date", [""])[0].startswith("eq."):
+            return j(route, [])  # same-flight check before publishing: this pilot has no other outing that day
         uid = q.get("user_id", [""])[0].replace("eq.", "")
         if uid:
             rows = [r for r in ROWS if r["user_id"] == uid] + ([ROW3] if uid == UID else [])
