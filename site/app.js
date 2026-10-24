@@ -219,17 +219,19 @@ async function outingsSection(token, { path, userId, showPilot, empty }) {
       : notice('info', empty)];
 }
 
-// My H&Fs (`mine`: the signed-in person's own outings, no pilot column) and All (everyone's).
-async function pageOutings(token, { mine }) {
-  setNav(mine ? 'home' : 'all');
+// All: everyone's outings.
+async function pageAll(token) {
+  setNav('all');
+  const section = await outingsSection(token, { path: 'all', showPilot: true, empty: h('p', null, 'No outing yet for these filters.') });
+  if (section) show(h('h1', null, 'All Hike & Fly outings'), section);
+}
+
+// My H&Fs is the pilot page of the signed-in person, at the address "#/".
+async function pageMine(token) {
   const me = api.state.user;
-  // Signed out: there are no outings of one's own to show, so the visitor lands on everyone's.
-  if (mine && !me) return location.replace(`${location.pathname}#/all`);
-  const section = await outingsSection(token, {
-    path: mine ? '' : 'all', userId: mine ? me.id : undefined, showPilot: !mine,
-    empty: h('p', null, mine ? 'No outing of yours yet for these filters. ' : 'No outing yet for these filters.', mine ? link('#/upload', 'Upload a track') : null),
-  });
-  if (section) show(h('h1', null, mine ? 'My H&Fs' : 'All Hike & Fly outings'), section);
+  // Signed out: there is no page of one's own, so the visitor lands on everyone's outings.
+  if (!me) return location.replace(`${location.pathname}#/all`);
+  await pageUser(token, me.id, { path: '' });
 }
 
 async function pageRanking(token) {
@@ -311,12 +313,14 @@ function reportForm(outingId) {
   return h('details', null, h('summary', { class: 'hint' }, 'Report a problem'), form);
 }
 
-async function pageUser(token, id) {
-  setNav(null);
+// A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "" for My H&Fs.
+async function pageUser(token, id, opts = {}) {
+  // The entry "My H&Fs" is lit on one's own page, and only there.
+  setNav(api.state.user && api.state.user.id === id ? 'home' : null);
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
   if (!profile) return show(notice('error', h('p', null, 'This page does not exist.')));
-  const section = await outingsSection(token, { path: `user/${id}`, userId: id, showPilot: false, empty: h('p', null, 'No published outing for these filters.') });
+  const section = await outingsSection(token, { path: opts.path != null ? opts.path : `user/${id}`, userId: id, showPilot: false, empty: h('p', null, 'No published outing for these filters.') });
   if (!section) return;
   const mine = api.state.user && api.state.user.id === id;
   // The totals follow the year and country filters, like the list below them.
@@ -347,7 +351,7 @@ async function pageUser(token, id) {
         h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
         h('td', null, statusBadge(r), ' ', h('button', { class: 'link', onclick: async () => {
           if (!confirm('Delete this upload?')) return;
-          try { await api.deleteOuting(r); pageUser(++routeToken, id).catch(fail); } catch (e) { fail(e); }
+          try { await api.deleteOuting(r); pageUser(++routeToken, id, opts).catch(fail); } catch (e) { fail(e); }
         } }, 'Delete'))))));
   }
   nodes.push(h('h2', null, 'Outings'), section);
@@ -688,8 +692,8 @@ async function route() {
   window.scrollTo(0, 0);
   document.body.classList.toggle('wide', path[0] === 'map');
   try {
-    if (path[0] === '') { loading(); await pageOutings(token, { mine: true }); }
-    else if (path[0] === 'all') { loading(); await pageOutings(token, { mine: false }); }
+    if (path[0] === '') { loading(); await pageMine(token); }
+    else if (path[0] === 'all') { loading(); await pageAll(token); }
     else if (path[0] === 'ranking') { loading(); await pageRanking(token); }
     else if (path[0] === 'map') { loading(); await pageMap(token); }
     else if (path[0] === 'outing' && path[1]) { loading(); await pageOuting(token, path[1]); }
