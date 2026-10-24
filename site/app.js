@@ -1,5 +1,6 @@
 // The site: a small single-page app. Routes are in the address after "#".
-//   #/                 list of outings (filter by year and country)
+//   #/                 My H&Fs: the signed-in person's own outings (filter by year and country)
+//   #/all              All: the outings of everyone (filter by year and country)
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
 //   #/ranking          ranking of participants (by year or all time)
@@ -115,7 +116,6 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
     showPilot ? h('td', null, link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
     h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, outingTitle(r)) : (r.title || 'Uploaded track'),
       r.status === 'published' && r.verified === false ? [' ', statusBadge(r)] : null),
-    h('td', null, r.country_name || r.country_code || ''),
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
@@ -141,7 +141,6 @@ function listHeaders({ showPilot = true, showStatus = false } = {}) {
     { label: 'Date', key: 'date' },
     showPilot ? { label: 'Pilot', key: 'pilot' } : null,
     { label: 'Outing', key: 'outing' },
-    { label: 'Country', key: 'country' },
     { label: 'D+ (m)', key: 'dplus', num: true },
     { label: 'D− (m)', key: 'dminus', num: true },
     { label: 'Hike (km)', key: 'hike', num: true },
@@ -182,18 +181,23 @@ function goFilters(path, { year, country, sort, dir, page }) {
 
 // ---------------------------------------------------------------- pages
 
-async function pageHome(token) {
-  setNav('home');
+// The list of outings: `mine` = the signed-in person's own (My H&Fs, no pilot column), else everyone's (All).
+async function pageOutings(token, { mine }) {
+  setNav(mine ? 'home' : 'all');
+  const path = mine ? '' : 'all';
+  const me = api.state.user;
+  // Signed out: there are no outings of one's own to show, so the visitor lands on everyone's.
+  if (mine && !me) return location.replace(`${location.pathname}#/all`);
   const q = query();
   const sort = api.SORT_COLUMNS[q.sort] ? q.sort : 'date';
   const dir = q.sort && q.dir === 'asc' ? 'asc' : (q.sort && q.dir === 'desc' ? 'desc' : (sort === 'date' ? 'desc' : 'asc'));
   const page = Math.max(1, parseInt(q.page, 10) || 1);
   const size = CONFIG.PAGE_SIZE;
   // Changing a filter or the order goes back to page 1; the order is kept when a filter changes.
-  const go = (extra) => goFilters('', { year: q.year, country: q.country, sort, dir, ...extra });
+  const go = (extra) => goFilters(path, { year: q.year, country: q.country, sort, dir, ...extra });
   const bar = await filterBar(q, (v) => go({ ...v, page: 1 }));
 
-  const { rows, total } = await api.listOutings({ year: q.year, country: q.country, sort, dir, offset: (page - 1) * size });
+  const { rows, total } = await api.listOutings({ userId: mine ? me.id : undefined, year: q.year, country: q.country, sort, dir, offset: (page - 1) * size });
   if (token !== routeToken) return;
   const pages = Math.max(1, Math.ceil(total / size));
   if (page > pages) return go({ page: pages });   // a page that no longer exists (filters changed): go to the last one
@@ -201,7 +205,7 @@ async function pageHome(token) {
   // A click on a header: the same column flips the order; a new column starts with text A to Z,
   // numbers from the biggest, dates from the newest.
   const onSort = (key) => {
-    const text = ['pilot', 'outing', 'country'].includes(key);
+    const text = ['pilot', 'outing'].includes(key);
     go({ sort: key, dir: key === sort ? (dir === 'asc' ? 'desc' : 'asc') : (text ? 'asc' : 'desc'), page: 1 });
   };
 
@@ -213,10 +217,10 @@ async function pageHome(token) {
     h('button', { disabled: page >= pages, onclick: () => go({ page: page + 1 }) }, 'Next ›')) : null;
 
   show(
-    h('h1', null, 'Hike & Fly outings'), bar,
+    h('h1', null, mine ? 'My H&Fs' : 'All Hike & Fly outings'), bar,
     total
-      ? [table(listHeaders(), outingRows(rows), '', { key: sort, dir, onSort }), count, pager]
-      : notice('info', h('p', null, 'No outing yet for these filters.')));
+      ? [table(listHeaders({ showPilot: !mine }), outingRows(rows, { showPilot: !mine }), '', { key: sort, dir, onSort }), count, pager]
+      : notice('info', h('p', null, mine ? 'No outing of yours yet for these filters. ' : 'No outing yet for these filters.', mine ? link('#/upload', 'Upload a track') : null)));
 }
 
 async function pageRanking(token) {
@@ -254,7 +258,7 @@ async function pageMap(token) {
 }
 
 async function pageOuting(token, id) {
-  setNav('home');
+  setNav('all');
   const o = await api.getOuting(id);
   if (token !== routeToken) return;
   if (!o) return show(notice('error', h('p', null, 'This outing does not exist, or is not public.')));
@@ -299,7 +303,7 @@ function reportForm(outingId) {
 }
 
 async function pageUser(token, id) {
-  setNav(api.state.user && api.state.user.id === id ? 'me' : 'home');
+  setNav(api.state.user && api.state.user.id === id ? 'home' : 'all');
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
   if (!profile) return show(notice('error', h('p', null, 'This page does not exist.')));
@@ -327,7 +331,7 @@ async function pageUser(token, id) {
       table(listHeaders({ showPilot: false, showStatus: true }), others.map((r) => h('tr', null,
         h('td', null, fmtDate(r.outing_date) === '–' ? fmtDate(r.created_at) : fmtDate(r.outing_date)),
         h('td', { class: 'wrap' }, r.status === 'rejected' ? (r.reject_reason || 'Not counted') : 'Uploaded track'),
-        h('td', null, ''), h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
+        h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
         h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
         h('td', null, statusBadge(r), ' ', h('button', { class: 'link', onclick: async () => {
           if (!confirm('Delete this upload?')) return;
@@ -675,7 +679,8 @@ async function route() {
   window.scrollTo(0, 0);
   document.body.classList.toggle('wide', path[0] === 'map');
   try {
-    if (path[0] === '') { loading(); await pageHome(token); }
+    if (path[0] === '') { loading(); await pageOutings(token, { mine: true }); }
+    else if (path[0] === 'all') { loading(); await pageOutings(token, { mine: false }); }
     else if (path[0] === 'ranking') { loading(); await pageRanking(token); }
     else if (path[0] === 'map') { loading(); await pageMap(token); }
     else if (path[0] === 'outing' && path[1]) { loading(); await pageOuting(token, path[1]); }
@@ -690,12 +695,16 @@ async function route() {
 
 (async function main() {
   renderFooter();
+  let homeUser = null;     // who My H&Fs was drawn for: it is drawn again only when that changes
   api.onSession(() => {
     renderAccount();
     const here = (location.hash.replace(/^#\/?/, '').split('/')[0]);
-    if (here === 'login' || here === 'upload' || (here === 'user' && api.state.user)) route();
+    const id = api.state.user ? api.state.user.id : null;
+    if (here === 'login' || here === 'upload' || (here === 'user' && api.state.user) || (here === '' && id !== homeUser)) route();
+    homeUser = id;
   });
   await api.refreshSession();
+  homeUser = api.state.user ? api.state.user.id : null;
   renderAccount();
   try {
     const next = localStorage.getItem('after-login');

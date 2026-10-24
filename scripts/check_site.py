@@ -194,7 +194,7 @@ with sync_playwright() as p:
 
     # ============ anonymous visitor
     page, external, logs = new_page(b)
-    page.goto(BASE)
+    page.goto(BASE + "#/all")
     page.wait_for_selector("tbody tr", timeout=30000)
     rows = page.locator("tbody tr")
     check(rows.count() == 2, f"list shows the 2 published outings ({rows.count()})")
@@ -203,8 +203,13 @@ with sync_playwright() as p:
     check("Alice" in first and comma(ROW1["score"]) in first, "list row: pilot and score " + first.replace("\t", " | ")[:80])
     check(page.locator("#f-year option").count() == 2 and page.locator("#f-country option").count() == 2, "year and country filters filled")
     check("Sign in" in page.inner_text("#account"), "anonymous: Sign in link")
+    check("Country" not in page.inner_text("thead") and "Pilot" in page.inner_text("thead"), "All: no Country column, Pilot column kept")
+    check("Hike (km)" in page.inner_text("thead") and "Fly (km)" in page.inner_text("thead"), "All: distances shown")
     page.screenshot(path=f"{SHOTS}/1-list.png")
 
+    page.goto(BASE)
+    page.wait_for_selector("tbody tr", timeout=30000)
+    check(page.url.endswith("#/all"), "anonymous: the entry page sends the visitor to All")
     page.click("tbody tr:first-child a[href^='#/outing']")
     page.wait_for_selector(".stat.big", timeout=30000)
     check(page.inner_text(".stat.big b") == comma(NATIVE["score"]), f"outing page score {page.inner_text('.stat.big b')} = Python {comma(NATIVE['score'])}")
@@ -330,7 +335,7 @@ with sync_playwright() as p:
 
     # ============ phone
     page, external, logs = new_page(b, width=390, height=844)
-    page.goto(BASE)
+    page.goto(BASE + "#/all")
     page.wait_for_selector("tbody tr", timeout=30000)
     check(page.evaluate("document.documentElement.scrollWidth") <= 390, "phone: list has no sideways scroll of the page")
     page.goto(BASE + f"#/outing/{ROW1['id']}")
