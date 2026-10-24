@@ -1,0 +1,55 @@
+name: Backup
+
+# Every Monday (and when asked): copy the tables, the accounts and the original track files (scripts/backup.py),
+# pack them, encrypt them with the BACKUP_PASSPHRASE secret (AES-256, gpg) and keep the result 90 days as this
+# run's artifact. Free, nothing outside GitHub. The repository is public, so anyone signed in to GitHub can
+# download the artifact: it is useless without the passphrase. Keep the passphrase in a password manager, outside
+# GitHub (a secret cannot be read back). How to restore: README, section "Backups".
+#
+# Needs the secrets of process.yml (SUPABASE_URL, SUPABASE_SERVICE_KEY) and BACKUP_PASSPHRASE (a long random
+# passphrase). Without BACKUP_PASSPHRASE the run fails on purpose: never an unencrypted backup.
+
+on:
+  schedule:
+    - cron: "41 2 * * 1"   # Mondays, 02:41 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: A passphrase is set
+        run: test -n "$BACKUP_PASSPHRASE" || { echo "Add the BACKUP_PASSPHRASE secret first"; exit 1; }
+
+      - name: Copy everything
+        run: python3 scripts/backup.py backup
+
+      - name: Pack and encrypt
+        run: |
+          NAME="hf-tracks-backup-$(date -u +%Y-%m-%d)"
+          tar -czf "$NAME.tar.gz" backup
+          gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 --symmetric --cipher-algo AES256 \
+              -o "$NAME.tar.gz.gpg" "$NAME.tar.gz" 3<<<"$BACKUP_PASSPHRASE"
+          rm -rf backup "$NAME.tar.gz"
+          echo "NAME=$NAME" >> "$GITHUB_ENV"
+          ls -l "$NAME.tar.gz.gpg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.NAME }}.tar.gz.gpg
+          retention-days: 90
+          if-no-files-found: error

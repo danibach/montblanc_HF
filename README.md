@@ -66,6 +66,28 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 4. **Pages**: Settings > Pages > Source: GitHub Actions.
 5. `site/config.js`: set `CONTACT_EMAIL`.
 6. The free Supabase plan has no backups and pauses after a week without activity (the keep-alive in `process.yml` prevents it).
+7. **Backups**: add the secret `BACKUP_PASSPHRASE` (a long random passphrase, kept in a password manager outside
+   GitHub too); see below.
+
+## Backups
+
+Every Monday, the "Backup" action (`.github/workflows/backup.yml`, also run by hand from the Actions tab) copies the
+tables (with the traces), the accounts and the original track files (`scripts/backup.py`), encrypts them with
+`BACKUP_PASSPHRASE` and keeps the file 90 days as the run's artifact: about thirteen weekly backups. Free, nothing
+outside GitHub; the repository being public, the artifact can be downloaded by any GitHub user, but it is useless
+without the passphrase. Without the secret the run fails rather than keep an unencrypted backup.
+
+To restore: download the artifact of the run (Actions > Backup > the run > Artifacts), then
+
+```bash
+gpg -d hf-tracks-backup-YYYY-MM-DD.tar.gz.gpg > backup.tar.gz && tar -xzf backup.tar.gz
+python scripts/restore_backup.py backup          # writes backup/restore.sql
+```
+
+Run `supabase/schema-v2.sql` (and the later migrations the backup has tables for), then `backup/restore.sql` in the
+SQL Editor, then `SUPABASE_URL=… SUPABASE_SERVICE_KEY=… python scripts/restore_backup.py backup --upload-files` for the
+track files. Rows still there are kept. The accounts are recreated in `auth.users` (id, e-mail), a way Supabase does
+not document: try a restore once on a test project.
 
 ## Develop
 
