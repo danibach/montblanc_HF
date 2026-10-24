@@ -181,13 +181,10 @@ function goFilters(path, { year, country, sort, dir, page }) {
 
 // ---------------------------------------------------------------- pages
 
-// The list of outings: `mine` = the signed-in person's own (My H&Fs, no pilot column), else everyone's (All).
-async function pageOutings(token, { mine }) {
-  setNav(mine ? 'home' : 'all');
-  const path = mine ? '' : 'all';
-  const me = api.state.user;
-  // Signed out: there are no outings of one's own to show, so the visitor lands on everyone's.
-  if (mine && !me) return location.replace(`${location.pathname}#/all`);
+// The filtered, sortable, paged list of outings (filter bar, table, pager). `path` is the page's address (the
+// filters and the order live in it), `userId` limits it to one pilot. Returns the nodes to show, or null when
+// the page has been left or redirected meanwhile.
+async function outingsSection(token, { path, userId, showPilot, empty }) {
   const q = query();
   const sort = api.SORT_COLUMNS[q.sort] ? q.sort : 'date';
   const dir = q.sort && q.dir === 'asc' ? 'asc' : (q.sort && q.dir === 'desc' ? 'desc' : (sort === 'date' ? 'desc' : 'asc'));
@@ -197,10 +194,10 @@ async function pageOutings(token, { mine }) {
   const go = (extra) => goFilters(path, { year: q.year, country: q.country, sort, dir, ...extra });
   const bar = await filterBar(q, (v) => go({ ...v, page: 1 }));
 
-  const { rows, total } = await api.listOutings({ userId: mine ? me.id : undefined, year: q.year, country: q.country, sort, dir, offset: (page - 1) * size });
-  if (token !== routeToken) return;
+  const { rows, total } = await api.listOutings({ userId, year: q.year, country: q.country, sort, dir, offset: (page - 1) * size });
+  if (token !== routeToken) return null;
   const pages = Math.max(1, Math.ceil(total / size));
-  if (page > pages) return go({ page: pages });   // a page that no longer exists (filters changed): go to the last one
+  if (page > pages) { go({ page: pages }); return null; }   // a page that no longer exists (filters changed): go to the last one
 
   // A click on a header: the same column flips the order; a new column starts with text A to Z,
   // numbers from the biggest, dates from the newest.
@@ -216,11 +213,23 @@ async function pageOutings(token, { mine }) {
     h('span', { class: 'hint' }, `Page ${page} of ${pages}`),
     h('button', { disabled: page >= pages, onclick: () => go({ page: page + 1 }) }, 'Next ›')) : null;
 
-  show(
-    h('h1', null, mine ? 'My H&Fs' : 'All Hike & Fly outings'), bar,
+  return [bar,
     total
-      ? [table(listHeaders({ showPilot: !mine }), outingRows(rows, { showPilot: !mine }), '', { key: sort, dir, onSort }), count, pager]
-      : notice('info', h('p', null, mine ? 'No outing of yours yet for these filters. ' : 'No outing yet for these filters.', mine ? link('#/upload', 'Upload a track') : null)));
+      ? [table(listHeaders({ showPilot }), outingRows(rows, { showPilot }), '', { key: sort, dir, onSort }), count, pager]
+      : notice('info', empty)];
+}
+
+// My H&Fs (`mine`: the signed-in person's own outings, no pilot column) and All (everyone's).
+async function pageOutings(token, { mine }) {
+  setNav(mine ? 'home' : 'all');
+  const me = api.state.user;
+  // Signed out: there are no outings of one's own to show, so the visitor lands on everyone's.
+  if (mine && !me) return location.replace(`${location.pathname}#/all`);
+  const section = await outingsSection(token, {
+    path: mine ? '' : 'all', userId: mine ? me.id : undefined, showPilot: !mine,
+    empty: h('p', null, mine ? 'No outing of yours yet for these filters. ' : 'No outing yet for these filters.', mine ? link('#/upload', 'Upload a track') : null),
+  });
+  if (section) show(h('h1', null, mine ? 'My H&Fs' : 'All Hike & Fly outings'), section);
 }
 
 async function pageRanking(token) {
@@ -258,7 +267,7 @@ async function pageMap(token) {
 }
 
 async function pageOuting(token, id) {
-  setNav('all');
+  setNav(null);   // an outing belongs to no entry of the menu
   const o = await api.getOuting(id);
   if (token !== routeToken) return;
   if (!o) return show(notice('error', h('p', null, 'This outing does not exist, or is not public.')));
@@ -303,15 +312,19 @@ function reportForm(outingId) {
 }
 
 async function pageUser(token, id) {
-  setNav(api.state.user && api.state.user.id === id ? 'home' : 'all');
+  setNav(null);
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
   if (!profile) return show(notice('error', h('p', null, 'This page does not exist.')));
+  const section = await outingsSection(token, { path: `user/${id}`, userId: id, showPilot: false, empty: h('p', null, 'No published outing for these filters.') });
+  if (!section) return;
   const mine = api.state.user && api.state.user.id === id;
-  const published = rows.filter((r) => r.status === 'published');
+  // The totals follow the year and country filters, like the list below them.
+  const q = query();
+  const published = rows.filter((r) => r.status === 'published'
+    && (!q.year || String(r.outing_date || '').slice(0, 4) === String(q.year))
+    && (!q.country || r.country_code === q.country));
   const sum = (k) => published.reduce((a, r) => a + (r[k] || 0), 0);
-  const countries = new Set(published.map((r) => r.country_code).filter(Boolean));
-  const best = published.reduce((m, r) => Math.max(m, r.flight_free_km || 0), 0);
   const others = rows.filter((r) => r.status !== 'published');
 
   const nodes = [
@@ -321,9 +334,8 @@ async function pageUser(token, id) {
       stat(fmtInt(sum('score')), 'Total score', true),
       stat(`${fmtInt(sum('dplus_m'))} m`, 'D+ on foot'),
       stat(`${fmtInt(sum('dminus_m'))} m`, 'D− in flight'),
-      stat(fmtKm(published.reduce((a, r) => a + (r.walk_km || 0), 0)), 'Distance on foot'),
-      stat(fmtKm(best), 'Longest free distance'),
-      stat(fmtInt(countries.size), 'Countries')),
+      stat(fmtKm(sum('walk_km')), 'Distance on foot'),
+      stat(fmtKm(sum('flight_path_km')), 'Total distance on flight')),
   ];
   if (mine && !profile.display_name) nodes.push(nameForm('Choose the name shown next to your outings'));
   if (mine && others.length) {
@@ -338,10 +350,7 @@ async function pageUser(token, id) {
           try { await api.deleteOuting(r); pageUser(++routeToken, id).catch(fail); } catch (e) { fail(e); }
         } }, 'Delete'))))));
   }
-  nodes.push(h('h2', null, 'Outings'),
-    published.length
-      ? table(listHeaders({ showPilot: false }), outingRows(published, { showPilot: false }))
-      : notice('info', h('p', null, 'No published outing yet.')));
+  nodes.push(h('h2', null, 'Outings'), section);
   if (mine) {
     nodes.push(h('h2', null, 'Your account'),
       h('div', { class: 'card' },
