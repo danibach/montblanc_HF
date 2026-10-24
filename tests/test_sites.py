@@ -71,6 +71,21 @@ def test_an_official_take_off_within_50_m_wins_whatever_the_altitude():
     assert attach(45.9005, 6.4500, 1800, SiteIndex(ffvl_takeoffs(FFVL)))[2] == "provisional"
 
 
+def test_provisional_twins_end_up_as_one_and_official_neighbours_stay_two():
+    # Tête Pelouse: two provisional take-offs 24 m apart (altitudes 111 m apart): an outing on the younger one is
+    # tied to the older, which leaves the younger unused (the sync removes it)
+    index = SiteIndex()
+    for sid, lat, alt in ((10, 45.9000, 2000), (11, 45.900216, 2111)):
+        index.add({"id": sid, "source": "provisional", "lat": lat, "lon": 6.7000, "alt": alt})
+    site, _, status = attach(45.900216, 6.7000, 2111, index)
+    assert site["id"] == 10 and status == "auto"
+    # the Suchet: two OpenStreetMap summits 40 m apart, mapped on purpose: each outing keeps the nearer one
+    osm = SiteIndex()
+    for sid, lat in ((1, 46.7700), (2, 46.77036)):
+        osm.add({"id": sid, "source": "osm", "lat": lat, "lon": 6.45, "alt": 1590})
+    assert attach(46.77036, 6.45, 1590, osm)[0]["id"] == 2 and attach(46.7700, 6.45, 1590, osm)[0]["id"] == 1
+
+
 def test_a_provisional_take_off_gathers_the_next_outings():
     index = SiteIndex()
     first = {"id": "a", "takeoff_name": None, "summit_name": "Pointe de Beauregard", "title": "x",

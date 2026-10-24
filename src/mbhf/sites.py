@@ -9,7 +9,9 @@ Sources, both open:
 An outing's take-off point is tied to the nearest known take-off (brief of the map, section 4):
 * closer than ``SAME_SPOT_M``: the same spot, tied at once (``auto``) whatever the altitudes say (an official
   altitude can be a nominal one: the FFVL gives 4 800 m for the Mont Blanc), and an official take-off wins over a
-  provisional one even when the provisional one is closer;
+  provisional one even when the provisional one is closer (two official take-offs 40 m apart stay two: each
+  outing keeps the nearer); among provisional twins the oldest wins, so the younger ones lose their outings and
+  are removed by the sync;
 * closer than ``AUTO_M``: tied at once (``auto``);
 * between ``AUTO_M`` and ``CONFIRM_M``: tied, to be confirmed by hand (``to_confirm``);
 * farther, or more than ``MAX_DALT_M`` higher or lower (two take-offs on either side of a ridge): a new
@@ -150,7 +152,10 @@ def attach(lat: float, lon: float, alt: Optional[float], index: SiteIndex) -> tu
     near = index.near(lat, lon, CONFIRM_M)
     same = [x for x in near if x[0] <= SAME_SPOT_M]
     if same:  # the same spot: no altitude test (two take-offs on either side of a ridge are never this close)
-        d, s = min(same, key=lambda x: (SOURCE_RANK.get(x[1]["source"], 9), x[0]))
+        # an official take-off first (the nearest: the Suchet's two summits, 40 m apart, stay two); among provisional
+        # twins the oldest, so that the others lose their outings and are removed by the sync
+        d, s = min(same, key=lambda x: (SOURCE_RANK.get(x[1]["source"], 9),
+                                        (x[1].get("id") or 0) if x[1]["source"] == "provisional" else x[0]))
         return s, round(d), "auto"
     for d, s in near:
         if alt is not None and s.get("alt") is not None and abs(alt - s["alt"]) > MAX_DALT_M:
