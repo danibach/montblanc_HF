@@ -53,6 +53,24 @@ def test_attach_by_distance_and_altitude():
     assert attach(45.9005, 6.4500, 1800, index)[2] == "provisional"  # close, but 235 m lower: the other side
 
 
+def test_an_official_take_off_within_50_m_wins_whatever_the_altitude():
+    # the Mont Blanc: the FFVL gives 4 800 m, an outing took off at 4 673 m (127 m lower) and used to get a
+    # provisional take-off 7 m away, so its outings and its routes were kept apart from the official one
+    official = ffvl_takeoffs([{"suid": 962, "toponym": "MONT BLANC", "flying_functions_text": "décollage",
+                               "latitude": 45.8327, "longitude": 6.8652, "altitude": 4800}])
+    index = SiteIndex(official)
+    assert attach(45.83276, 6.86522, 4673, index)[2] == "auto"
+    first = {"id": "a", "takeoff_name": "Mont Blanc / Monte Bianco", "summit_name": None, "title": "x",
+             "takeoff_lat": 45.83276, "takeoff_lon": 6.86522, "takeoff_alt": 4673}
+    provisional = provisional_site(first)
+    provisional["id"] = 1451
+    index.add(provisional)  # the outing sits exactly on the provisional take-off, 7 m from the official one
+    site, d, status = attach(45.83276, 6.86522, 4673, index)
+    assert site["source"] == "ffvl" and status == "auto" and d < 50
+    # the altitude test still separates the two sides of a ridge farther than 50 m away
+    assert attach(45.9005, 6.4500, 1800, SiteIndex(ffvl_takeoffs(FFVL)))[2] == "provisional"
+
+
 def test_a_provisional_take_off_gathers_the_next_outings():
     index = SiteIndex()
     first = {"id": "a", "takeoff_name": None, "summit_name": "Pointe de Beauregard", "title": "x",

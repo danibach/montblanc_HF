@@ -7,6 +7,9 @@ Sources, both open:
   closer than ``AUTO_M`` to an FFVL one is the same place and is left out (the federation's name wins).
 
 An outing's take-off point is tied to the nearest known take-off (brief of the map, section 4):
+* closer than ``SAME_SPOT_M``: the same spot, tied at once (``auto``) whatever the altitudes say (an official
+  altitude can be a nominal one: the FFVL gives 4 800 m for the Mont Blanc), and an official take-off wins over a
+  provisional one even when the provisional one is closer;
 * closer than ``AUTO_M``: tied at once (``auto``);
 * between ``AUTO_M`` and ``CONFIRM_M``: tied, to be confirmed by hand (``to_confirm``);
 * farther, or more than ``MAX_DALT_M`` higher or lower (two take-offs on either side of a ridge): a new
@@ -24,6 +27,7 @@ import re
 import statistics
 from typing import Iterable, Optional
 
+SAME_SPOT_M = 50.0
 AUTO_M = 100.0
 CONFIRM_M = 200.0
 MAX_DALT_M = 100.0
@@ -143,7 +147,12 @@ class SiteIndex:
 def attach(lat: float, lon: float, alt: Optional[float], index: SiteIndex) -> tuple[Optional[dict], Optional[float], str]:
     """The take-off an outing's take-off point belongs to: (site, distance in metres, status), where status is
     ``auto``, ``to_confirm`` or ``provisional`` (no site close enough: make one)."""
-    for d, s in index.near(lat, lon, CONFIRM_M):
+    near = index.near(lat, lon, CONFIRM_M)
+    same = [x for x in near if x[0] <= SAME_SPOT_M]
+    if same:  # the same spot: no altitude test (two take-offs on either side of a ridge are never this close)
+        d, s = min(same, key=lambda x: (SOURCE_RANK.get(x[1]["source"], 9), x[0]))
+        return s, round(d), "auto"
+    for d, s in near:
         if alt is not None and s.get("alt") is not None and abs(alt - s["alt"]) > MAX_DALT_M:
             continue  # same spot on the map, but another side of the mountain
         return s, round(d), ("auto" if d <= AUTO_M else "to_confirm")
