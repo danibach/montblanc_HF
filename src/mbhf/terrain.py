@@ -54,19 +54,41 @@ class TerrainConfig:
     every_s: float = 40.0
     min_per_flight: int = 8
     max_per_flight: int = 45
+    # recording gaps (as ``OutingConfig.gap_s``) going down at least this much: both ends looked up, for at most
+    # this many gaps
+    gap_s: float = 600.0
+    gap_min_drop_m: float = 30.0
+    max_gaps: int = 5
+
+
+def gap_ends(track: Track, cfg: Optional[TerrainConfig] = None) -> list[int]:
+    """Fixes on either side of the recording gaps that go down: a flight with the recorder off shows when one
+    of them is in the air (``outing.flight_gap_verdict``)."""
+    cfg = cfg or TerrainConfig()
+    pts = track.points
+    out: list[int] = []
+    for i in range(1, len(pts)):
+        a0, a1 = pts[i - 1].alt, pts[i].alt
+        if ((pts[i].t - pts[i - 1].t).total_seconds() > cfg.gap_s and a0 is not None and a1 is not None
+                and a0 - a1 >= cfg.gap_min_drop_m):
+            out += [i - 1, i]
+    return out[: 2 * cfg.max_gaps]
 
 
 def sample_flights(track: Track, seg: SegmentationResult, cfg: Optional[TerrainConfig] = None) -> list[dict]:
-    """Fixes spread along each flight: ``[{"flight": k, "i": index, "lat", "lon", "alt"}]``."""
+    """Fixes spread along each flight: ``[{"flight": k, "i": index, "lat", "lon", "alt"}]``, then the two ends
+    of the recording gaps that go down: ``{"gap": True, "i": index, ...}``."""
     cfg = cfg or TerrainConfig()
+    ends = [i for i in gap_ends(track, cfg) if track.points[i].alt is not None]
+    room = MAX_COORDINATES - len(ends)
     flights = [(k, s) for k, s in enumerate(seg.segments) if s.mode == "flight"]
     counts = []
     for _, s in flights:
         n = int(s.duration_s / cfg.every_s)
         counts.append(max(cfg.min_per_flight, min(cfg.max_per_flight, n)))
     total = sum(counts)
-    if total > MAX_COORDINATES:  # a long track with several flights: thin each one out
-        counts = [max(4, c * MAX_COORDINATES // total) for c in counts]
+    if total > room:  # a long track with several flights: thin each one out
+        counts = [max(4, c * room // total) for c in counts]
     out: list[dict] = []
     for (k, s), n in zip(flights, counts):
         span = s.i_end - s.i_start
@@ -75,7 +97,11 @@ def sample_flights(track: Track, seg: SegmentationResult, cfg: Optional[TerrainC
             p = track.points[i]
             if p.alt is not None:
                 out.append({"flight": k, "i": i, "lat": p.lat, "lon": p.lon, "alt": p.alt})
-    return out[:MAX_COORDINATES]
+    out = out[:room]
+    for i in ends:
+        p = track.points[i]
+        out.append({"gap": True, "i": i, "lat": p.lat, "lon": p.lon, "alt": p.alt})
+    return out
 
 
 def elevation_query(samples: list[dict]) -> Optional[str]:
@@ -146,14 +172,17 @@ def apply_terrain(
     if not samples:
         return seg, []
     if elevations is None or len(elevations) != len(samples):
-        return seg, ["Terrain check not available: flights are kept as found."]
+        if any("flight" in sm for sm in samples):
+            return seg, ["Terrain check not available: flights are kept as found."]
+        return seg, ["Terrain check not available: a recording gap cannot be shown to be a flight."]
+    ground = {sm["i"]: e for sm, e in zip(samples, elevations) if sm.get("gap") and e is not None}
     labels = list(seg.labels)
     notes: list[str] = []
     changed = False
     for k, s in enumerate(seg.segments):
         if s.mode != "flight":
             continue
-        idx = [n for n, sm in enumerate(samples) if sm["flight"] == k]
+        idx = [n for n, sm in enumerate(samples) if sm.get("flight") == k]
         st = height_stats([samples[n] for n in idx], [elevations[n] for n in idx], cfg)
         if st is None:
             continue
@@ -170,5 +199,6 @@ def apply_terrain(
         else:
             notes.append(line + " It stays close to the ground: counted as a flight, to be checked.")
     if not changed:
-        return seg, notes
-    return SegmentationResult(segments=_build_segments(track.points, labels), labels=labels, warnings=seg.warnings), notes
+        return SegmentationResult(segments=seg.segments, labels=seg.labels, warnings=seg.warnings, ground=ground), notes
+    return SegmentationResult(segments=_build_segments(track.points, labels), labels=labels, warnings=seg.warnings,
+                              ground=ground), notes

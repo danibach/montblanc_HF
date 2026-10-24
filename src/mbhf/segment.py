@@ -101,6 +101,8 @@ class SegmentationResult:
     segments: list[Segment]
     labels: list[int]
     warnings: list[str] = field(default_factory=list)
+    # ground altitude (metres) under the two ends of the recording gaps, by fix index (the terrain check fills it)
+    ground: dict = field(default_factory=dict)
 
 
 @dataclass
