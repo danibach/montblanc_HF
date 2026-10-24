@@ -62,6 +62,32 @@ function metres(lat1, lon1, lat2, lon2) {
 
 const pilotOf = (o) => o.user_id || o.pilot || o.id;
 
+// Spots closer than this are shown as one, with the outings of all of them. A take-off made from an outing can sit a
+// few metres from an official one (the Mont Blanc: 7 m): two markers on top of each other, each hiding the other and
+// its outings. The same distance as SAME_SPOT_M in src/mbhf/sites.py. Only for this page: nothing is stored.
+const MERGE_M = 50;
+const SOURCE_ORDER = { ffvl: 0, osm: 1, provisional: 2 };
+
+const isOfficial = (sp) => !!sp.site && sp.site.source !== 'provisional';
+
+/** A spot that is not an official take-off (provisional, or not tied yet) within MERGE_M of another spot joins the
+ *  nearest one; the official take-off (else the busiest spot) keeps its name and point. Two official take-offs stay
+ *  apart even 40 m away (the Suchet's two summits are mapped on purpose). ``siteIds`` lists the take-offs of the
+ *  register a spot stands for, ``pilots`` counts each pilot once. */
+function mergeClose(spots) {
+  const order = (sp) => (sp.site ? SOURCE_ORDER[sp.site.source] ?? 3 : 4);
+  const merged = [];
+  for (const sp of spots.slice().sort((a, b) => order(a) - order(b) || b.outings.length - a.outings.length)) {
+    const near = isOfficial(sp) ? [] : merged.map((m) => [metres(m.lat, m.lon, sp.lat, sp.lon), m]).filter(([d]) => d <= MERGE_M);
+    const into = near.length ? near.reduce((a, b) => (b[0] < a[0] ? b : a))[1] : null;
+    if (!into) { merged.push(sp); continue; }
+    into.outings = into.outings.concat(sp.outings);
+    for (const id of sp.siteIds) into.siteIds.add(id);
+  }
+  for (const sp of merged) sp.pilots = new Set(sp.outings.map(pilotOf)).size;
+  return merged;
+}
+
 /**
  * The spots of the map: [{lat, lon, alt, name, outings, pilots, site}]. An outing tied to a take-off of the register
  * (FFVL, OpenStreetMap or provisional: ``sites`` from map_takeoff_sites()) is shown at that take-off, under its name;
@@ -74,7 +100,7 @@ export function groupTakeoffs(rows, sites = []) {
   for (const o of rows) {
     const site = byId.get(o.takeoff_site_id);
     if (!site) { loose.push(o); continue; }
-    if (!registered.has(site.id)) registered.set(site.id, { lat: site.lat, lon: site.lon, alt: site.alt, name: site.name, site, outings: [] });
+    if (!registered.has(site.id)) registered.set(site.id, { lat: site.lat, lon: site.lon, alt: site.alt, name: site.name, site, siteIds: new Set([site.id]), outings: [] });
     registered.get(site.id).outings.push(o);
   }
   for (const sp of registered.values()) sp.pilots = new Set(sp.outings.map(pilotOf)).size;
@@ -95,7 +121,7 @@ export function groupTakeoffs(rows, sites = []) {
       }
     }
     if (!best) {
-      best = { lat: o.takeoff_lat, lon: o.takeoff_lon, outings: [] };
+      best = { lat: o.takeoff_lat, lon: o.takeoff_lon, siteIds: new Set(), outings: [] };
       const key = cell(best.lat, best.lon);
       grid.set(key, [...(grid.get(key) || []), best]);
       spots.push(best);
@@ -114,7 +140,7 @@ export function groupTakeoffs(rows, sites = []) {
     sp.name = [...names.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0])[0]
       || `Take-off${sp.alt != null ? ` · ${fmtInt(sp.alt)} m` : ''}`;
   }
-  return [...registered.values(), ...spots];
+  return mergeClose([...registered.values(), ...spots]);
 }
 
 const SOURCES = {
@@ -471,7 +497,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     // (the climbs that follow the same way gathered by the server), one line per route instead. Either way an
     // outing's own line appears only while it is hovered or kept lit.
     const crowded = climbOfId.size > MANY_CLIMBS;
-    const siteRoutes = new Map(routes.filter((r) => sp.site && r.site_id === sp.site.id).map((r) => [r.id, r]));
+    const siteRoutes = new Map(routes.filter((r) => sp.siteIds.has(r.site_id)).map((r) => [r.id, r]));
     const byRoute = sp.outings.some((o) => siteRoutes.has(o.route_id));
     const onDemand = crowded || byRoute;
     const lines = new Map();
