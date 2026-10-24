@@ -8,7 +8,8 @@ Run by GitHub Actions (.github/workflows/sites.yml) once a week and when asked. 
 3. both written into ``takeoff_sites`` (updated in place: the ids stay);
 4. each published outing tied by the rule of src/mbhf/sites.py (auto under 100 m, to confirm up to 200 m, else a
    provisional take-off made from it); an outing tied by hand (``manual``) is left alone;
-5. provisional take-offs no outing uses any more (an official one turned up next to them) are removed;
+5. each provisional take-off is moved to the median of its outings' take-off points (it starts as the first outing's
+   point), and the outings are tied again; ones no outing uses any more are removed;
 6. the routes of every take-off are made again from the climbs (src/mbhf/routes.py) and the outings tied to them.
 ``--dry-run`` reads everything and prints what it would do, without writing.
 New outings are tied when the server checks them (process_pending.py), with the take-offs already in the register.
@@ -25,8 +26,8 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
-from mbhf.sites import (SiteIndex, attach, ffvl_takeoffs, osm_takeoffs, overpass_query,  # noqa: E402
-                        provisional_site, without_doubles)
+from mbhf.sites import (SiteIndex, attach, centre_of, ffvl_takeoffs, metres, osm_takeoffs,  # noqa: E402
+                        overpass_query, provisional_site, without_doubles)
 
 FFVL_DATASETS = "https://www.data.gouv.fr/api/1/organizations/federation-francaise-de-vol-libre/datasets/?page_size=50"
 # the main Overpass server is often busy (502): public mirrors are tried in turn
@@ -132,7 +133,48 @@ def tie_outing(outing: dict, index: SiteIndex, register: Register) -> tuple[str,
         metres = 0
     if (outing.get("takeoff_site_id"), outing.get("takeoff_site_status")) != (site["id"], status):
         register.tie(outing["id"], site["id"], status, metres)
+        outing["takeoff_site_id"], outing["takeoff_site_status"] = site["id"], status
     return status, site
+
+
+def tie_all(outings: list[dict], index: SiteIndex, register: Register, provisional_by_id: dict):
+    """Tie every outing that is not tied by hand. Returns (counts, ids of the take-offs in use, outing id -> site id)."""
+    counts = {"auto": 0, "to_confirm": 0, "provisional": 0, "manual": 0}
+    used, assigned = set(), {}
+    for o in outings:
+        if o.get("takeoff_site_status") == "manual":
+            counts["manual"] += 1
+            used.add(o.get("takeoff_site_id"))
+            assigned[o["id"]] = o.get("takeoff_site_id")
+            continue
+        status, site = tie_outing(o, index, register)
+        if site.get("source") == "provisional":
+            provisional_by_id[site["id"]] = site
+        counts[status] += 1
+        used.add(site["id"])
+        assigned[o["id"]] = site["id"]
+    return counts, used, assigned
+
+
+def recentre(register: Register, outings: list[dict], assigned: dict, provisional_by_id: dict) -> int:
+    """Move each provisional take-off with two outings or more to the median of their take-off points (when that
+    is more than 5 m away). Returns how many moved."""
+    by_site: dict[int, list[dict]] = {}
+    for o in outings:
+        if assigned.get(o["id"]) in provisional_by_id:
+            by_site.setdefault(assigned[o["id"]], []).append(o)
+    moved = []
+    for site_id, group in by_site.items():
+        if len(group) < 2:
+            continue
+        site = provisional_by_id[site_id]
+        lat, lon, alt = centre_of((o["takeoff_lat"], o["takeoff_lon"], o.get("takeoff_alt")) for o in group)
+        if metres(site["lat"], site["lon"], lat, lon) > 5:
+            site.update(lat=lat, lon=lon, alt=alt if alt is not None else site.get("alt"))
+            moved.append(site)
+    if moved:
+        register.upsert(moved)
+    return len(moved)
 
 
 def sync(api, dry_run: bool = False) -> None:
@@ -155,16 +197,15 @@ def sync(api, dry_run: bool = False) -> None:
     for s in provisional:
         index.add(s)
 
-    counts = {"auto": 0, "to_confirm": 0, "provisional": 0, "manual": 0}
-    used = set()
-    for o in outings:
-        if o.get("takeoff_site_status") == "manual":
-            counts["manual"] += 1
-            used.add(o.get("takeoff_site_id"))
-            continue
-        status, site = tie_outing(o, index, register)
-        counts[status] += 1
-        used.add(site["id"])
+    provisional_by_id = {s["id"]: s for s in provisional}
+    counts, used, assigned = tie_all(outings, index, register, provisional_by_id)
+
+    # a provisional take-off is the first outing's point: move it to the middle of its outings, then tie them again
+    moved = recentre(register, outings, assigned, provisional_by_id)
+    if moved:
+        index = SiteIndex(official + list(provisional_by_id.values()))
+        counts, used, assigned = tie_all(outings, index, register, provisional_by_id)
+    print(f"provisional take-offs moved to the middle of their outings: {moved}")
     print("outings tied: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
     unused = [s["id"] for s in provisional if s["id"] not in used]
     register.delete_sites(unused)
