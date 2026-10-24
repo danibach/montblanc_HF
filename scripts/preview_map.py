@@ -153,6 +153,24 @@ def register_in_memory(rows: list[dict], outings: list, with_osm: bool = True) -
         key = f"{used[site_id]['source']} {status}"
         counts[key] = counts.get(key, 0) + 1
     print("outings tied: " + ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())), flush=True)
+
+    # the routes of each take-off, as scripts/sync_sites.py makes them (src/mbhf/routes.py)
+    from mbhf.routes import Climb, routes_of
+    by_site = {}
+    for o in outings:
+        if len((o[13] or {}).get("line") or []) > 1:
+            by_site.setdefault(o[14], []).append(Climb(o[0], o[13]["line"], o[9]))
+    route_of, routes = {}, []
+    for site_id, climbs in by_site.items():
+        for r in routes_of(climbs):
+            rid = len(routes) + 1
+            routes.append([rid, site_id, r["name"], r["line"]])
+            for oid in r["outing_ids"]:
+                route_of[oid] = rid
+    for o in outings:
+        o.append(route_of.get(o[0]))
+    print(f"routes: {len(routes)} for {len(by_site)} take-offs ({len(route_of)} climbs)", flush=True)
+    register_in_memory.routes = routes
     return [[s["id"], s["name"], s["lat"], s["lon"], s["alt"], s["source"], s.get("wind_ok"), s.get("hike_and_fly")]
             for s in used.values()]
 
@@ -179,6 +197,7 @@ def main() -> int:
     args = ap.parse_args()
     outings, tracks = live() if args.real else made_up(args.crowded)
     sites = register_in_memory(live.rows, outings, not args.no_osm) if args.real and args.sites else []
+    routes = getattr(register_in_memory, "routes", [])
     site = copy_site(Path(tempfile.mkdtemp(prefix="hf-preview-")), args.port)
 
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -200,6 +219,8 @@ def main() -> int:
             self.rfile.read(int(self.headers.get("content-length") or 0))
             if self.path.startswith("/rest/v1/rpc/map_outings"):
                 return self.send_json(outings)
+            if self.path.startswith("/rest/v1/rpc/map_routes"):
+                return self.send_json(routes)
             self.send_json(sites if self.path.startswith("/rest/v1/rpc/map_takeoff_sites") else {})
 
         def do_GET(self):

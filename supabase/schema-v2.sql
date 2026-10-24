@@ -132,6 +132,25 @@ alter table public.outings add column if not exists takeoff_site_status text
 alter table public.outings add column if not exists takeoff_site_m real;
 create index if not exists outings_takeoff_site_idx on public.outings (takeoff_site_id);
 
+-- routes: the climbs to one take-off that follow the same way up (src/mbhf/routes.py), made again by the server;
+-- see migration-2026-10-23-routes.sql
+create table if not exists public.routes (
+  id bigint generated always as identity primary key,
+  takeoff_site_id bigint not null references public.takeoff_sites (id) on delete cascade,
+  name text not null,
+  start_place text,
+  line jsonb not null,
+  outing_count integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+create index if not exists routes_site_idx on public.routes (takeoff_site_id);
+alter table public.routes enable row level security;
+drop policy if exists "Routes are public" on public.routes;
+create policy "Routes are public" on public.routes for select to anon, authenticated using (true);
+revoke all on public.routes from anon, authenticated;
+grant select on public.routes to anon, authenticated;
+alter table public.outings add column if not exists route_id bigint references public.routes (id) on delete set null;
+
 create index if not exists outings_verified_idx on public.outings (verified) where not verified;
 create index if not exists outings_list_idx on public.outings (status, outing_date desc);
 create index if not exists outings_user_idx on public.outings (user_id, outing_date desc);
@@ -242,12 +261,12 @@ $$;
 
 -- the public, verified outings for the take-off map, as one JSON array of [id, take-off lat, lon, alt, take-off
 -- name, title, date, D+ on foot, km on foot, start place, pilot, highest point, pilot id, climb, take-off id, tie
--- status]. One JSON value rather than rows, so the API row limit (1,000) does not cut the map.
+-- status, route id]. One JSON value rather than rows, so the API row limit (1,000) does not cut the map.
 create or replace function public.map_outings() returns json
 language sql stable as $$
   select coalesce(json_agg(json_build_array(o.id, o.takeoff_lat, o.takeoff_lon, o.takeoff_alt, o.takeoff_name, o.title,
            o.outing_date, o.dplus_m, o.walk_km, o.start_place, p.display_name, o.summit_alt, o.user_id, o.climb,
-           o.takeoff_site_id, o.takeoff_site_status)
+           o.takeoff_site_id, o.takeoff_site_status, o.route_id)
          order by o.outing_date desc), '[]'::json)
   from public.outings o join public.profiles p on p.id = o.user_id
   where o.status = 'published' and o.verified and not o.hidden
@@ -267,6 +286,16 @@ grant execute on function public.ranking(int, text, int) to anon, authenticated;
 grant execute on function public.outing_filters() to anon, authenticated;
 grant execute on function public.map_outings() to anon, authenticated;
 grant execute on function public.map_takeoff_sites() to anon, authenticated;
+
+-- the routes of the map's outings: [id, take-off id, name, line]
+create or replace function public.map_routes() returns json
+language sql stable as $$
+  select coalesce(json_agg(json_build_array(r.id, r.takeoff_site_id, r.name, r.line)), '[]'::json)
+  from public.routes r
+  where r.id in (select o.route_id from public.outings o
+                 where o.status = 'published' and o.verified and not o.hidden and o.route_id is not null)
+$$;
+grant execute on function public.map_routes() to anon, authenticated;
 
 -- ---------------------------------------------------------------------------------------------
 -- delete my account: the site first deletes the person's files, then calls this.

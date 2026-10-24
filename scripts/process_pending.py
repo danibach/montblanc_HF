@@ -173,7 +173,7 @@ def tie_takeoff(api: Api, outing_id: str, values: dict) -> None:
     around it. Apart from the rest: an error here (for example the register is not there yet,
     migration-2026-10-23-takeoff-sites.sql not run) must never reject an outing."""
     try:
-        from sync_sites import Register, tie_outing
+        from sync_sites import Register, rebuild_routes, tie_outing
         from mbhf.sites import SiteIndex
 
         lat, lon = values.get("takeoff_lat"), values.get("takeoff_lon")
@@ -184,6 +184,11 @@ def tie_takeoff(api: Api, outing_id: str, values: dict) -> None:
                                                 f"&lon=gte.{lon - 0.015}&lon=lte.{lon + 0.015}")
         status, site = tie_outing({**values, "id": outing_id}, SiteIndex(near), register)
         print(f"  take-off: {site['name']} ({status})")
+        # its routes made again with this climb (routes table: migration-2026-10-23-routes.sql)
+        try:
+            print(f"  routes at this take-off: {rebuild_routes(register, site['id'])}")
+        except Exception as exc:
+            print(f"  routes not made: {exc}")
     except Exception as exc:
         print(f"  take-off not tied: {exc}")
 

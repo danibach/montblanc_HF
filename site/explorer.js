@@ -256,7 +256,7 @@ function season(o) {
  * full tracks; ``sites`` are the take-offs of the register (getMapSites()). Returns {element, start}: start() is
  * called once the element is in the page.
  */
-export function buildExplorer(rows, loadTraces, sites = []) {
+export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': 'Map of the take-offs' });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
@@ -467,16 +467,20 @@ export function buildExplorer(rows, loadTraces, sites = []) {
       }
       if (mine !== request) return;
     }
-    // Many climbs: the heat map of the ways up (shown from ROUTES_ZOOM on) replaces a tangle of lines, and an
-    // outing's line appears only while it is hovered or kept lit.
+    // Many climbs: the heat map of the ways up (shown from ROUTES_ZOOM on) replaces a tangle of lines. With routes
+    // (the climbs that follow the same way gathered by the server), one line per route instead. Either way an
+    // outing's own line appears only while it is hovered or kept lit.
     const crowded = climbOfId.size > MANY_CLIMBS;
+    const siteRoutes = new Map(routes.filter((r) => sp.site && r.site_id === sp.site.id).map((r) => [r.id, r]));
+    const byRoute = sp.outings.some((o) => siteRoutes.has(o.route_id));
+    const onDemand = crowded || byRoute;
     const lines = new Map();
     const bounds = L.latLngBounds([[sp.lat, sp.lon]]);
     let selected = null;
     const restyle = (hot) => {
       for (const [id, line] of lines) {
         const lit = id === hot || id === selected;
-        if (crowded) {
+        if (onDemand) {
           // through the group: a line only taken off the map would stay in it and never come back
           if (lit) climbs.addLayer(line.setStyle(CLIMB_HOT));
           else climbs.removeLayer(line);
@@ -494,7 +498,7 @@ export function buildExplorer(rows, loadTraces, sites = []) {
       const climb = climbOfId.get(o.id);
       if (!climb) continue;
       const line = L.polyline(climb.line, CLIMB);
-      if (!crowded) line.addTo(climbs);
+      if (!onDemand) line.addTo(climbs);
       line.on('mouseover', () => restyle(o.id));
       line.on('mouseout', () => restyle(null));
       line.on('click', () => {
@@ -525,40 +529,79 @@ export function buildExplorer(rows, loadTraces, sites = []) {
       return li;
     }
 
-    // the list: one group per start place (largest first), sorted as chosen, PAGE outings at a time
+    // the list: one group per route (or per start place for the outings not in a route yet), largest first, sorted
+    // as chosen, PAGE outings at a time
     const groups = new Map();
+    const labels = new Map();
     for (const o of sp.outings) {
-      const place = o.start_place || 'an unnamed start';
-      groups.set(place, [...(groups.get(place) || []), o]);
+      const route = siteRoutes.get(o.route_id);
+      const key = route ? `route:${route.id}` : `place:${o.start_place || ''}`;
+      labels.set(key, route ? route.name : `From ${o.start_place || 'an unnamed start'}`);
+      groups.set(key, [...(groups.get(key) || []), o]);
     }
     const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+
+    // a line per route, the thicker the more outings (of the ones the filters keep)
+    const routeLines = new Map();
+    for (const [key, outings] of ordered) {
+      const route = key.startsWith('route:') ? siteRoutes.get(Number(key.slice(6))) : null;
+      if (!route || !route.line || route.line.length < 2) continue;
+      const style = { ...CLIMB, opacity: 0.85, weight: Math.round(3 + 2 * Math.log2(outings.length)) };
+      const line = L.polyline(route.line, style).addTo(climbs);
+      line.bindTooltip(h('span', null, `${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
+      routeLines.set(key, { line, style });
+      bounds.extend(line.getBounds());
+    }
+    const median = (xs) => {
+      const v = xs.filter((x) => x != null).sort((a, b) => a - b);
+      return v.length ? v[Math.floor((v.length - 1) / 2)] : null;
+    };
+    // median numbers of a group's climbs: « ↗ 630 m · 6.4 km · 1 h 50 »
+    function typical(outings) {
+      const cs = outings.map((o) => climbOfId.get(o.id)).filter(Boolean);
+      if (!cs.length) return '';
+      const d = median(outings.map((o) => climbDplus(o, climbOfId.get(o.id))));
+      const km = median(cs.map((c) => c.km));
+      const t = median(cs.map((c) => c.duration_s));
+      return [d != null ? `↗ ${fmtInt(d)} m` : null, km != null ? fmtKm(km) : null, t != null ? `⏱ ${fmtDur(t)}` : null]
+        .filter(Boolean).join(' · ') + (outings.length > 1 ? ' (median)' : '');
+    }
     const sortPick = h('select', { id: 'm-sort', 'aria-label': 'Sort the outings' },
       Object.entries(SORTS).map(([k, s]) => h('option', { value: k }, s.label)));
     const open = new Set(sp.outings.length <= PAGE ? ordered.map((g) => g[0]) : [ordered[0][0]]);
     const pages = new Map();
     function renderList() {
       const by = SORTS[sortPick.value].by;
-      list.replaceChildren(...ordered.map(([place, outings]) => {
+      list.replaceChildren(...ordered.map(([key, outings]) => {
         const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
-        const n = pages.get(place) || PAGE;
+        const n = pages.get(key) || PAGE;
         const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
         const left = items.length - n;
         const more = left > 0
-          ? h('button', { class: 'more', onclick: () => { pages.set(place, n + PAGE); renderList(); } },
+          ? h('button', { class: 'more', onclick: () => { pages.set(key, n + PAGE); renderList(); } },
             left > PAGE ? `Show ${PAGE} more (${left} left)` : `Show the last ${plural(left, 'outing')}`)
           : null;
-        const group = h('details', { class: 'start-group', open: open.has(place) },
-          h('summary', null, `From ${place}`, h('span', { class: 'hint' }, ` · ${plural(outings.length, 'outing')}`)), body, more);
-        group.addEventListener('toggle', () => { if (group.open) open.add(place); else open.delete(place); });
+        const numbers = typical(outings);
+        const summary = h('summary', null, labels.get(key), h('span', { class: 'hint' }, ` · ${plural(outings.length, 'outing')}`),
+          key.startsWith('route:') && numbers ? h('span', { class: 'route-nums' }, numbers) : null);
+        const drawn = routeLines.get(key);
+        if (drawn) {
+          summary.addEventListener('mouseenter', () => drawn.line.setStyle({ ...CLIMB_HOT, weight: drawn.style.weight + 1 }).bringToFront());
+          summary.addEventListener('mouseleave', () => drawn.line.setStyle(drawn.style));
+        }
+        const group = h('details', { class: 'start-group', open: open.has(key) }, summary, body, more);
+        group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
         return group;
       }));
     }
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, 'Sort'), sortPick));
     renderList();
-    status.textContent = crowded
-      ? `${plural(climbOfId.size, 'climb')}: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.`
-      : 'Hover an outing to light its climb; click it to keep it lit.';
+    status.textContent = byRoute
+      ? `${plural(routeLines.size, 'route')} up to this take-off: the thicker the line, the more outings. Hover a route to light it, an outing to see its own climb.`
+      : crowded
+        ? `${plural(climbOfId.size, 'climb')}: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.`
+        : 'Hover an outing to light its climb; click it to keep it lit.';
     if (lines.size) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     if (crowded && map.getZoom() < ROUTES_ZOOM) map.setZoom(ROUTES_ZOOM); // close enough for the heat of the ways up
   }
