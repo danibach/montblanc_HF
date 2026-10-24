@@ -54,7 +54,7 @@ function setNav(name) {
 }
 
 function show(...nodes) {
-  view.replaceChildren(...nodes.flat().filter(Boolean));
+  view.replaceChildren(...nodes.flat(Infinity).filter(Boolean));
 }
 
 function loading() {
