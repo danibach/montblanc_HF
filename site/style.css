@@ -170,3 +170,7 @@ th button.sort { all: unset; cursor: pointer; font: inherit; color: inherit; }
 th button.sort:hover, th button.sort:focus-visible { text-decoration: underline; }
 th[aria-sort] { color: var(--ink); }
 .pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1rem 0; }
+
+/* The heat map is a canvas laid over the whole map: without this it catches the mouse and the lines under it
+   (routes, climbs) can be neither hovered nor clicked. The map still drags and zooms through it. */
+.leaflet-heatmap-layer { pointer-events: none; }
