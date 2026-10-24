@@ -549,8 +549,29 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       const style = { ...CLIMB, opacity: 0.85, weight: Math.round(3 + 2 * Math.log2(outings.length)) };
       const line = L.polyline(route.line, style).addTo(climbs);
       line.bindTooltip(h('span', null, `${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
+      // a route lights up under the pointer; a click keeps it lit (and opens it in the list), a second click lets it go
+      line.on('mouseover', () => paintRoute(key, true));
+      line.on('mouseout', () => paintRoute(key, false));
+      line.on('click', () => selectRoute(key));
       routeLines.set(key, { line, style });
       bounds.extend(line.getBounds());
+    }
+    let selectedRoute = null;
+    const paintRoute = (key, hover) => {
+      const drawn = routeLines.get(key);
+      if (!drawn) return;
+      const lit = hover || selectedRoute === key;
+      drawn.line.setStyle(lit ? { ...CLIMB_HOT, weight: drawn.style.weight + 1 } : drawn.style);
+      if (lit) drawn.line.bringToFront();
+    };
+    function selectRoute(key) {
+      const before = selectedRoute;
+      selectedRoute = before === key ? null : key;
+      if (before) paintRoute(before, false);
+      if (selectedRoute) { paintRoute(selectedRoute, true); open.add(selectedRoute); }
+      renderList();
+      const group = selectedRoute && list.querySelector(`[data-key="${selectedRoute}"]`);
+      if (group) group.scrollIntoView({ block: 'nearest' });
     }
     const median = (xs) => {
       const v = xs.filter((x) => x != null).sort((a, b) => a - b);
@@ -584,12 +605,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
         const numbers = typical(outings);
         const summary = h('summary', null, labels.get(key), h('span', { class: 'hint' }, ` · ${plural(outings.length, 'outing')}`),
           key.startsWith('route:') && numbers ? h('span', { class: 'route-nums' }, numbers) : null);
-        const drawn = routeLines.get(key);
-        if (drawn) {
-          summary.addEventListener('mouseenter', () => drawn.line.setStyle({ ...CLIMB_HOT, weight: drawn.style.weight + 1 }).bringToFront());
-          summary.addEventListener('mouseleave', () => drawn.line.setStyle(drawn.style));
+        if (routeLines.has(key)) {
+          summary.addEventListener('mouseenter', () => paintRoute(key, true));
+          summary.addEventListener('mouseleave', () => paintRoute(key, false));
         }
-        const group = h('details', { class: 'start-group', open: open.has(key) }, summary, body, more);
+        const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, body, more);
         group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
         return group;
       }));
@@ -598,7 +618,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, 'Sort'), sortPick));
     renderList();
     status.textContent = byRoute
-      ? `${plural(routeLines.size, 'route')} up to this take-off: the thicker the line, the more outings. Hover a route to light it, an outing to see its own climb.`
+      ? `${plural(routeLines.size, 'route')} up to this take-off: the thicker the line, the more outings. Hover a route to light it and click it to keep it lit; hover an outing to see its own climb.`
       : crowded
         ? `${plural(climbOfId.size, 'climb')}: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.`
         : 'Hover an outing to light its climb; click it to keep it lit.';

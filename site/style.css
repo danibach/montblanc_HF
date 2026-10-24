@@ -124,6 +124,7 @@ body.wide main { max-width: none; }
 .start-group { margin: .5rem 0; }
 .start-group summary { cursor: pointer; font-weight: 600; padding: .3rem 0; }
 .start-group summary .hint { font-weight: 400; }
+.start-group.on > summary { color: var(--orange); }
 .start-group summary .route-nums { display: block; font-weight: 400; font-size: .82rem; color: var(--muted); margin-left: 1rem; font-variant-numeric: tabular-nums; }
 .start-group .more { width: 100%; margin-bottom: .4rem; }
 /* take-off markers: a round badge with the number of outings */
