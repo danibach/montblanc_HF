@@ -208,10 +208,8 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/1-list.png")
 
     page.goto(BASE)
-    page.wait_for_selector("main h1", timeout=30000)
-    check("My H&Fs" in page.inner_text("main h1") and page.locator("tbody tr").count() == 0, "anonymous: My H&Fs asks to sign in")
-    page.goto(BASE + "#/all")
     page.wait_for_selector("tbody tr", timeout=30000)
+    check(page.url.endswith("#/all"), "anonymous: the entry page sends the visitor to All")
     page.click("tbody tr:first-child a[href^='#/outing']")
     page.wait_for_selector(".stat.big", timeout=30000)
     check(page.inner_text(".stat.big b") == comma(NATIVE["score"]), f"outing page score {page.inner_text('.stat.big b')} = Python {comma(NATIVE['score'])}")

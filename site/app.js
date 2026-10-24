@@ -186,10 +186,8 @@ async function pageOutings(token, { mine }) {
   setNav(mine ? 'home' : 'all');
   const path = mine ? '' : 'all';
   const me = api.state.user;
-  if (mine && !me) {
-    return show(h('h1', null, 'My H&Fs'),
-      notice('info', h('p', null, link('#/login', 'Sign in'), ' to see your own outings here, or browse ', link('#/all', 'all the outings'), '.')));
-  }
+  // Signed out: there are no outings of one's own to show, so the visitor lands on everyone's.
+  if (mine && !me) return location.replace(`${location.pathname}#/all`);
   const q = query();
   const sort = api.SORT_COLUMNS[q.sort] ? q.sort : 'date';
   const dir = q.sort && q.dir === 'asc' ? 'asc' : (q.sort && q.dir === 'desc' ? 'desc' : (sort === 'date' ? 'desc' : 'asc'));
