@@ -192,7 +192,7 @@ const WRITABLE = ['status', 'engine_version', 'score_version', 'title', 'outing_
   'country_code', 'country_name', 'start_lat', 'start_lon', 'start_alt', 'start_place', 'start_commune',
   'summit_name', 'summit_lat', 'summit_lon', 'summit_alt', 'takeoff_name', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt',
   'landing_lat', 'landing_lon', 'landing_alt', 'dplus_m', 'dminus_m', 'walk_km', 'flight_free_km', 'flight_path_km',
-  'score', 'flights', 'trace', 'warnings', 'places_pending', 'manual_flights'];
+  'score', 'flights', 'trace', 'warnings', 'places_pending', 'manual_flights']; // file_parts: set by submitTrack
 
 /** Two flights are the same when they overlap for at least half of the shorter one (src/mbhf/duplicates.py). */
 function sameFlight(a, b) {
@@ -225,25 +225,47 @@ export function duplicateMessage(o) {
   return `This flight is already in ${what}${when}, sent from another file. The same flight counts once: to replace it, delete that outing first.`;
 }
 
+/** The fingerprint of an outing in several files: the SHA-256 of their own, one per line, in time order
+ * (src/mbhf/multi.py, combined_sha256). */
+export async function combinedSha256(hashes) {
+  return sha256Hex(new TextEncoder().encode(hashes.join('\n')));
+}
+
+/** Store the original file(s) privately and add the outing. ``file`` is a File, or the Files of one outing in
+ * several files (in time order): they are all stored, listed in file_parts, and the server joins them again. */
 export async function submitTrack(file, onProgress, result) {
-  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const files = Array.isArray(file) ? file : [file];
   const twin = await sameFlightAs(result);
   if (twin) throw new Error(duplicateMessage(twin));
-  const buffer = await file.arrayBuffer();
-  const hash = await sha256Hex(buffer);
   const fields = {};
   for (const k of WRITABLE) if (result && result[k] !== undefined) fields[k] = result[k];
-  const path = `${state.user.id}/${crypto.randomUUID()}.${ext}`;
+  const parts = [];
+  for (const f of files) {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    parts.push({ file: f, ext, path: `${state.user.id}/${crypto.randomUUID()}.${ext}`, size: f.size,
+      sha256: await sha256Hex(await f.arrayBuffer()) });
+  }
+  const paths = parts.map((p) => p.path);
   onProgress && onProgress('Uploading…');
-  const up = await sb.storage.from(BUCKET).upload(path, file, { contentType: 'application/octet-stream', upsert: false });
-  if (up.error) throw new Error(up.error.message || 'The file could not be uploaded.');
-  const ins = await sb
-    .from('outings')
-    .insert({ ...fields, file_path: path, file_format: ext, file_size: file.size, file_sha256: hash, status: 'published' })
-    .select('id')
-    .single();
+  for (const p of parts) {
+    const up = await sb.storage.from(BUCKET).upload(p.path, p.file, { contentType: 'application/octet-stream', upsert: false });
+    if (up.error) {
+      await sb.storage.from(BUCKET).remove(paths);
+      throw new Error(up.error.message || 'The file could not be uploaded.');
+    }
+  }
+  const row = { ...fields, file_path: parts[0].path, file_format: parts[0].ext, status: 'published' };
+  if (parts.length === 1) Object.assign(row, { file_size: parts[0].size, file_sha256: parts[0].sha256 });
+  else {
+    Object.assign(row, {
+      file_size: parts.reduce((s, p) => s + p.size, 0),
+      file_sha256: await combinedSha256(parts.map((p) => p.sha256)),
+      file_parts: parts.map((p) => ({ path: p.path, format: p.ext, size: p.size, sha256: p.sha256, name: p.file.name.slice(0, 80) })),
+    });
+  }
+  const ins = await sb.from('outings').insert(row).select('id').single();
   if (ins.error) {
-    await sb.storage.from(BUCKET).remove([path]);
+    await sb.storage.from(BUCKET).remove(paths);
     if (ins.error.code === '23505') throw new Error('This track was already submitted.');
     if (ins.error.code === 'P0001') throw new Error('You reached the daily upload limit. Try again tomorrow.');
     throw new Error(ins.error.message);
@@ -263,10 +285,26 @@ export async function alreadySent(hashes) {
   return found;
 }
 
+/** Every stored file of an outing (one, or the parts of an outing in several files). */
+function filePaths(outing) {
+  const parts = (outing.file_parts || []).map((p) => p && p.path);
+  return [...new Set([outing.file_path, ...parts].filter(Boolean))];
+}
+
+/** The outing's file_parts, when the row at hand was read without them (lists) — empty on a database that does
+ * not have the column yet (migration-2026-10-25-file-parts.sql). */
+async function withParts(outing) {
+  if ('file_parts' in outing) return outing;
+  const { data, error } = await sb.from('outings').select('file_parts').eq('id', outing.id).maybeSingle();
+  return error || !data ? outing : { ...outing, file_parts: data.file_parts };
+}
+
 export async function deleteOuting(outing) {
+  outing = await withParts(outing);
   const del = await sb.from('outings').delete().eq('id', outing.id);
   if (del.error) throw new Error(del.error.message);
-  if (outing.file_path) await sb.storage.from(BUCKET).remove([outing.file_path]);
+  const paths = filePaths(outing);
+  if (paths.length) await sb.storage.from(BUCKET).remove(paths);
 }
 
 export async function reportOuting(outingId, reason) {
@@ -276,7 +314,8 @@ export async function reportOuting(outingId, reason) {
 
 export async function deleteAccount() {
   const rows = await listUserOutings(state.user.id);
-  const paths = rows.map((r) => r.file_path).filter(Boolean);
+  const withAll = await sb.from('outings').select('id,file_path,file_parts').eq('user_id', state.user.id).limit(1000);
+  const paths = (withAll.error ? rows : withAll.data || []).flatMap(filePaths);
   for (let i = 0; i < paths.length; i += 100) {
     const { error } = await sb.storage.from(BUCKET).remove(paths.slice(i, i + 100));
     if (error) throw new Error(error.message);

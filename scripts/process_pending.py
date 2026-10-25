@@ -106,19 +106,22 @@ def look_up_places(outing: dict, attempts: int = 2, timeout: float = 40.0):
 
 
 def to_check(api: Api) -> list:
-    """The outings to check. Without the column manual_flights (migration-2026-10-25-manual-flights.sql not run
-    yet) the job still works, as before."""
+    """The outings to check. Without the column manual_flights (migration-2026-10-25-manual-flights.sql) or
+    file_parts (migration-2026-10-25-file-parts.sql) not run yet, the job still works, without them."""
     base = f"{TO_CHECK}&order=created_at.asc&limit={BATCH}"
     cols = "id,user_id,created_at,file_path,file_format"
-    try:
-        return api.select(f"{base}&select={cols},manual_flights")
-    except RuntimeError as exc:
-        print(f"  manual_flights not read (migration not run?): {exc}")
-        return api.select(f"{base}&select={cols}")
+    for extra in (",manual_flights,file_parts", ",manual_flights", ",file_parts", ""):
+        try:
+            return api.select(f"{base}&select={cols}{extra}")
+        except RuntimeError as exc:
+            if not extra:
+                raise
+            print(f"  {extra[1:]} not read (migration not run?): {exc}")
+    return []
 
 
 def process_pending(api: Api) -> None:
-    from mbhf.analyse import AnalysisError, analyse_bytes
+    from mbhf.analyse import AnalysisError, analyse_files
     from mbhf.rows import outing_row
     from mbhf.terrain import fetch_elevations
     from mbhf.duplicates import duplicate_message, same_flight
@@ -126,16 +129,17 @@ def process_pending(api: Api) -> None:
 
     for row in to_check(api):
         print(f"outing {row['id']} ({row['file_path']})")
+        parts = row.get("file_parts") or [{"path": row["file_path"], "format": row["file_format"]}]
         try:
-            data = api.download(row["file_path"])
-        except RuntimeError as exc:
+            files = [(f"track{k}.{p['format']}", api.download(p["path"])) for k, p in enumerate(parts)]
+        except (RuntimeError, KeyError, TypeError) as exc:
             reject(api, row["id"], OUR_SIDE)
             print(f"  file not read from storage: {exc}")
             continue
         try:
-            # flights the participant marked on the map replace the automatic detection and the ground check
-            result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations,
-                                   manual_ranges=row.get("manual_flights"))
+            # flights the participant marked on the map replace the automatic detection and the ground check (for an
+            # outing in several files, in seconds after the first fix of the first file)
+            result = analyse_files(files, elevation_fetch=fetch_elevations, manual_ranges=row.get("manual_flights"))
         except AnalysisError as exc:
             reject(api, row["id"], str(exc))
             continue
@@ -145,7 +149,9 @@ def process_pending(api: Api) -> None:
             continue
 
         sha = result["file"]["sha256"]
-        twins = api.select(f"file_sha256=eq.{sha}&status=eq.published&id=neq.{row['id']}&select=id&limit=1")
+        # the same file (or, for an outing in several files, one of them) already counted in another outing
+        hashes = [sha] + [p["sha256"] for p in result["file"].get("parts", [])]
+        twins = api.select(f"file_sha256=in.({','.join(hashes)})&status=eq.published&id=neq.{row['id']}&select=id&limit=1")
         if twins:
             reject(api, row["id"], "This track was already submitted.")
             continue

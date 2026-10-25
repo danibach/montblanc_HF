@@ -66,6 +66,28 @@ export async function analyseFile(file) {
   return res.result;
 }
 
+/** Analyse several Files as one outing (they must follow one another: src/mbhf/multi.py). Same result shape
+ * as analyseFile, with result.file.parts describing each file. */
+export async function analyseFiles(files) {
+  await startEngine();
+  const parts = await Promise.all(files.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })));
+  const res = await call({ type: 'analyse_parts', files: parts }, parts.map((p) => p.bytes));
+  if (!res.ok) throw new Error(res.error || 'These files could not be analysed.');
+  return res.result;
+}
+
+/** Which of these Files follow one another and make one outing: lists of positions, e.g. [[0, 2], [1]]. */
+export async function groupFiles(files) {
+  await startEngine();
+  const ends = [];
+  for (const f of files) {
+    const bytes = await f.arrayBuffer();
+    const res = await call({ type: 'ends', name: f.name, bytes }, [bytes]);
+    ends.push(res && res.ok ? res.ends : null);
+  }
+  return call({ type: 'groups', ends });
+}
+
 /**
  * Analyse a File again with the flights the participant marked by hand on the map.
  * `ranges` is a list of [from, to] in seconds after the trace's t0. Same result as analyseFile (the terrain
@@ -73,6 +95,12 @@ export async function analyseFile(file) {
  */
 export async function analyseManual(file, ranges) {
   await startEngine();
+  if (Array.isArray(file)) { // one outing in several files: the ranges are in seconds after the first file's start
+    const files = await Promise.all(file.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })));
+    const res = await call({ type: 'manual_parts', files, ranges }, files.map((f) => f.bytes));
+    if (!res.ok) throw new Error(res.error || 'These files could not be analysed.');
+    return res.result;
+  }
   const bytes = await file.arrayBuffer();
   const res = await call({ type: 'manual', name: file.name, bytes, ranges }, [bytes]);
   if (!res.ok) throw new Error(res.error || 'This file could not be analysed.');
