@@ -192,7 +192,7 @@ const WRITABLE = ['status', 'engine_version', 'score_version', 'title', 'outing_
   'country_code', 'country_name', 'start_lat', 'start_lon', 'start_alt', 'start_place', 'start_commune',
   'summit_name', 'summit_lat', 'summit_lon', 'summit_alt', 'takeoff_name', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt',
   'landing_lat', 'landing_lon', 'landing_alt', 'dplus_m', 'dminus_m', 'walk_km', 'flight_free_km', 'flight_path_km',
-  'score', 'flights', 'trace', 'warnings', 'places_pending'];
+  'score', 'flights', 'trace', 'warnings', 'places_pending', 'manual_flights'];
 
 /** Two flights are the same when they overlap for at least half of the shorter one (src/mbhf/duplicates.py). */
 function sameFlight(a, b) {

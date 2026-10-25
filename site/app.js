@@ -678,12 +678,32 @@ function pageMark() {
     recalc.disabled = true;
     result.replaceChildren(h('p', { class: 'hint pad' }, 'Analysing…'));
     try {
-      const res = await analyseManual(item.file, tool.ranges()); // no ground check: the marking overrides it
+      const ranges = tool.ranges();
+      const res = await analyseManual(item.file, ranges); // no ground check: the marking overrides it
       const o = res.outing;
       if (o.status === 'ok') {
+        const places = await lookUpPlaces(o);
+        const pv = { ...previewRow(res, places), manual_flights: ranges };
+        const publish = h('button', { class: 'primary', id: 'mark-publish' }, 'Publish this outing');
+        const status = h('span', { class: 'hint', role: 'status' });
+        publish.addEventListener('click', async () => {
+          publish.disabled = true;
+          try {
+            const id = await api.submitTrack(item.file, (t) => { status.textContent = t; }, pv);
+            noFlight = noFlight.filter((it) => it !== item);
+            result.replaceChildren(notice('ok', h('p', null, 'Published with the flights you marked. The server uses them too when it checks the result: the "Validation pending" badge disappears within a few minutes.'),
+              h('p', null, link(`#/outing/${id}`, 'See your outing'), ' · ', link('#/upload', 'Back to the list'))));
+          } catch (e) {
+            status.textContent = '';
+            publish.disabled = false;
+            result.prepend(notice('error', h('p', null, e.message)));
+          }
+        });
         result.replaceChildren(
           notice('ok', h('p', null, h('b', null, `${fmtInt(o.score)} points`), ` — ${fmtInt(o.dplus_m)} m climbed on foot and ${fmtInt(o.dminus_m)} m flown down.`)),
-          h('p', { class: 'hint' }, 'This is a check of the result only. Publishing an outing with hand-marked flights is not available yet.'));
+          h('div', { class: 'publish-bar' },
+            h('div', { class: 'row' }, publish, status),
+            h('p', { class: 'hint' }, 'Not published yet. By publishing you agree that this track — map, profile and statistics — is shown publicly. The original file stays private. Your marked flights are published with it and are not checked against the ground.')));
       } else {
         result.replaceChildren(notice('error', h('p', null, refusalText(o))));
       }

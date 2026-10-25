@@ -60,3 +60,64 @@ def test_nothing_marked_is_an_error_not_a_crash():
 def test_normal_analysis_unchanged():
     data = gpx_bytes(as_track(slow_ski_descent()))
     assert json.loads(analyse_json("ski.gpx", data))["result"]["outing"]["reason"] == "no_flight"
+
+
+# ---- the server job: the same marking, sent by the browser, checked again
+
+import sys
+from pathlib import Path
+
+import pytest
+
+from mbhf.analyse import AnalysisError, clean_manual_ranges
+
+
+def test_server_ranges_are_checked():
+    assert clean_manual_ranges([[10, 20.5]]) == [[10.0, 20.5]]
+    for bad in (None, [], "x", [[1]], [[1, 2, 3]], [["a", 2]], [[True, 2]], [[-1, 5]], [[5, 5]], [[0, 10 ** 9]], [[1, 2]] * 21):
+        with pytest.raises(AnalysisError):
+            clean_manual_ranges(bad)
+
+
+def test_server_analysis_follows_the_marking_and_skips_the_ground_check():
+    data = gpx_bytes(as_track(slow_ski_descent()))
+    ranges = _ranges(data)
+    server = analyse_bytes("track.gpx", data, elevation_fetch=lambda samples: [10_000.0] * len(samples), manual_ranges=ranges)
+    browser = json.loads(manual_json("ski.gpx", data, json.dumps(ranges)))["result"]
+    assert server["outing"]["status"] == "ok"
+    assert server["outing"]["score"] == browser["outing"]["score"]
+    assert server["outing"]["flight_free_km"] == browser["outing"]["flight_free_km"]
+    # without the marking the same file stays refused
+    assert analyse_bytes("track.gpx", data)["outing"]["status"] == "rejected"
+
+
+def test_job_publishes_a_hand_marked_outing(monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import process_pending as job
+
+    data = gpx_bytes(as_track(slow_ski_descent()))
+    patches = []
+
+    class FakeApi(job.Api):
+        def __init__(self):
+            pass
+
+        def select(self, query):
+            if "manual_flights" in query and "file_sha256" not in query and "user_id=eq" not in query:
+                return [{"id": "o1", "user_id": "u", "created_at": "2026-10-25T06:00:00+00:00", "file_path": "u/f.gpx",
+                         "file_format": "gpx", "manual_flights": _ranges(data)}]
+            return []
+
+        def download(self, path):
+            return data
+
+        def patch(self, outing_id, values):
+            patches.append(values)
+
+    monkeypatch.setattr(job, "look_up_places", lambda *a, **k: None)
+    monkeypatch.setattr(job, "tie_takeoff", lambda *a, **k: None)
+    monkeypatch.setattr(job, "save_climb", lambda *a, **k: None)
+    monkeypatch.setattr("mbhf.terrain.fetch_elevations", lambda samples: [10_000.0] * len(samples))
+    job.process_pending(FakeApi())
+    assert patches and patches[0]["status"] == "published" and patches[0]["verified"] is True
+    assert patches[0]["dminus_m"] > 300
