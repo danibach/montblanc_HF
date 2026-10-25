@@ -89,5 +89,5 @@ def test_mapped_paragliding_site_names_the_takeoff():
     resp = {"elements": RESPONSE["elements"] + [way]}
     p = resolve_places(OUTING, resp)
     assert p["takeoff"] == {"name": "Planfait", "osm_id": 5, "kind": "site"}
-    assert place_title(p, "2021-09-29", 2205) == "Planfait"
+    assert place_title(p, "2021-09-29", 2205) == "Planfait from Les Granges"  # « {take-off} from {start} »
     assert "free_flying" in overpass_query(OUTING)
