@@ -123,7 +123,7 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
-    h('td', { class: 'num' }, fmtDist(r.flight_path_km)),
+    h('td', { class: 'num' }, fmtDist(r.flight_free_km)),
     h('td', { class: 'num score' }, fmtInt(r.score)),
     showStatus ? h('td', null, statusBadge(r)) : null));
 }
@@ -373,7 +373,7 @@ async function pageUser(token, id, opts = {}) {
       stat(`${fmtInt(sum('dplus_m'))} m`, 'D+ on foot'),
       stat(`${fmtInt(sum('dminus_m'))} m`, 'D− in flight'),
       stat(fmtKm(sum('walk_km')), 'Distance on foot'),
-      stat(fmtKm(sum('flight_path_km')), 'Total distance on flight')),
+      stat(fmtKm(sum('flight_free_km')), 'Total distance on flight')),
   ];
   if (mine && !profile.display_name) nodes.push(nameForm('Choose the name shown next to your outings'));
   if (mine && others.length) {

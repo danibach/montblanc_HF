@@ -82,7 +82,7 @@ export const SORT_COLUMNS = {
   dplus: 'dplus_m',
   dminus: 'dminus_m',
   hike: 'walk_km',
-  fly: 'flight_path_km',
+  fly: 'flight_free_km',
   score: 'score',
 };
 

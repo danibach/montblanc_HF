@@ -94,9 +94,9 @@ def supabase(route, request):
         return j(route, {"years": [2026], "countries": [{"code": "FR", "name": "France"}]})
     if u.path == "/rest/v1/rpc/ranking":
         body = request.post_data_json or {}
-        rows = [{"user_id": UID, "display_name": "Alice", "outings": 1, "dplus": ROW1["dplus_m"], "dminus": ROW1["dminus_m"], "walk_km": ROW1["walk_km"], "flight_km": ROW1["flight_path_km"], "score": ROW1["score"]}]
+        rows = [{"user_id": UID, "display_name": "Alice", "outings": 1, "dplus": ROW1["dplus_m"], "dminus": ROW1["dminus_m"], "walk_km": ROW1["walk_km"], "flight_km": ROW1["flight_free_km"], "score": ROW1["score"]}]
         if body.get("p_year") != 2025:
-            rows.append({"user_id": OTHER, "display_name": "Bruno", "outings": 1, "dplus": ROW2["dplus_m"], "dminus": ROW2["dminus_m"], "walk_km": ROW2["walk_km"], "flight_km": ROW2["flight_path_km"], "score": ROW2["score"]})
+            rows.append({"user_id": OTHER, "display_name": "Bruno", "outings": 1, "dplus": ROW2["dplus_m"], "dminus": ROW2["dminus_m"], "walk_km": ROW2["walk_km"], "flight_km": ROW2["flight_free_km"], "score": ROW2["score"]})
         return j(route, sorted(rows, key=lambda r: -r["score"]))
     if u.path == "/rest/v1/rpc/map_outings":
         # like the SQL function: only the verified outings (ROW1), not the one waiting for the server (ROW2)
@@ -248,7 +248,7 @@ with sync_playwright() as p:
     best = max(ROW1["score"], ROW2["score"])
     check(comma(best) in page.locator("tbody tr").nth(0).inner_text(), "ranking: best score first")
     check("Hike (km)" in page.inner_text("thead") and "Fly (km)" in page.inner_text("thead"), "ranking: distance columns")
-    check(f"{ROW1['walk_km']:.1f}" in page.inner_text("tbody") and f"{ROW1['flight_path_km']:.1f}" in page.inner_text("tbody"), "ranking: a pilot's km on foot and in flight")
+    check(f"{ROW1['walk_km']:.1f}" in page.inner_text("tbody") and f"{ROW1['flight_free_km']:.1f}" in page.inner_text("tbody"), "ranking: a pilot's km on foot and in flight")
     page.select_option("#f-year", "2026")
     page.wait_for_function("location.hash.includes('year=2026')")
     page.screenshot(path=f"{SHOTS}/3-ranking.png")

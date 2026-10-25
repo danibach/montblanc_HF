@@ -46,7 +46,7 @@ export function buildHelp() {
         ['D+ (m)', 'Height climbed on foot, in metres: the sum of the climbs, on an altitude averaged over about a minute. A dip of less than 15 m does not end a climb, which keeps GPS noise out. The climb after the last flight counts too (back to the car, up to the bivouac); a climb given up before a ride in a vehicle does not.'],
         ['D− (m)', 'Height lost in flight, in metres: for each flight, the altitude at take-off minus the altitude at landing. Thermals are ignored: only the net difference counts, so climbing in a thermal does not add anything.'],
         ['Hike (km)', 'Distance covered on foot, in kilometres, summed over the whole track. Rides in a vehicle (car, lift, bike) are not counted.'],
-        ['Fly (km)', 'Length of the path flown, in kilometres, summed over all the flights of the outing. This is not the FAI free distance, which the page of an outing shows separately, as "Free distance FAI" (the longest straight route through up to three turn points); it is not part of the score.'],
+        ['Fly (km)', 'The FAI free distance, in kilometres: the longest route flown from a start point through up to three turn points to a finish, summed over all the flights of the outing. It is the "Free distance FAI" of the page of an outing. It is not part of the score.'],
         ['Score', 'D+ on foot plus D− in flight, in metres (see below).'],
         ['Outings', 'In Pilots: the number of published outings of the pilot. The totals follow the year and country filters.'],
       ])),
