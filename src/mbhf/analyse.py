@@ -92,6 +92,9 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
     info = {"name": shown, "format": ext[1:], "size": len(data), "sha256": sha256_hex(data), "fixes": fixes}
     if blanked:
         info["altitude_ignored"] = blanked
+    editor = advice.editor_of(data)
+    if editor:
+        info["editor"] = editor
     return Prepared(info, track, seg)
 
 
@@ -105,7 +108,7 @@ def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
     if notes:
         outing["warnings"] = list(outing["warnings"]) + [n for n in notes if n not in outing["warnings"]]
     # the words shown when the outing does not count (None when it counts)
-    outing["reason_text"] = advice.refusal(outing, prepared.track.points)
+    outing["reason_text"] = advice.refusal(outing, prepared.track.points, editor=prepared.info.get("editor"))
     return {
         "file": prepared.info,
         "outing": outing,
