@@ -332,7 +332,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   function overview() {
     current = null;
     request += 1;
-    if (climbs) climbs.clearLayers();
+    if (climbs) { climbs.eachLayer((l) => l.closeTooltip()); climbs.clearLayers(); }
     element.querySelector('.explorer').classList.remove('has-spot');
     side.replaceChildren(
       h('h2', null, 'Take-offs'),
@@ -349,6 +349,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
 
   // markers again after each move: spots close on screen become one group
   function draw() {
+    // a marker taken away under the pointer gets no mouseout: its tooltip would stay on the map
+    markers.eachLayer((mk) => mk.closeTooltip());
     markers.clearLayers();
     const zoom = map.getZoom();
     const cells = new Map();
@@ -361,7 +363,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       const n = group.reduce((a, sp) => a + sp.outings.length, 0);
       if (group.length === 1) {
         const sp = group[0];
-        const mk = L.marker([sp.lat, sp.lon], { icon: icon(n, sp === current ? 'spot on' : 'spot'), title: sp.name, riseOnHover: true });
+        const mk = L.marker([sp.lat, sp.lon], { icon: icon(n, sp === current ? 'spot on' : 'spot'), riseOnHover: true });
+        // no `title`: the browser's own tooltip came on top of this one and stayed while the pointer did not move
         // a node, not a string: Leaflet would read a string as HTML, and names come from OpenStreetMap
         mk.bindTooltip(h('span', null, `${sp.name} · ${plural(n, 'outing')} · ${plural(sp.pilots, 'pilot')}`), { direction: 'top', offset: [0, -14] });
         mk.on('click', () => openSpot(sp));
@@ -369,7 +372,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       } else {
         const lat = group.reduce((a, sp) => a + sp.lat, 0) / group.length;
         const lon = group.reduce((a, sp) => a + sp.lon, 0) / group.length;
-        const mk = L.marker([lat, lon], { icon: icon(n, 'group'), title: `${group.length} take-offs` });
+        const mk = L.marker([lat, lon], { icon: icon(n, 'group') });
         mk.bindTooltip(h('span', null, `${group.length} take-offs · ${plural(n, 'outing')} — click to zoom in`), { direction: 'top', offset: [0, -16] });
         mk.on('click', () => map.fitBounds(L.latLngBounds(group.map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 15 }));
         markers.addLayer(mk);
@@ -465,6 +468,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   async function openSpot(sp) {
     current = sp;
     const mine = ++request;
+    climbs.eachLayer((l) => l.closeTooltip()); // a line taken away under the pointer keeps its tooltip otherwise
     climbs.clearLayers();
     element.querySelector('.explorer').classList.add('has-spot');
     draw();
