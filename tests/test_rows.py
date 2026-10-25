@@ -11,7 +11,7 @@ def test_row_with_names():
     places = {"country": {"code": "FR", "name": "France"}, "commune": "Servoz", "start_place": "Les Granges",
               "summit": {"name": "Pointe Haute", "osm_id": 20, "ele": 2205}, "takeoff": {"name": "Col", "osm_id": 22, "kind": "peak"}}
     row = outing_row(res, places)
-    assert row["title"] == "Pointe Haute from Les Granges" and row["country_code"] == "FR" and row["places_pending"] is False
+    assert row["title"] == "Pointe Haute" and row["country_code"] == "FR" and row["places_pending"] is False
     assert row["score"] == row["dplus_m"] + row["dminus_m"]
     assert row["takeoff_alt"] > 2000 and row["landing_alt"] < 1500
     assert "i_start" not in row["flights"][0] and len(row["trace"]["t"]) > 10

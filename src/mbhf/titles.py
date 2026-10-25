@@ -1,11 +1,12 @@
-"""The title of an outing: « {take-off} from {start} », decided by Sarah on 25 October 2026.
+"""The title of an outing: the take-off's name alone, decided by Sarah on 25 October 2026 (« {take-off} from {start} »
+was tried the same day and dropped for now).
 
 * the main name is the take-off of the register (FFVL, OpenStreetMap or provisional: as pilots call it), else the
   mapped take-off or the summit reached on foot; a village alone is never the main name;
 * the name is cleaned (``clean_name``): no opening dates (« ouvert du 1/5 au 31/10 »), no season in brackets
   (« (ete) »), no quotes, one language for a bilingual name (« Mont Blanc / Monte Bianco » -> « Mont Blanc »),
   capitals the French way and a few lost accents put back (« cret » -> « Crêt »);
-* « from {start} »: the hamlet or village where the walk started, left out when the name already says it.
+* the same cleaning is used for the names of the register (FFVL, OpenStreetMap), so the map says what the titles say.
 
 Before this, the titles mixed the take-off, the summit and the village, raw FFVL names included
 (« La clusaz - aiguille des calvaires (ete) »), and ten outings were all « Pointe de Beauregard ».
@@ -77,12 +78,7 @@ def clean_name(name: Optional[str], places: tuple = ()) -> Optional[str]:
 
 
 def outing_title(main: Optional[str], start_place: Optional[str], commune: Optional[str] = None) -> Optional[str]:
-    """« {main} from {start_place} » (main cleaned); just the main name when the start says the same or is unknown;
-    None when there is no main name."""
-    m = clean_name(main, (commune, start_place))
-    if not m:
-        return None
-    start = (start_place or "").strip()
-    if not start or _key(start) in _key(m) or _key(m) in _key(start):
-        return m
-    return f"{m} from {start}"
+    """The take-off's name alone, cleaned (Sarah, 25 October 2026: « juste le nom du déco pour l'instant »); the start
+    and commune are only used to drop a village prefix (« La Clusaz - Crêt du Loup » -> « Crêt du Loup »). None when
+    there is no main name."""
+    return clean_name(main, (commune, start_place)) or None

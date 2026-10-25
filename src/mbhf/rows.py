@@ -30,7 +30,7 @@ def has_names(places: Optional[dict]) -> bool:
 
 
 def place_title(places: Optional[dict], date: Optional[str], summit_alt: Optional[float]) -> str:
-    """« {take-off} from {start} » (src/mbhf/titles.py) from the OpenStreetMap names; the server job then gives the
+    """The take-off's name (src/mbhf/titles.py) from the OpenStreetMap names; the server job then gives the
     name of the take-off of the register (scripts/sync_sites.py)."""
     p = places or {}
     takeoff = p.get("takeoff") or {}

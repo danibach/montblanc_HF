@@ -90,7 +90,10 @@ def ffvl_takeoffs(terrains: Iterable[dict]) -> list[dict]:
         if usages is not None and "parapente" not in usages:
             continue
         out.append({
-            "source": "ffvl", "source_id": str(t["suid"]), "name": pretty_name(t.get("toponym") or ""),
+            # the take-off's own name, cleaned (src/mbhf/titles.py): « LA CLUSAZ - CRET DU LOUP (ETE 1ER MAI…) »
+            # -> « Crêt du Loup »
+            "source": "ffvl", "source_id": str(t["suid"]),
+            "name": clean_name(t.get("toponym"), (pretty_name(t.get("city") or ""),)) or pretty_name(t.get("toponym") or ""),
             "lat": float(t["latitude"]), "lon": float(t["longitude"]), "alt": _number(t.get("altitude")),
             "country_code": "FR", "wind_ok": t.get("wind_orientations_ok") or None,
             "hike_and_fly": (t.get("hike_and_fly_description") or "").strip() or None,
@@ -118,7 +121,8 @@ def osm_takeoffs(elements: Iterable[dict]) -> list[dict]:
         if lat is None:
             continue
         out.append({
-            "source": "osm", "source_id": f"{el.get('type', 'node')}/{el['id']}", "name": tags["name"].strip(),
+            "source": "osm", "source_id": f"{el.get('type', 'node')}/{el['id']}",
+            "name": clean_name(tags["name"]) or tags["name"].strip(),
             "lat": float(lat), "lon": float(lon), "alt": _number(tags.get("ele")),
             "country_code": None, "wind_ok": tags.get("free_flying:wind_direction") or None,
             "hike_and_fly": None, "ffvl_status": None,
@@ -197,7 +201,7 @@ def attach(lat: float, lon: float, alt: Optional[float], index: SiteIndex,
 
 def provisional_site(outing: dict) -> dict:
     """A take-off made from an outing that no known take-off is close to."""
-    # not the outing's title: it is « {take-off} from {start} » (src/mbhf/titles.py)
+    # not the outing's title: it may lose a village prefix (src/mbhf/titles.py)
     name = clean_name(outing.get("takeoff_name")) or clean_name(outing.get("summit_name")) or "Take-off"
     if outing.get("takeoff_alt") is not None and name == "Take-off":
         name = f"Take-off · {round(outing['takeoff_alt']):,} m"

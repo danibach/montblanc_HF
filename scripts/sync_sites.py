@@ -10,7 +10,7 @@ Run by GitHub Actions (.github/workflows/sites.yml) once a week and when asked. 
    provisional take-off made from it); an outing tied by hand (``manual``) is left alone;
 5. each provisional take-off is moved to the median of its outings' take-off points (it starts as the first outing's
    point), and the outings are tied again; ones no outing uses any more are removed;
-6. every outing gets the title of its take-off, « Pointe de Beauregard from Les Verrier » (src/mbhf/titles.py);
+6. every outing gets the title of its take-off, « Pointe de Beauregard » (src/mbhf/titles.py);
 7. the routes of every take-off are made again from the climbs (src/mbhf/routes.py) and the outings tied to them.
 ``--dry-run`` reads everything and prints what it would do, without writing.
 New outings are tied when the server checks them (process_pending.py), with the take-offs already in the register.
@@ -143,7 +143,7 @@ def tie_outing(outing: dict, index: SiteIndex, register: Register) -> tuple[str,
 
 
 def title_from_site(site: Optional[dict], outing: dict) -> Optional[str]:
-    """The outing's title from its take-off in the register: « Pointe de Beauregard from Les Verrier »."""
+    """The outing's title from its take-off in the register: « Pointe de Beauregard »."""
     if not site:
         return None
     return outing_title(site.get("name"), outing.get("start_place"), outing.get("start_commune"))
