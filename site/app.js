@@ -15,6 +15,7 @@ import { analyseFile, analyseFiles, analyseManual, checkTerrain, groupFiles, loo
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
 import { buildExplorer } from './explorer.js';
 import { buildMarkTool } from './mark.js';
+import { buildHelp } from './help.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
@@ -34,6 +35,7 @@ function renderAccount() {
   } else {
     box.append(h('a', { href: '#/login' }, 'Sign in'));
   }
+  box.append(h('a', { href: '#/help', class: 'help-link' }, 'Help'));
 }
 
 function renderFooter() {
@@ -121,7 +123,7 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
-    h('td', { class: 'num' }, fmtDist(r.flight_path_km)),
+    h('td', { class: 'num' }, fmtDist(r.flight_free_km)),
     h('td', { class: 'num score' }, fmtInt(r.score)),
     showStatus ? h('td', null, statusBadge(r)) : null));
 }
@@ -371,7 +373,7 @@ async function pageUser(token, id, opts = {}) {
       stat(`${fmtInt(sum('dplus_m'))} m`, 'D+ on foot'),
       stat(`${fmtInt(sum('dminus_m'))} m`, 'D− in flight'),
       stat(fmtKm(sum('walk_km')), 'Distance on foot'),
-      stat(fmtKm(sum('flight_path_km')), 'Total distance on flight')),
+      stat(fmtKm(sum('flight_free_km')), 'Total distance on flight')),
   ];
   if (mine && !profile.display_name) nodes.push(nameForm('Choose the name shown next to your outings'));
   if (mine && others.length) {
@@ -710,6 +712,11 @@ function confirmGroups(groups, out) {
 
 // ---------------------------------------------------------------- mark flights by hand
 
+function pageHelp() {
+  setNav(null);
+  show(buildHelp());
+}
+
 function pageMark() {
   setNav('upload');
   const item = markTarget;
@@ -869,6 +876,7 @@ async function route() {
     else if (path[0] === 'user' && path[1]) { loading(); await pageUser(token, path[1]); }
     else if (path[0] === 'upload') await pageUpload();
     else if (path[0] === 'mark') pageMark();
+    else if (path[0] === 'help') pageHelp();
     else if (path[0] === 'login') pageLogin();
     else { location.hash = '#/'; }
   } catch (err) {

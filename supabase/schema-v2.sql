@@ -283,7 +283,7 @@ returns table (user_id uuid, display_name text, outings bigint, dplus bigint, dm
 language sql stable as $$
   select o.user_id, p.display_name, count(*), coalesce(sum(o.dplus_m), 0)::bigint,
          coalesce(sum(o.dminus_m), 0)::bigint, coalesce(sum(o.score), 0)::bigint,
-         coalesce(sum(o.walk_km), 0)::numeric, coalesce(sum(o.flight_path_km), 0)::numeric
+         coalesce(sum(o.walk_km), 0)::numeric, coalesce(sum(o.flight_free_km), 0)::numeric
   from public.outings o join public.profiles p on p.id = o.user_id
   where o.status = 'published' and not o.hidden
     and (p_year is null or extract(year from o.outing_date) = p_year)
