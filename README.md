@@ -67,6 +67,35 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 4. **Pages**: Settings > Pages > Source: GitHub Actions.
 5. `site/config.js`: set `CONTACT_EMAIL`.
 6. The free Supabase plan has no backups and pauses after a week without activity (the keep-alive in `process.yml` prevents it).
+7. **Backups**: add the secret `BACKUP_PASSPHRASE` (a long random passphrase, kept in a password manager outside
+   GitHub too); see below.
+
+## Backups
+
+Every Monday, the "Backup" action (`.github/workflows/backup.yml`, also run by hand from the Actions tab) copies the
+tables (with the traces), the accounts and the original track files (`scripts/backup.py`), encrypts them with
+`BACKUP_PASSPHRASE` (AES-256) and stores the file in a **private** repository, `danibach/montblanc_HF-backups` by
+default (repository variable `BACKUP_REPO`), keeping the last 12 (about three months). Nothing is left in this public
+repository. The private repository is written again each time (one commit), so it does not grow with the weeks.
+Free, nothing outside GitHub. Without its secrets the run fails rather than store an unencrypted or public copy.
+
+Once (Dani): create the private repository `montblanc_HF-backups` (empty is fine); a fine-grained personal access
+token with "Contents: read and write" on that repository only, saved here as the secret `BACKUP_REPO_TOKEN`; a long
+random passphrase saved as the secret `BACKUP_PASSPHRASE` and in a password manager (a secret cannot be read back).
+Then run the action once by hand and check that a folder `hf-tracks-backup-YYYY-MM-DD` appears in the private repository.
+
+To restore: take the folder of the backup from the private repository, then
+
+```bash
+cat hf-tracks-backup-YYYY-MM-DD.tar.gz.gpg.part-* > backup.tar.gz.gpg   # the parts of 90 MB, in order
+gpg -d backup.tar.gz.gpg > backup.tar.gz && tar -xzf backup.tar.gz         # asks the passphrase
+python scripts/restore_backup.py backup          # writes backup/restore.sql
+```
+
+Run `supabase/schema-v2.sql` (and the later migrations the backup has tables for), then `backup/restore.sql` in the
+SQL Editor, then `SUPABASE_URL=… SUPABASE_SERVICE_KEY=… python scripts/restore_backup.py backup --upload-files` for the
+track files. Rows still there are kept. The accounts are recreated in `auth.users` (id, e-mail), a way Supabase does
+not document: try a restore once on a test project.
 
 ## Develop
 
