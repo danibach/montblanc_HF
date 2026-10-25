@@ -45,6 +45,28 @@ self.onmessage = async (ev) => {
         data.destroy();
       }
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'ends') {
+      const data = engine.py.toPy(new Uint8Array(msg.bytes));
+      let text;
+      try {
+        text = engine.browser.ends_json(msg.name, data);
+      } finally {
+        data.destroy();
+      }
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'groups') {
+      post({ type: 'result', id: msg.id, payload: JSON.parse(engine.browser.groups_json(JSON.stringify(msg.ends))) });
+    } else if (msg.type === 'analyse_parts') {
+      engine.browser.parts_clear();
+      for (const f of msg.files) {
+        const data = engine.py.toPy(new Uint8Array(f.bytes));
+        try {
+          engine.browser.parts_add(f.name, data);
+        } finally {
+          data.destroy();
+        }
+      }
+      post({ type: 'result', id: msg.id, payload: JSON.parse(engine.browser.analyse_parts_json()) });
     } else if (msg.type === 'terrain') {
       const text = engine.browser.terrain_json(msg.sha256, JSON.stringify(msg.response));
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });

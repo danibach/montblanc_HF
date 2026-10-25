@@ -106,22 +106,28 @@ def look_up_places(outing: dict, attempts: int = 2, timeout: float = 40.0):
 
 
 def process_pending(api: Api) -> None:
-    from mbhf.analyse import AnalysisError, analyse_bytes
+    from mbhf.analyse import AnalysisError, analyse_files
     from mbhf.rows import outing_row
     from mbhf.terrain import fetch_elevations
     from mbhf.duplicates import duplicate_message, same_flight
     from mbhf.advice import OUR_SIDE
 
-    for row in api.select(f"{TO_CHECK}&select=id,user_id,created_at,file_path,file_format&order=created_at.asc&limit={BATCH}"):
+    columns = "id,user_id,created_at,file_path,file_format"
+    try:  # file_parts: an outing in several files (migration-2026-10-25-file-parts.sql)
+        rows = api.select(f"{TO_CHECK}&select={columns},file_parts&order=created_at.asc&limit={BATCH}")
+    except RuntimeError:  # the migration is not run yet: one file per outing
+        rows = api.select(f"{TO_CHECK}&select={columns}&order=created_at.asc&limit={BATCH}")
+    for row in rows:
         print(f"outing {row['id']} ({row['file_path']})")
+        parts = row.get("file_parts") or [{"path": row["file_path"], "format": row["file_format"]}]
         try:
-            data = api.download(row["file_path"])
-        except RuntimeError as exc:
+            files = [(f"track{k}.{p['format']}", api.download(p["path"])) for k, p in enumerate(parts)]
+        except (RuntimeError, KeyError, TypeError) as exc:
             reject(api, row["id"], OUR_SIDE)
             print(f"  file not read from storage: {exc}")
             continue
         try:
-            result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations)
+            result = analyse_files(files, elevation_fetch=fetch_elevations)
         except AnalysisError as exc:
             reject(api, row["id"], str(exc))
             continue
@@ -131,7 +137,9 @@ def process_pending(api: Api) -> None:
             continue
 
         sha = result["file"]["sha256"]
-        twins = api.select(f"file_sha256=eq.{sha}&status=eq.published&id=neq.{row['id']}&select=id&limit=1")
+        # the same file (or, for an outing in several files, one of them) already counted in another outing
+        hashes = [sha] + [p["sha256"] for p in result["file"].get("parts", [])]
+        twins = api.select(f"file_sha256=in.({','.join(hashes)})&status=eq.published&id=neq.{row['id']}&select=id&limit=1")
         if twins:
             reject(api, row["id"], "This track was already submitted.")
             continue
