@@ -138,6 +138,19 @@ body.wide main { max-width: none; }
 .swatch { display: inline-block; width: 1.1rem; height: 0; border-top: 4px solid var(--c, var(--orange)); border-radius: 2px; vertical-align: middle; margin-right: .45rem; }
 .swatch.dotted { border-top-style: dotted; }
 .start-group summary .badge, .start-folder > summary .badge { float: right; font-size: .78rem; font-weight: 650; background: var(--hover); border-radius: 999px; padding: .05rem .5rem; margin-left: .4rem; }
+/* the sheet of a way up (site/routesheet.js) */
+.start-group .sheet-link { display: block; margin: .1rem 0 .35rem 1rem; font-size: .85rem; }
+.route-sheet .back { font-size: .85rem; margin-bottom: .4rem; }
+.route-sheet h2 { margin: .2rem 0; display: flex; align-items: center; gap: .45rem; }
+.route-sheet .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: .5rem; margin: .7rem 0; }
+.route-sheet .fact { background: var(--card-2); border-radius: 8px; padding: .45rem .6rem; display: flex; flex-direction: column; }
+.route-sheet .fact b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.route-sheet .fact .hint { font-size: .75rem; }
+.route-profile { width: 100%; height: auto; display: block; }
+.route-profile .area { fill: rgba(240, 105, 61, .22); }
+.route-profile .line { fill: none; stroke: var(--orange); stroke-width: 2; stroke-linejoin: round; }
+.route-profile text { fill: var(--muted); font-size: 9px; }
+.route-sheet .route-actions { gap: .5rem; flex-wrap: wrap; margin: .6rem 0; }
 /* take-off markers: a round badge with the number of outings */
 .tk { display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: 700; font-size: .8rem; color: var(--on-accent); box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
 .tk.spot { background: var(--orange); }

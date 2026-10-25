@@ -3,6 +3,7 @@
 // and the list of its outings. Flights are never drawn. Filters by season and year apply to everything.
 
 import { groupName, sectorOf } from './sectors.js';
+import { routeNumbers, routeSheet } from './routesheet.js';
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 
@@ -328,9 +329,14 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   let heatRoutes;
   let legendText;
   let current = null; // the spot shown in the panel
+  // a sheet's address (#/map/route/12) is written without a page change: the map stays as it is. The one the page
+  // was opened with is read before anything rewrites it.
+  const setHash = (hash) => { if (location.hash !== hash) history.replaceState(null, '', hash); };
+  const asked = location.hash.match(/^#\/map\/route\/(\d+)/);
   let request = 0; // a slow answer for a spot we already left must not draw over the new one
 
   function overview() {
+    setHash('#/map');
     current = null;
     request += 1;
     if (climbs) { climbs.eachLayer((l) => l.closeTooltip()); climbs.clearLayers(); }
@@ -471,7 +477,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     searchBox.setAttribute('aria-expanded', 'false');
   }
 
-  async function openSpot(sp) {
+  async function openSpot(sp, routeId = null) {
+    if (!routeId) setHash('#/map');
     current = sp;
     const mine = ++request;
     climbs.eachLayer((l) => l.closeTooltip()); // a line taken away under the pointer keeps its tooltip otherwise
@@ -671,6 +678,9 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
       const n = pages.get(key) || PAGE;
       const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
+      // a way of the server has its sheet: numbers, altitude profile, GPX (site/routesheet.js)
+      const sheetLink = key.startsWith('route:') && siteRoutes.has(Number(key.slice(6)))
+        ? h('button', { class: 'link sheet-link', onclick: () => showSheet(key) }, 'Route sheet: profile, time, GPX →') : null;
       const left = items.length - n;
       const more = left > 0
         ? h('button', { class: 'more', onclick: () => { pages.set(key, n + PAGE); renderList(); } },
@@ -684,7 +694,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
         summary.addEventListener('mouseenter', () => paintRoutes([key]));
         summary.addEventListener('mouseleave', () => paintRoutes([]));
       }
-      const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, body, more);
+      const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, sheetLink, body, more);
       group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
       return group;
     }
@@ -705,6 +715,35 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
         return folder;
       }));
     }
+    // the sheet of one way, in place of the take-off's panel (back to it with its button)
+    function showSheet(key) {
+      const route = siteRoutes.get(Number(key.slice(6)));
+      const outings = groups.get(key) || [];
+      const place = placeOf.get(key);
+      const several = (starts.get(place) || []).length > 1;
+      // « From La Clusaz · via Bois de la Colombière »; a start's only way is already named « From Les Verrier »
+      const way = !several && /^from /i.test(route.name) ? route.name : `From ${place || 'an unnamed start'} · ${route.name}`;
+      const panel = [...side.childNodes];
+      const scroll = side.scrollTop;
+      setHash(`#/map/route/${route.id}`);
+      selectedRoute = key;
+      paintRoutes([]);
+      const back = () => {
+        setHash('#/map');
+        selectedRoute = null;
+        paintRoutes([]);
+        side.replaceChildren(...panel);
+        side.scrollTop = scroll;
+      };
+      side.replaceChildren(routeSheet({
+        route, way, link: `${location.origin}${location.pathname}#/map/route/${route.id}`, onBack: back,
+        takeoff: { name: sp.name, alt: sp.alt }, swatch: swatch(key),
+        numbers: routeNumbers(outings, (o) => climbOfId.get(o.id)),
+        outings: h('ul', { class: 'out-list' }, outings.slice().sort((a, b) => SORTS.recent.by(a, b, climbOfId)).map(item)),
+      }));
+      side.scrollTop = 0;
+      map.fitBounds(L.latLngBounds(route.line), { padding: [30, 30], maxZoom: 15 });
+    }
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, 'Sort'), sortPick));
     renderList();
@@ -715,6 +754,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
         : 'Hover an outing to light its climb; click it to keep it lit.';
     if (lines.size) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     if (crowded && map.getZoom() < ROUTES_ZOOM) map.setZoom(ROUTES_ZOOM); // close enough for the heat of the ways up
+    if (routeId && siteRoutes.has(routeId)) showSheet(`route:${routeId}`);
   }
 
   const start = () => {
@@ -747,6 +787,13 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     if (spots.length) map.fitBounds(L.latLngBounds(spots.map((sp) => [sp.lat, sp.lon])), { padding: [40, 40], maxZoom: 11 });
     else map.setView([45.92, 6.87], 9); // Mont Blanc, until the first outing is confirmed
     pickHeat();
+    // a sheet's address: its take-off opened on it (in all seasons if the season shown hides it)
+    const wantedRoute = asked && routes.find((r) => r.id === Number(asked[1]));
+    if (wantedRoute) {
+      const holder = () => spots.find((s) => s.siteIds.has(wantedRoute.site_id));
+      if (!holder() && seasonPick.value) { seasonPick.value = ''; applyFilters(); }
+      if (holder()) openSpot(holder(), wantedRoute.id);
+    }
     seasonPick.addEventListener('change', applyFilters);
     yearPick.addEventListener('change', applyFilters);
     for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);
