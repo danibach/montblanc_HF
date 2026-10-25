@@ -45,6 +45,15 @@ self.onmessage = async (ev) => {
         data.destroy();
       }
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'manual') {
+      const data = engine.py.toPy(new Uint8Array(msg.bytes));
+      let text;
+      try {
+        text = engine.browser.manual_json(msg.name, data, JSON.stringify(msg.ranges));
+      } finally {
+        data.destroy();
+      }
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
     } else if (msg.type === 'terrain') {
       const text = engine.browser.terrain_json(msg.sha256, JSON.stringify(msg.response));
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
