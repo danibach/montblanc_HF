@@ -142,9 +142,9 @@ body.wide main { max-width: none; }
 .start-group .sheet-link { display: block; margin: .1rem 0 .35rem 1rem; font-size: .85rem; }
 .route-sheet .back { font-size: .85rem; margin-bottom: .4rem; }
 .route-sheet h2 { margin: .2rem 0; display: flex; align-items: center; gap: .45rem; }
-.route-sheet .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: .5rem; margin: .7rem 0; }
-.route-sheet .fact { background: var(--card-2); border-radius: 8px; padding: .45rem .6rem; display: flex; flex-direction: column; }
-.route-sheet .fact b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.route-sheet .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr)); gap: .4rem; margin: .7rem 0; }
+.route-sheet .fact { background: var(--card-2); border-radius: 8px; padding: .4rem .5rem; display: flex; flex-direction: column; }
+.route-sheet .fact b { font-size: 1.02rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .route-sheet .fact .hint { font-size: .75rem; }
 .route-profile { width: 100%; height: auto; display: block; }
 .route-profile .area { fill: rgba(240, 105, 61, .22); }
