@@ -4,6 +4,7 @@
 
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
+import { groupName, sectorOf } from './sectors.js';
 
 // Take-offs closer than this are the same spot. Only for this page: nothing is stored.
 const SAME_SPOT_M = 150;
@@ -375,7 +376,10 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
         const lat = group.reduce((a, sp) => a + sp.lat, 0) / group.length;
         const lon = group.reduce((a, sp) => a + sp.lon, 0) / group.length;
         const mk = L.marker([lat, lon], { icon: icon(n, 'group') });
-        mk.bindTooltip(h('span', null, `${group.length} take-offs · ${plural(n, 'outing')} — click to zoom in`), { direction: 'top', offset: [0, -16] });
+        // named by its flying sector(s) (site/sectors.js): « Lac d'Annecy · 8 take-offs », not « 8 take-offs »
+        const where = groupName(group);
+        mk.bindTooltip(h('span', null, h('b', null, where), ` · ${group.length} take-offs · ${plural(n, 'outing')} — click to zoom in`), { direction: 'top', offset: [0, -16] });
+        mk.on('add', () => mk.getElement().setAttribute('aria-label', `${where}, ${group.length} take-offs`));
         mk.on('click', () => map.fitBounds(L.latLngBounds(group.map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 15 }));
         markers.addLayer(mk);
       }
@@ -480,7 +484,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       h('div', { class: 'side-head' },
         h('div', null,
           h('h2', null, sp.name),
-          h('p', { class: 'hint' }, `${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
+          h('p', { class: 'hint' }, `${sectorOf(sp.lat, sp.lon) ? `${sectorOf(sp.lat, sp.lon)} · ` : ''}${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
       siteFacts(sp), status, list);
     side.scrollTop = 0;

@@ -14,8 +14,8 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 def spots(tmp_path, rows, sites):
     """groupTakeoffs(rows, sites) as JSON (the sets as sorted lists), from a copy of the page's modules."""
-    for name in ("explorer.js", "config.js", "util.js"):
-        shutil.copy(SITE / name, tmp_path / name)
+    for path in SITE.glob("*.js"):  # explorer.js and the modules it imports (sectors.js, ffvl.js…)
+        shutil.copy(path, tmp_path / path.name)
     (tmp_path / "package.json").write_text('{"type": "module"}')
     (tmp_path / "run.mjs").write_text(
         "globalThis.window = {};  // the page reads window (Leaflet) when it loads\n"
