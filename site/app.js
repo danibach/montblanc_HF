@@ -457,7 +457,7 @@ async function pageUpload() {
     h('p', null, input),
     h('p', { class: 'hint' }, `IGC, GPX, KML, TCX or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB each. The analysis runs in your browser: a single file is sent only when you publish it.`),
     h('p', { class: 'hint' }, `Several files at once: each one is analysed and, by default, published as soon as it is ready. Keep the page open until the list is finished. At most 20 uploads per day, and up to 1,000 per day during the first two weeks of your account.`),
-    h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused.'));
+    h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused, unless you mark the flight by hand afterwards.'));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => {
@@ -678,8 +678,7 @@ function pageMark() {
     recalc.disabled = true;
     result.replaceChildren(h('p', { class: 'hint pad' }, 'Analysing…'));
     try {
-      let res = await analyseManual(item.file, tool.ranges());
-      res = await checkTerrain(res);
+      const res = await analyseManual(item.file, tool.ranges()); // no ground check: the marking overrides it
       const o = res.outing;
       if (o.status === 'ok') {
         result.replaceChildren(
@@ -695,7 +694,7 @@ function pageMark() {
   });
   show(h('h1', null, 'Mark a flight by hand'),
     h('p', null, h('b', null, item.file.name), ' — ', item.message),
-    h('p', { class: 'hint' }, 'The track is drawn in green on foot, orange in flight and grey in a vehicle. Click the take-off, then the landing: the stretch between them becomes a flight (in blue). The usual checks still apply to it.'),
+    h('p', { class: 'hint' }, 'The track is drawn in green on foot, orange in flight and grey in a vehicle. Click the take-off, then the landing: the stretch between them becomes a flight (in blue). Your marking overrides the automatic ground check, so a track whose altitudes were flattened onto the terrain can still be entered: only mark what was really a flight.'),
     tool.element,
     h('div', { class: 'row' }, recalc, link('#/upload', 'Back to the list')),
     result);

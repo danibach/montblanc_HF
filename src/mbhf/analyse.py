@@ -121,8 +121,7 @@ def with_manual_flights(prepared: Prepared, ranges_s: list) -> Prepared:
 
     ``ranges_s`` is a list of ``[from, to]``, in seconds after the first fix of the track (the ``t0`` and ``t``
     of the trace the page draws). Every fix inside a range is a flight, whatever the engine thought; the rest
-    keeps the engine's labels. The result goes through the usual steps (terrain check, scoring): a marked
-    descent that follows the ground is still refused."""
+    keeps the engine's labels. The marking overrides the terrain check: the page does not run it on these flights."""
     pts = prepared.track.points
     t0 = pts[0].t
     labels = list(prepared.seg.labels)
@@ -135,7 +134,7 @@ def with_manual_flights(prepared: Prepared, ranges_s: list) -> Prepared:
                 labels[i] = FLIGHT
     seg = SegmentationResult(segments=_build_segments(pts, labels), labels=labels, warnings=list(prepared.seg.warnings))
     marked = Prepared(prepared.info, prepared.track, seg)
-    marked.notes = ["Flights marked by hand"]
+    marked.notes = ["Flights marked by hand (the ground check is not applied to them)"]
     return marked
 
 

@@ -47,7 +47,9 @@ def manual_json(name: str, data: bytes, ranges_json: str) -> str:
     """Like ``analyse_json``, for a file whose flights the participant marked on the map.
 
     ``ranges_json`` is ``[[from, to], ...]`` in seconds after the first fix (the trace's ``t0``). The answer has the
-    same shape, ``terrain.query`` included, so the page goes on with ``terrain_json`` as for any file."""
+    same shape. The terrain check is NOT run on hand-marked flights (``terrain.query`` is None): the marking overrides
+    it, so that tracks whose altitudes were flattened onto the terrain (by a track editor, or by the device itself)
+    can still be entered, with the flight's D- and FAI free distance computed from the marked stretch."""
     try:
         ranges = [[float(a), float(b)] for a, b in json.loads(ranges_json)]
         if not ranges:
@@ -56,7 +58,7 @@ def manual_json(name: str, data: bytes, ranges_json: str) -> str:
         result = finish(prepared)
         _LAST.clear()
         _LAST[result["file"]["sha256"]] = prepared
-        result["terrain"] = {"query": terrain_query_for(prepared)}
+        result["terrain"] = {"query": None}
     except AnalysisError as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
     except Exception as exc:

@@ -4,7 +4,7 @@ import json
 from synth import as_track, gpx_bytes, slow_ski_descent
 
 from mbhf.analyse import analyse_bytes, prepare_bytes, with_manual_flights, finish
-from mbhf.browser import analyse_json, manual_json, terrain_json
+from mbhf.browser import analyse_json, manual_json
 
 
 def _ski_span(g):
@@ -28,7 +28,7 @@ def test_track_without_flight_gets_one_by_hand():
     o = out["result"]["outing"]
     assert o["status"] == "ok" and len(o["flights"]) == 1
     assert o["dminus_m"] > 300
-    assert "Flights marked by hand" in o["warnings"]
+    assert any("marked by hand" in w for w in o["warnings"])
     assert out["result"]["manual"] is True
     assert all(0 <= m <= 2 for m in out["result"]["trace"]["m"]) and 1 in out["result"]["trace"]["m"]
 
@@ -41,17 +41,14 @@ def test_reversed_range_is_the_same():
     assert one["score"] == two["score"]
 
 
-def test_note_survives_the_terrain_check():
+def test_marking_overrides_the_terrain_check():
     data = gpx_bytes(as_track(slow_ski_descent()))
     res = json.loads(manual_json("ski.gpx", data, json.dumps(_ranges(data))))["result"]
-    sha = res["file"]["sha256"]
-    # an elevation service that says "the ground is far below": the marked flight stands
-    samples = len(res["terrain"]["query"].split("&")[0].split("=")[1].split(","))
-    answer = json.dumps({"elevation": [0.0] * samples})
-    after = json.loads(terrain_json(sha, answer))
-    assert after["ok"] is True
-    assert "Flights marked by hand" in after["result"]["outing"]["warnings"]
-    assert after["result"]["outing"]["status"] == "ok"
+    assert res["terrain"]["query"] is None          # the page has nothing to ask the elevation service
+    o = res["outing"]
+    assert o["status"] == "ok" and o["dminus_m"] > 300 and o["flight_free_km"] > 0
+    assert any("marked by hand" in w for w in o["warnings"])
+    assert not any("follows the ground" in w for w in o["warnings"])
 
 
 def test_nothing_marked_is_an_error_not_a_crash():
