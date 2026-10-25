@@ -36,6 +36,42 @@ ENDS_AT_TOP = ("The recording ends at its highest point ({alt} m): no descent wa
 STARTS_AT_TOP = ("The recording starts at {alt} m, near the highest point: the climb is not in the file, "
                  "so the outing does not count.")
 TOO_LITTLE_CLIMB = "Only {dplus} m of climbing on foot were recorded ({need} m needed). The climb must be in the file."
+RIDE_FROM_TOP = "No flight found: the fast descent from the top ({alt} m, at {time} UTC) was read as a ride, not a flight."
+IF_FLIGHT = (" If it was a flight, upload the original recording of your device: a file edited or merged with a track "
+             "tool often carries the map's ground altitude instead of the measured one. Without it, mark the flight by "
+             "hand on the Upload page.")
+EDITED_BY = (" This file was written by {editor}, a track editor, which can replace the measured altitude with the "
+             "map's ground altitude and turn a flight into a ride: send the original recording of your device instead, "
+             "or mark the flight by hand on the Upload page.")
+
+# Track editors and map sites whose GPX keep the points but may change the altitudes (the ``creator`` of the
+# file): Dani's Mont-Blanc files of November 2024 come from Adze, the 2019 Mont-Blanc file from a map site.
+EDITORS = {"adze": "Adze", "gpx.studio": "gpx.studio", "gpsvisualizer": "GPS Visualizer", "gps visualizer": "GPS Visualizer",
+           "gpsies": "GPSies", "routeconverter": "RouteConverter", "ride atlas": "The Ride Atlas", "gpx editor": "GPX Editor"}
+# a ride that starts this close to the highest point and loses at least this much: a descent from the top
+RIDE_TOP_M = 150.0
+RIDE_DROP_M = 300.0
+
+
+def editor_of(data: bytes) -> Optional[str]:
+    """The track editor that wrote this file, from the GPX ``creator`` (None: a device, an app or unknown)."""
+    head = data[:4096].decode("utf-8", "replace").lower()
+    at = head.find("creator=")
+    if at < 0:
+        return None
+    creator = head[at + 8: at + 120]
+    return next((name for key, name in EDITORS.items() if key in creator), None)
+
+
+def _ride_from_top(outing: dict, points: list[Point], top: float) -> Optional[tuple[float, str]]:
+    """A ride that starts at the top of the outing and goes far down: (its altitude, its time), or None."""
+    for s in outing.get("segments", []):
+        if s.get("mode") != "vehicle":
+            continue
+        alts = [p.alt for p in points if p.alt is not None and s["start"] <= p.t.isoformat() <= s["end"]]
+        if alts and alts[0] >= top - RIDE_TOP_M and alts[0] - min(alts) >= RIDE_DROP_M:
+            return alts[0], s["start"][11:16]
+    return None
 
 
 def _m(value: float) -> str:
@@ -53,8 +89,10 @@ def file_problem(name: str, detail: str, data: bytes = b"") -> str:
     return DAMAGED.format(name=name)
 
 
-def refusal(outing: dict, points: list[Point], cfg: Optional[OutingConfig] = None) -> Optional[str]:
-    """Why a rejected outing does not count and what to do, or None when it counts."""
+def refusal(outing: dict, points: list[Point], cfg: Optional[OutingConfig] = None,
+            editor: Optional[str] = None) -> Optional[str]:
+    """Why a rejected outing does not count and what to do, or None when it counts. ``editor``: the track editor
+    that wrote the file (``editor_of``), named when no flight was found."""
     if outing.get("status") == "ok":
         return None
     cfg = cfg or OutingConfig()
@@ -66,7 +104,11 @@ def refusal(outing: dict, points: list[Point], cfg: Optional[OutingConfig] = Non
             return ground  # the terrain check's own words, with its advice
         if top is not None and top - alts[-1] <= ENDS_AT_TOP_M:
             return ENDS_AT_TOP.format(alt=_m(top))
-        return NO_FLIGHT
+        ride = _ride_from_top(outing, points, top) if top is not None else None
+        named = EDITED_BY.format(editor=editor) if editor else ""
+        if ride:
+            return RIDE_FROM_TOP.format(alt=_m(ride[0]), time=ride[1]) + (named or IF_FLIGHT)
+        return NO_FLIGHT + named
     if outing.get("reason") == "too_little_climb":
         if top is not None and top - alts[0] <= STARTS_AT_TOP_M:
             return STARTS_AT_TOP.format(alt=_m(alts[0]))

@@ -97,6 +97,9 @@ def read_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> tuple
         info["altitude_ignored"] = blanked
     if jumped:
         info["position_ignored"] = jumped
+    editor = advice.editor_of(data)
+    if editor:
+        info["editor"] = editor
     return track, info
 
 
@@ -133,6 +136,9 @@ def prepare_files(parts: list[tuple[str, bytes]], max_bytes: int = MAX_FILE_BYTE
     for key in ("altitude_ignored", "position_ignored"):
         if sum(i.get(key, 0) for i in infos):
             info[key] = sum(i.get(key, 0) for i in infos)
+    editors = [i["editor"] for i in infos if i.get("editor")]
+    if editors:
+        info["editor"] = editors[0]
     return _prepare(track, info)
 
 
@@ -150,7 +156,7 @@ def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
     if notes:
         outing["warnings"] = list(outing["warnings"]) + [n for n in notes if n not in outing["warnings"]]
     # the words shown when the outing does not count (None when it counts)
-    outing["reason_text"] = advice.refusal(outing, prepared.track.points)
+    outing["reason_text"] = advice.refusal(outing, prepared.track.points, editor=prepared.info.get("editor"))
     return {
         "file": prepared.info,
         "outing": outing,
