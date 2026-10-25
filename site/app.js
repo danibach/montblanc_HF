@@ -98,7 +98,7 @@ function outingDetail(o) {
       stat(`${fmtInt(o.dplus_m)} m`, 'D+ on foot'),
       stat(`${fmtInt(o.dminus_m)} m`, 'D− in flight'),
       stat(fmtKm(o.walk_km), 'Distance on foot'),
-      stat(fmtKm(o.flight_free_km), 'Free distance (FAI, total)'),
+      stat(fmtKm(o.flight_free_km), 'Free distance FAI'),
       stat(fmtDur(o.duration_s), 'Duration')),
     h('dl', { class: 'places' },
       place('Start on foot', [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
