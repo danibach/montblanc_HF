@@ -1,6 +1,6 @@
 """One outing in several files (multi.py, analyse.prepare_files)."""
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from synth import T0, as_track, gpx_bytes, hike_and_fly
@@ -61,6 +61,27 @@ def test_groups_in_a_batch():
     # a ride, the climb, the ride home, an unrelated outing a week later, and the three already joined by hand
     files = [ends(3, 8), ends(0, 2.9), ends(8.2, 10), ends(200, 205), ends(0, 10)]
     assert groups(files) == [[1, 0, 2], [4], [3]]
+
+
+def test_a_flight_marked_by_hand_on_an_outing_in_several_files():
+    # Dani's Mont-Blanc files (Adze, the flight's altitude flattened onto the ground) only count with the flight
+    # marked by hand on the joined track, in seconds after the first fix of the first file: that path, end to end
+    whole = as_track(hike_and_fly())
+    climb, rest = split(whole, 0.6)
+    files = [("climb.gpx", gpx_bytes(climb)), ("flight.gpx", gpx_bytes(rest))]
+    one = analyse_bytes("whole.gpx", gpx_bytes(whole))["outing"]["flights"][0]
+    t0 = whole.points[0].t
+    ranges = [[(datetime.fromisoformat(one["takeoff"]["t"]) - t0).total_seconds(),
+               (datetime.fromisoformat(one["landing"]["t"]) - t0).total_seconds()]]
+    o = analyse_files(files[::-1], manual_ranges=ranges)["outing"]
+    assert o["status"] == "ok" and o["dminus_m"] > 800
+    assert any("marked by hand" in w for w in o["warnings"])
+    browser.parts_clear()
+    for name, data in files:
+        browser.parts_add(name, data)
+    res = json.loads(browser.manual_parts_json(json.dumps(ranges)))
+    assert res["ok"] and res["result"]["manual"] and res["result"]["outing"]["status"] == "ok"
+    assert len(res["result"]["file"]["parts"]) == 2
 
 
 def test_the_page_entry_points():

@@ -105,6 +105,21 @@ def look_up_places(outing: dict, attempts: int = 2, timeout: float = 40.0):
         return None
 
 
+def to_check(api: Api) -> list:
+    """The outings to check. Without the column manual_flights (migration-2026-10-25-manual-flights.sql) or
+    file_parts (migration-2026-10-25-file-parts.sql) not run yet, the job still works, without them."""
+    base = f"{TO_CHECK}&order=created_at.asc&limit={BATCH}"
+    cols = "id,user_id,created_at,file_path,file_format"
+    for extra in (",manual_flights,file_parts", ",manual_flights", ",file_parts", ""):
+        try:
+            return api.select(f"{base}&select={cols}{extra}")
+        except RuntimeError as exc:
+            if not extra:
+                raise
+            print(f"  {extra[1:]} not read (migration not run?): {exc}")
+    return []
+
+
 def process_pending(api: Api) -> None:
     from mbhf.analyse import AnalysisError, analyse_files
     from mbhf.rows import outing_row
@@ -112,12 +127,7 @@ def process_pending(api: Api) -> None:
     from mbhf.duplicates import duplicate_message, same_flight
     from mbhf.advice import OUR_SIDE
 
-    columns = "id,user_id,created_at,file_path,file_format"
-    try:  # file_parts: an outing in several files (migration-2026-10-25-file-parts.sql)
-        rows = api.select(f"{TO_CHECK}&select={columns},file_parts&order=created_at.asc&limit={BATCH}")
-    except RuntimeError:  # the migration is not run yet: one file per outing
-        rows = api.select(f"{TO_CHECK}&select={columns}&order=created_at.asc&limit={BATCH}")
-    for row in rows:
+    for row in to_check(api):
         print(f"outing {row['id']} ({row['file_path']})")
         parts = row.get("file_parts") or [{"path": row["file_path"], "format": row["file_format"]}]
         try:
@@ -127,7 +137,9 @@ def process_pending(api: Api) -> None:
             print(f"  file not read from storage: {exc}")
             continue
         try:
-            result = analyse_files(files, elevation_fetch=fetch_elevations)
+            # flights the participant marked on the map replace the automatic detection and the ground check (for an
+            # outing in several files, in seconds after the first fix of the first file)
+            result = analyse_files(files, elevation_fetch=fetch_elevations, manual_ranges=row.get("manual_flights"))
         except AnalysisError as exc:
             reject(api, row["id"], str(exc))
             continue

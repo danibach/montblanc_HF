@@ -89,6 +89,25 @@ export async function groupFiles(files) {
 }
 
 /**
+ * Analyse a File again with the flights the participant marked by hand on the map.
+ * `ranges` is a list of [from, to] in seconds after the trace's t0. Same result as analyseFile (the terrain
+ * check follows with checkTerrain); throws an Error with a readable message.
+ */
+export async function analyseManual(file, ranges) {
+  await startEngine();
+  if (Array.isArray(file)) { // one outing in several files: the ranges are in seconds after the first file's start
+    const files = await Promise.all(file.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })));
+    const res = await call({ type: 'manual_parts', files, ranges }, files.map((f) => f.bytes));
+    if (!res.ok) throw new Error(res.error || 'These files could not be analysed.');
+    return res.result;
+  }
+  const bytes = await file.arrayBuffer();
+  const res = await call({ type: 'manual', name: file.name, bytes, ranges }, [bytes]);
+  if (!res.ok) throw new Error(res.error || 'This file could not be analysed.');
+  return res.result;
+}
+
+/**
  * Tell a flight from a descent on the ground (ski, bike) with the height above the terrain.
  * Takes the result of analyseFile; resolves to the result again, with the check applied, or to the
  * same result if the elevation service cannot be reached.

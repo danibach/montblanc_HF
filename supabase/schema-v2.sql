@@ -103,6 +103,12 @@ alter table public.outings add column if not exists file_parts jsonb;
 -- the climb on foot drawn on the take-off map, written by the server job only:
 -- {line: [[lat, lon], …], dplus_m, km, duration_s}, {} when there is no climb to draw
 alter table public.outings add column if not exists climb jsonb;
+-- flights the participant marked by hand on the map: [[from, to], ...] in seconds after the first fix of the track.
+-- The job uses them instead of the automatic detection (and skips the ground check); see migration-2026-10-25-manual-flights.sql
+alter table public.outings add column if not exists manual_flights jsonb;
+alter table public.outings drop constraint if exists outings_manual_flights_check;
+alter table public.outings add constraint outings_manual_flights_check
+  check (manual_flights is null or (jsonb_typeof(manual_flights) = 'array' and jsonb_array_length(manual_flights) between 1 and 20));
 
 -- the take-off register (FFVL open data, OpenStreetMap, provisional take-offs), written by the server only
 -- (scripts/sync_sites.py, scripts/process_pending.py); see migration-2026-10-23-takeoff-sites.sql
@@ -200,7 +206,7 @@ grant insert (
   start_lat, start_lon, start_alt, start_place, start_commune,
   summit_name, summit_lat, summit_lon, summit_alt,
   takeoff_name, takeoff_lat, takeoff_lon, takeoff_alt, landing_lat, landing_lon, landing_alt,
-  dplus_m, dminus_m, walk_km, flight_free_km, flight_path_km, score, flights, trace, warnings, places_pending
+  dplus_m, dminus_m, walk_km, flight_free_km, flight_path_km, score, flights, trace, warnings, places_pending, manual_flights
 ) on public.outings to authenticated;
 grant delete on public.outings to authenticated;
 
