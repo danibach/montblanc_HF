@@ -17,6 +17,7 @@ Nothing here changes the analysis of a track.
 from __future__ import annotations
 
 import math
+import re
 import statistics
 from collections import Counter
 from typing import Optional
@@ -142,16 +143,81 @@ def median_line(route: list[Climb]) -> list[list[float]]:
     return _latlon(kept, lat0)
 
 
-def routes_of(climbs: list[Climb]) -> list[dict]:
-    """``[{name, start_place, line, outing_ids}]`` for one take-off: « From La Clusaz », « From La Clusaz (variant 2) »."""
+VIA_M = 400.0  # a named place this close to where a way strays most from the others names it
+# what names a way best, first: a pass or a summit, a hiking signpost, a hamlet, a lake, a wood
+_VIA_RANK = (("mountain_pass", None), ("natural", "saddle"), ("natural", "peak"), ("information", "guidepost"),
+             ("place", None), ("water", None), ("natural", "water"), ("natural", "wood"), ("landuse", "forest"))
+
+
+def via_query(lat: float, lon: float) -> str:
+    """Overpass QL: the named places, signposts, passes, lakes and woods around a point (twice VIA_M: when nothing is
+    that close, the nearest farther one still tells the way apart)."""
+    at = f"around:{2 * VIA_M:.0f},{lat:.5f},{lon:.5f}"
+    return (f'[out:json][timeout:30];(node({at})[name][~"^(natural|place|mountain_pass|information|water)$"~"."];'
+            f'way({at})[name][~"^(natural|water|landuse)$"~"."];);out center tags;')
+
+
+def pick_via(elements: list, lat: float, lon: float, avoid: tuple = ()) -> Optional[str]:
+    """The best name for a way that strays from the others at (lat, lon), from an Overpass answer: within VIA_M the
+    kind of place first (``_VIA_RANK``), then the nearest; farther (up to twice VIA_M), the nearest. Names in
+    ``avoid`` (the start, the take-off) are skipped."""
+    k = math.cos(math.radians(lat))
+    best = None
+    farther = None
+    for el in elements or []:
+        tags = el.get("tags") or {}
+        name = re.sub(r"\s*\([^)]*\)\s*$", "", (tags.get("name") or "").strip())  # « Les Corbassières (Ferme) »
+        if not name or any(name.lower() == (a or "").lower() for a in avoid):
+            continue
+        rank = next((i for i, (key, val) in enumerate(_VIA_RANK) if key in tags and (val is None or tags[key] == val)), None)
+        if rank is None:
+            continue
+        c = el if "lat" in el else el.get("center") or {}
+        if "lat" not in c:
+            continue
+        d = math.hypot((c["lon"] - lon) * 111320.0 * k, (c["lat"] - lat) * 110540.0)
+        if d <= VIA_M and (best is None or (rank, d) < best[0]):
+            best = ((rank, d), name)
+        elif d <= 2 * VIA_M and (farther is None or d < farther[0]):
+            farther = (d, name)
+    return best[1] if best else farther[1] if farther else None
+
+
+def stray_point(line: list, others: list[list]) -> list:
+    """The point of ``line`` farthest from every other line: where this way is its own."""
+    lat0 = line[0][0]
+    others_pts = [resample(o, lat0) for o in others]
+    pts = _xy(line, lat0)
+    def gap(p):
+        return min(min(math.hypot(p[0] - q[0], p[1] - q[1]) for q in o) for o in others_pts)
+    return line[max(range(len(pts)), key=lambda i: gap(pts[i]))]
+
+
+def routes_of(climbs: list[Climb], via=None) -> list[dict]:
+    """``[{name, start_place, line, outing_ids}]`` for one take-off. A start with one way: « From La Clusaz ». A start
+    with several: each way named after a place it goes by and the others do not, « via Les Corbassières »
+    (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…"""
     out = []
-    seen = Counter()
     for g in group(climbs):
         place = Counter(c.start_place for c in g if c.start_place).most_common(1)
         place = place[0][0] if place else None
-        seen[place] += 1
-        name = f"From {place}" if place else "From an unnamed start"
-        if seen[place] > 1:
-            name += f" (variant {seen[place]})"
-        out.append({"name": name, "start_place": place, "line": median_line(g), "outing_ids": [c.id for c in g]})
+        out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
+                    "line": median_line(g), "outing_ids": [c.id for c in g]})
+    by_place: dict = {}
+    for r in out:
+        by_place.setdefault(r["start_place"], []).append(r)
+    for place, ways in by_place.items():
+        if len(ways) < 2:
+            continue
+        used = set()
+        for n, r in enumerate(ways, start=1):
+            name = None
+            if via:
+                lat, lon = stray_point(r["line"], [w["line"] for w in ways if w is not r])
+                try:
+                    name = via(lat, lon, (place,))
+                except Exception:  # OpenStreetMap could not answer: a plain name, made again at the next sync
+                    name = None
+            r["name"] = f"via {name}" if name and name not in used else "Main way" if n == 1 else f"Way {n}"
+            used.add(name)
     return out

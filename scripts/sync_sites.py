@@ -247,13 +247,23 @@ def sync(api, dry_run: bool = False) -> None:
 def rebuild_routes(register: Register, site_id: int) -> int:
     """Make the routes of one take-off again from the climbs of its public outings (src/mbhf/routes.py), and tie
     the outings to them. Returns how many routes."""
-    from mbhf.routes import Climb, routes_of
+    from mbhf.routes import Climb, pick_via, routes_of, via_query
 
     rows = register.select("outings", f"select=id,climb,start_place&takeoff_site_id=eq.{site_id}"
                                       "&status=eq.published&verified=is.true&hidden=is.false")
     climbs = [Climb(r["id"], r["climb"]["line"], r.get("start_place"))
               for r in rows if len((r.get("climb") or {}).get("line") or []) > 1]
-    routes = routes_of(climbs)
+
+    def via(lat, lon, avoid):  # the place a way goes by, from OpenStreetMap (only for a start with several ways)
+        query = urllib.parse.urlencode({"data": via_query(lat, lon)}).encode()
+        for url in OVERPASS_URLS:
+            try:
+                return pick_via(get_json(url, query, timeout=60).get("elements", []), lat, lon, avoid)
+            except Exception:
+                time.sleep(2)
+        return None
+
+    routes = routes_of(climbs, via)
     if register.dry:
         return len(routes)
     # the take-off's routes are made again: the old ones go (their outings lose their route_id until just below)

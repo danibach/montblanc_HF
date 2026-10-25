@@ -30,6 +30,10 @@ const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35,
 const CLIMB = { color: '#1f4fff', weight: 3, opacity: 0.9 };
 const CLIMB_HOT = { color: '#e0161b', weight: 5, opacity: 1 };
 const CLIMB_BACK = { color: '#1f4fff', weight: 2, opacity: 0.25 };
+// the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per start
+const ROUTE_W = 4;
+const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 3, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
+const PALETTE = ['#fc4c02', '#2b6cb0', '#2f855a', '#805ad5', '#b7791f', '#c53030'];
 const SEASONS = {
   summer: { label: 'Summer (May–Oct)', months: [5, 6, 7, 8, 9, 10] },
   winter: { label: 'Winter (Nov–Apr)', months: [11, 12, 1, 2, 3, 4] },
@@ -555,50 +559,76 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       return li;
     }
 
-    // the list: one group per route (or per start place for the outings not in a route yet), largest first, sorted
-    // as chosen, PAGE outings at a time
+    // the list: one group per route (or per start place for the outings not in a route yet), gathered under their
+    // start: a start with several ways is a folder (« From La Clusaz » holds « via Bois de la Colombière » and « via
+    // Les Corbassières »). Largest first, sorted as chosen, PAGE outings at a time
     const groups = new Map();
     const labels = new Map();
+    const placeOf = new Map();
     for (const o of sp.outings) {
       const route = siteRoutes.get(o.route_id);
       const key = route ? `route:${route.id}` : `place:${o.start_place || ''}`;
       labels.set(key, route ? route.name : `From ${o.start_place || 'an unnamed start'}`);
       groups.set(key, [...(groups.get(key) || []), o]);
     }
+    // a route's start: the start place most of its outings share (as the server names it, src/mbhf/routes.py)
+    for (const [key, outings] of groups) {
+      const tally = new Map();
+      for (const o of outings) if (o.start_place) tally.set(o.start_place, (tally.get(o.start_place) || 0) + 1);
+      placeOf.set(key, [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '');
+    }
     const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const starts = new Map();
+    for (const [key, outings] of ordered) starts.set(placeOf.get(key), [...(starts.get(placeOf.get(key)) || []), [key, outings]]);
+    const count = (ways) => ways.reduce((n, [, outings]) => n + outings.length, 0);
+    const startList = [...starts.entries()].sort((a, b) => count(b[1]) - count(a[1]));
+    // one colour per start; its busiest way in a full line, the others dotted
+    const look = new Map();
+    startList.forEach(([, ways], i) => ways.forEach(([key], j) => look.set(key, { color: PALETTE[i % PALETTE.length], main: j === 0 })));
 
-    // a line per route, the thicker the more outings (of the ones the filters keep)
+    // a thin line per route on a white casing (the number of outings is in the list, not in the width)
     const routeLines = new Map();
     for (const [key, outings] of ordered) {
       const route = key.startsWith('route:') ? siteRoutes.get(Number(key.slice(6))) : null;
       if (!route || !route.line || route.line.length < 2) continue;
-      const style = { ...CLIMB, opacity: 0.85, weight: Math.round(3 + 2 * Math.log2(outings.length)) };
+      const { color, main } = look.get(key);
+      const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round', dashArray: main ? null : '1 8' };
+      const casing = L.polyline(route.line, { ...ROUTE_CASING, interactive: false }).addTo(climbs);
       const line = L.polyline(route.line, style).addTo(climbs);
-      line.bindTooltip(h('span', null, `${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
+      const place = placeOf.get(key);
+      const several = (starts.get(place) || []).length > 1;
+      line.bindTooltip(h('span', null, `${several ? `From ${place} · ` : ''}${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
       // a route lights up under the pointer; a click keeps it lit (and opens it in the list), a second click lets it go
-      line.on('mouseover', () => paintRoute(key, true));
-      line.on('mouseout', () => paintRoute(key, false));
+      line.on('mouseover', () => paintRoutes([key]));
+      line.on('mouseout', () => paintRoutes([]));
       line.on('click', () => selectRoute(key));
-      routeLines.set(key, { line, style });
+      routeLines.set(key, { line, casing, style });
       bounds.extend(line.getBounds());
     }
     let selectedRoute = null;
-    const paintRoute = (key, hover) => {
-      const drawn = routeLines.get(key);
-      if (!drawn) return;
-      const lit = hover || selectedRoute === key;
-      drawn.line.setStyle(lit ? { ...CLIMB_HOT, weight: drawn.style.weight + 1 } : drawn.style);
-      if (lit) drawn.line.bringToFront();
+    // the lit routes (hovered, kept) stand out; when some are lit, the others fade
+    const paintRoutes = (keys) => {
+      const lit = new Set([...keys, ...(selectedRoute ? [selectedRoute] : [])]);
+      for (const [key, drawn] of routeLines) {
+        const on = lit.has(key);
+        drawn.casing.setStyle({ ...ROUTE_CASING, weight: ROUTE_CASING.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.3 : ROUTE_CASING.opacity });
+        drawn.line.setStyle({ ...drawn.style, weight: drawn.style.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.35 : drawn.style.opacity });
+        if (on) { drawn.casing.bringToFront(); drawn.line.bringToFront(); }
+      }
     };
     function selectRoute(key) {
-      const before = selectedRoute;
-      selectedRoute = before === key ? null : key;
-      if (before) paintRoute(before, false);
-      if (selectedRoute) { paintRoute(selectedRoute, true); open.add(selectedRoute); }
+      selectedRoute = selectedRoute === key ? null : key;
+      paintRoutes([]);
+      if (selectedRoute) { open.add(selectedRoute); open.add(`start:${placeOf.get(selectedRoute)}`); }
       renderList();
       const group = selectedRoute && list.querySelector(`[data-key="${selectedRoute}"]`);
       if (group) group.scrollIntoView({ block: 'nearest' });
     }
+    const swatch = (key) => {
+      const i = h('i', { class: look.get(key) && !look.get(key).main ? 'swatch dotted' : 'swatch' });
+      if (look.get(key)) i.style.setProperty('--c', look.get(key).color); // a property, not an attribute: the page's CSP
+      return i;
+    };
     const median = (xs) => {
       const v = xs.filter((x) => x != null).sort((a, b) => a - b);
       return v.length ? v[Math.floor((v.length - 1) / 2)] : null;
@@ -615,36 +645,54 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     }
     const sortPick = h('select', { id: 'm-sort', 'aria-label': 'Sort the outings' },
       Object.entries(SORTS).map(([k, s]) => h('option', { value: k }, s.label)));
-    const open = new Set(sp.outings.length <= PAGE ? ordered.map((g) => g[0]) : [ordered[0][0]]);
+    const small = sp.outings.length <= PAGE;
+    const open = new Set(small ? [...ordered.map((g) => g[0]), ...startList.map(([p]) => `start:${p}`)]
+      : [ordered[0][0], `start:${placeOf.get(ordered[0][0])}`]);
     const pages = new Map();
+    // one way: its outings under « From La Clusaz » or « via Les Corbassières »
+    function wayGroup(key, outings, by) {
+      const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
+      const n = pages.get(key) || PAGE;
+      const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
+      const left = items.length - n;
+      const more = left > 0
+        ? h('button', { class: 'more', onclick: () => { pages.set(key, n + PAGE); renderList(); } },
+          left > PAGE ? `Show ${PAGE} more (${left} left)` : `Show the last ${plural(left, 'outing')}`)
+        : null;
+      const numbers = typical(outings);
+      const summary = h('summary', null, routeLines.has(key) ? swatch(key) : null, labels.get(key),
+        h('span', { class: 'badge', title: plural(outings.length, 'outing') }, fmtInt(outings.length)),
+        key.startsWith('route:') && numbers ? h('span', { class: 'route-nums' }, numbers) : null);
+      if (routeLines.has(key)) {
+        summary.addEventListener('mouseenter', () => paintRoutes([key]));
+        summary.addEventListener('mouseleave', () => paintRoutes([]));
+      }
+      const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, body, more);
+      group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
+      return group;
+    }
     function renderList() {
       const by = SORTS[sortPick.value].by;
-      list.replaceChildren(...ordered.map(([key, outings]) => {
-        const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
-        const n = pages.get(key) || PAGE;
-        const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
-        const left = items.length - n;
-        const more = left > 0
-          ? h('button', { class: 'more', onclick: () => { pages.set(key, n + PAGE); renderList(); } },
-            left > PAGE ? `Show ${PAGE} more (${left} left)` : `Show the last ${plural(left, 'outing')}`)
-          : null;
-        const numbers = typical(outings);
-        const summary = h('summary', null, labels.get(key), h('span', { class: 'hint' }, ` · ${plural(outings.length, 'outing')}`),
-          key.startsWith('route:') && numbers ? h('span', { class: 'route-nums' }, numbers) : null);
-        if (routeLines.has(key)) {
-          summary.addEventListener('mouseenter', () => paintRoute(key, true));
-          summary.addEventListener('mouseleave', () => paintRoute(key, false));
-        }
-        const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, body, more);
-        group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
-        return group;
+      list.replaceChildren(...startList.map(([place, ways]) => {
+        if (ways.length === 1) return wayGroup(ways[0][0], ways[0][1], by);
+        // a start with several ways: a folder of them
+        const fkey = `start:${place}`;
+        const keys = ways.map(([key]) => key);
+        const summary = h('summary', null, swatch(keys[0]), `From ${place || 'an unnamed start'}`,
+          h('span', { class: 'hint' }, ` · ${ways.length} ways`), h('span', { class: 'badge' }, fmtInt(count(ways))));
+        summary.addEventListener('mouseenter', () => paintRoutes(keys));
+        summary.addEventListener('mouseleave', () => paintRoutes([]));
+        const folder = h('details', { class: 'start-folder', 'data-key': fkey, open: open.has(fkey) }, summary,
+          h('div', { class: 'ways' }, ways.map(([key, outings]) => wayGroup(key, outings, by))));
+        folder.addEventListener('toggle', () => { if (folder.open) open.add(fkey); else open.delete(fkey); });
+        return folder;
       }));
     }
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, 'Sort'), sortPick));
     renderList();
     status.textContent = byRoute
-      ? `${plural(routeLines.size, 'route')} up to this take-off: the thicker the line, the more outings. Hover a route to light it and click it to keep it lit; hover an outing to see its own climb.`
+      ? `${plural(routeLines.size, 'way')} up to this take-off, one colour per start (a dotted line: another way from the same start). Each line runs down the middle of its outings' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.`
       : crowded
         ? `${plural(climbOfId.size, 'climb')}: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.`
         : 'Hover an outing to light its climb; click it to keep it lit.';
