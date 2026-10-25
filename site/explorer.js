@@ -6,6 +6,7 @@ import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
+import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
 // Take-offs closer than this are the same spot. Only for this page: nothing is stored.
 const SAME_SPOT_M = 150;
@@ -288,7 +289,7 @@ function season(o) {
  * full tracks; ``sites`` are the take-offs of the register (getMapSites()). Returns {element, start}: start() is
  * called once the element is in the page.
  */
-export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
+export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = { sites: [], info: null }) {
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': 'Map of the take-offs' });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
@@ -478,6 +479,17 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     searchBox.setAttribute('aria-expanded', 'false');
   }
 
+  // the FFVL card of a take-off of ours that is an official one: winds on a rose, walk, warnings, restrictions…
+  function ffvlFacts(sp) {
+    // the map's list of take-offs has no FFVL id: the FFVL take-off within about 100 m of ours
+    const site = sp.site && sp.site.source === 'ffvl' && ffvl.sites.find((f) => f.kind.includes('T')
+      && Math.abs(f.lat - sp.site.lat) < 0.0009 && Math.abs(f.lon - sp.site.lon) < 0.0013);
+    if (!site) return null;
+    const box = h('div', { class: 'ffvl-in-panel' }, h('p', { class: 'hint' }, 'Loading the FFVL card…'));
+    ffvl.info(site.id).catch(() => ({})).then((info) => box.replaceChildren(ffvlCard(site, info)));
+    return box;
+  }
+
   async function openSpot(sp) {
     current = sp;
     const mine = ++request;
@@ -496,7 +508,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, `${sectorOf(sp.lat, sp.lon) ? `${sectorOf(sp.lat, sp.lon)} · ` : ''}${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
-      siteFacts(sp), status, list);
+      // replaceChildren would write a null as the text « null »
+      ...[siteFacts(sp), ffvlFacts(sp), status, list].filter(Boolean));
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
@@ -767,14 +780,25 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       maxZoom: CONFIG.TILES_MAX_ZOOM,
       attribution: CONFIG.TILES_ATTRIBUTION,
     }).addTo(map);
-    // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL)
-    if (sites.length) map.attributionControl.addAttribution('Take-offs: FFVL (Licence Ouverte), OpenStreetMap (ODbL)');
+    // no flag, to keep the credits short on a phone
+    map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+    // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL): one short line for both
+    // the take-offs and the FFVL sites
+    if (sites.length || ffvl.sites.length) map.attributionControl.addAttribution('FFVL (Licence Ouverte), OSM (ODbL)');
     heatSpots = L.heatLayer([], HEAT_SPOTS);
     heatRoutes = L.heatLayer([], HEAT_ROUTES);
     heat = L.layerGroup().addTo(map);
     climbs = L.featureGroup().addTo(map);
     markers = L.layerGroup().addTo(map);
-    L.control.layers(null, { 'Heat map': heat, 'Take-offs': markers }, { collapsed: false }).addTo(map);
+    // the official FFVL take-offs ▲ and landings ▼ (from zoom 10 on), with their card on a click (site/ffvl.js)
+    const overlays = { 'Heat map': heat, 'Take-offs': markers };
+    if (ffvl.sites.length) {
+      // where a take-off of ours is drawn (within 100 m), the ▲ goes beside its marker
+      const taken = (lat, lon) => spots.some((sp) => Math.abs(sp.lat - lat) < 0.0009 && Math.abs(sp.lon - lon) < 0.0013);
+      overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
+    }
+    // open on a wide map, folded into its button on a narrow one (a phone): open, it hid the markers under it
+    L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });

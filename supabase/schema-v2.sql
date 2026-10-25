@@ -160,6 +160,34 @@ revoke all on public.routes from anon, authenticated;
 grant select on public.routes to anon, authenticated;
 alter table public.outings add column if not exists route_id bigint references public.routes (id) on delete set null;
 
+-- the official FFVL take-offs and landings shown on the map (migration-2026-10-25-ffvl-terrains.sql)
+create table if not exists public.ffvl_terrains (
+  suid integer primary key,          -- the FFVL's own id
+  name text not null,
+  lat double precision not null,
+  lon double precision not null,
+  alt real,
+  kind text not null check (kind in ('T', 'L', 'TL')),   -- take-off, landing, both
+  status text,                       -- actif, actif_autorisation_systematique_requise, interdit_sauf_autorisation, interdit
+  winds text,                        -- good winds: « N;NO;O »
+  info jsonb not null default '{}',  -- the card: walk_min, access, ideal, warnings, restrictions, notes, gear…
+  updated_at timestamptz not null default now()
+);
+alter table public.ffvl_terrains enable row level security;
+drop policy if exists "FFVL sites are public" on public.ffvl_terrains;
+create policy "FFVL sites are public" on public.ffvl_terrains for select to anon, authenticated using (true);
+revoke all on public.ffvl_terrains from anon, authenticated;
+grant select on public.ffvl_terrains to anon, authenticated;
+
+-- the light list for the map, as one JSON array of [suid, name, lat, lon, alt, kind, status, winds]; the card is read
+-- on a click (select info where suid = …)
+create or replace function public.map_ffvl() returns json
+language sql stable as $$
+  select coalesce(json_agg(json_build_array(f.suid, f.name, f.lat, f.lon, f.alt, f.kind, f.status, f.winds)), '[]'::json)
+  from public.ffvl_terrains f
+$$;
+grant execute on function public.map_ffvl() to anon, authenticated;
+
 create index if not exists outings_verified_idx on public.outings (verified) where not verified;
 create index if not exists outings_list_idx on public.outings (status, outing_date desc);
 create index if not exists outings_user_idx on public.outings (user_id, outing_date desc);

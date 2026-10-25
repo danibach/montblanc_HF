@@ -138,7 +138,10 @@ def register_in_memory(rows: list[dict], outings: list, with_osm: bool = True) -
     register = Register(None, dry_run=True)
     ties = {}
     register.tie = lambda outing_id, site_id, status, metres: ties.__setitem__(outing_id, (site_id, status))
-    ffvl = ffvl_takeoffs(ffvl_file())
+    raw = ffvl_file()
+    ffvl = ffvl_takeoffs(raw)
+    from mbhf.sites import ffvl_terrains
+    register_in_memory.ffvl = ffvl_terrains(raw)  # the FFVL take-offs and landings of the map (map_ffvl)
     osm = osm_around([(r["takeoff_lat"], r["takeoff_lon"]) for r in rows]) if with_osm else None
     print(f"FFVL take-offs: {len(ffvl)}; OpenStreetMap: {'unavailable' if osm is None else len(osm)}", flush=True)
     index = SiteIndex(register.upsert(ffvl + without_doubles(ffvl, osm or [])))
@@ -227,10 +230,17 @@ def main() -> int:
                 return self.send_json(outings)
             if self.path.startswith("/rest/v1/rpc/map_routes"):
                 return self.send_json(routes)
+            if self.path.startswith("/rest/v1/rpc/map_ffvl"):
+                return self.send_json([[t["suid"], t["name"], t["lat"], t["lon"], t["alt"], t["kind"], t["status"], t["winds"]]
+                                       for t in getattr(register_in_memory, "ffvl", [])])
             self.send_json(sites if self.path.startswith("/rest/v1/rpc/map_takeoff_sites") else {})
 
         def do_GET(self):
             u = urllib.parse.urlparse(self.path)
+            if u.path == "/rest/v1/ffvl_terrains":  # the card of an FFVL site
+                suid = urllib.parse.parse_qs(u.query).get("suid", [""])[0].removeprefix("eq.")
+                return self.send_json(next(({"info": t["info"]} for t in getattr(register_in_memory, "ffvl", [])
+                                            if str(t["suid"]) == suid), None))
             if u.path == "/rest/v1/outings":  # the tracks of outings without a stored climb
                 ids = urllib.parse.parse_qs(u.query).get("id", [""])[0]
                 ids = ids[len("in.("):-1].replace('"', "").split(",") if ids.startswith("in.(") else []
