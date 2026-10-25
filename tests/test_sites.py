@@ -4,7 +4,7 @@ from mbhf.sites import (SiteIndex, attach, ffvl_takeoffs, osm_takeoffs, pretty_n
 # about 100 m north is 0.0009 degree of latitude
 FFVL = [
     {"suid": 1, "toponym": "LA CLUSAZ - AIGUILLE DES CALVAIRES (ETE)", "flying_functions_text": "décollage",
-     "latitude": 45.9000, "longitude": 6.4500, "altitude": 2035, "status": "actif", "wind_orientations_ok": "NW;W",
+     "city": "LA CLUSAZ", "latitude": 45.9000, "longitude": 6.4500, "altitude": 2035, "status": "actif", "wind_orientations_ok": "NW;W",
      "hike_and_fly_description": "  45 min from the car park  "},
     {"suid": 2, "toponym": "LA CLUSAZ - ATTERRISSAGE", "flying_functions_text": "atterrissage",
      "latitude": 45.9100, "longitude": 6.4300, "altitude": 1050},
@@ -21,8 +21,15 @@ def test_ffvl_keeps_take_offs_only():
     sites = ffvl_takeoffs(FFVL)
     assert [s["source_id"] for s in sites] == ["1"]
     s = sites[0]
-    assert s["name"] == "La Clusaz - Aiguille des Calvaires (Ete)" and s["alt"] == 2035 and s["wind_ok"] == "NW;W"
+    # just the take-off's name: no village, no season (Sarah, 25 October 2026)
+    assert s["name"] == "Aiguille des Calvaires" and s["alt"] == 2035 and s["wind_ok"] == "NW;W"
     assert s["hike_and_fly"] == "45 min from the car park"
+
+
+def test_ffvl_names_without_opening_dates():
+    raw = [{"suid": 3, "toponym": "Cret-du-merle - ouvert du 1/5 au 31/10", "flying_functions_text": "décollage",
+            "city": "ARACHES-LA-FRASSE", "latitude": 46.0, "longitude": 6.6}]
+    assert ffvl_takeoffs(raw)[0]["name"] == "Crêt-du-Merle"
 
 
 def test_osm_named_take_offs_without_landings():

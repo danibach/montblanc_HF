@@ -36,8 +36,11 @@ def test_routes_named_after_their_start_with_variants():
     climbs = [Climb("a", UP, "La Clusaz"), Climb("b", shifted(UP, dlon=0.0004), "La Clusaz"),
               Climb("c", shifted(UP, dlon=0.006), "La Clusaz"), Climb("d", shifted(UP, dlat=0.02, dlon=0.02), "Les Verrier")]
     routes = routes_of(climbs)
-    assert [(r["name"], sorted(r["outing_ids"])) for r in routes] == [
-        ("From La Clusaz", ["a", "b"]), ("From La Clusaz (variant 2)", ["c"]), ("From Les Verrier", ["d"])]
+    # a start with several ways: they are named apart (« via … » from OpenStreetMap, else « Main way », « Way 2 »)
+    assert [(r["name"], r["start_place"], sorted(r["outing_ids"])) for r in routes] == [
+        ("Main way", "La Clusaz", ["a", "b"]), ("Way 2", "La Clusaz", ["c"]), ("From Les Verrier", "Les Verrier", ["d"])]
+    named = routes_of(climbs, via=lambda lat, lon, avoid: "Les Corbassières" if lon > UP[0][1] + 0.003 else None)
+    assert [r["name"] for r in named] == ["Main way", "via Les Corbassières", "From Les Verrier"]
 
 
 def test_the_central_climb_draws_the_route():

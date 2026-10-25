@@ -4,28 +4,40 @@ Rule (decided on 23 October 2026 from the live climbs, see Notion « Décisions 
 when their starts are less than ``START_M`` apart and the two lines stay within ``NEAR_M`` of each other along
 ``SHARE`` of the way (each line resampled every ``STEP_M``; each point compared with the nearest point of the other
 line, both ways). On the live climbs, the same path stays within 15 to 110 m; different paths stray 400 m or more.
-Two starts that meet higher up stay two routes: the walk-in differs.
+Two starts that meet higher up stay two routes: the walk-in differs. ``SHARE`` went from 90 % to 80 % on 25 October
+2026: at the Pointe de Beauregard two winter climbs from La Clusaz by the same way kept 80 % of their points within
+104 m (the zigzags of a ski climb part a little more), while the two ways from La Clusaz stray 550 m and more there.
 
-A route is drawn with one of its real climbs, the most central one (closest to all the others), not an average
-that could cut across the slope. A climb joins a route when it matches any climb of it.
+A route is drawn as its median line (``median_line``): every climb is laid along the most central one, point by
+point, and the middle of them is kept, so ten climbs of one way make one line that none of them strays from
+much. A climb joins a route when it matches any climb of it.
 Nothing here changes the analysis of a track.
 """
 
 from __future__ import annotations
 
 import math
+import re
+import statistics
 from collections import Counter
 from typing import Optional
 
 START_M = 500.0
 NEAR_M = 150.0
-SHARE = 0.9
+SHARE = 0.8
 STEP_M = 25.0
+ALIGN_AHEAD = 40       # laying a climb along another: look this many points (1 km) ahead for the nearest one
+LINE_POINTS = 120      # a median line keeps at most this many points
 
 
 def _xy(points: list, lat0: float) -> list[tuple[float, float]]:
     k = math.cos(math.radians(lat0))
     return [(lon * 111320.0 * k, lat * 110540.0) for lat, lon in points]
+
+
+def _latlon(pts: list[tuple[float, float]], lat0: float) -> list[list[float]]:
+    k = math.cos(math.radians(lat0))
+    return [[round(y / 110540.0, 6), round(x / (111320.0 * k), 6)] for x, y in pts]
 
 
 def resample(line: list, lat0: float) -> list[tuple[float, float]]:
@@ -61,7 +73,8 @@ class Climb:
 
     def __init__(self, outing_id: str, line: list, start_place: Optional[str] = None, lat0: Optional[float] = None):
         self.id, self.line, self.start_place = outing_id, line, start_place
-        self.pts = resample(line, lat0 if lat0 is not None else line[0][0])
+        self.lat0 = lat0 if lat0 is not None else line[0][0]
+        self.pts = resample(line, self.lat0)
         self.grid = _Grid(self.pts)
 
 
@@ -101,16 +114,110 @@ def central(route: list[Climb]) -> Climb:
     return min(route, key=lambda c: sum(far_share(c, o) for o in route if o is not c))
 
 
-def routes_of(climbs: list[Climb]) -> list[dict]:
-    """``[{name, start_place, line, outing_ids}]`` for one take-off: « From La Clusaz », « From La Clusaz (variant 2) »."""
+def _laid_along(ref: list[tuple[float, float]], pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """For each point of ``ref``, the nearest point of ``pts``, going only forward (a climb does not go back down
+    its own way), looking at most ALIGN_AHEAD points ahead."""
+    out, j = [], 0
+    for p in ref:
+        window = range(j, min(len(pts), j + ALIGN_AHEAD))
+        j = min(window, key=lambda k: (pts[k][0] - p[0]) ** 2 + (pts[k][1] - p[1]) ** 2)
+        out.append(pts[j])
+    return out
+
+
+def median_line(route: list[Climb]) -> list[list[float]]:
+    """The line of a route: every climb laid along the most central one, then, point by point, the median of
+    them (east and north apart), lightly smoothed. One climb: its own line."""
+    ref = central(route)
+    if len(route) == 1:
+        return ref.line
+    lat0 = ref.lat0
+    others = [c.pts if c.lat0 == lat0 else resample(c.line, lat0) for c in route if c is not ref]
+    laid = [ref.pts] + [_laid_along(ref.pts, pts) for pts in others]
+    mid = [(statistics.median(l[i][0] for l in laid), statistics.median(l[i][1] for l in laid))
+           for i in range(len(ref.pts))]
+    smooth = [mid[0]] + [((mid[i - 1][0] + mid[i][0] + mid[i + 1][0]) / 3, (mid[i - 1][1] + mid[i][1] + mid[i + 1][1]) / 3)
+                         for i in range(1, len(mid) - 1)] + [mid[-1]]
+    step = max(1, math.ceil(len(smooth) / LINE_POINTS))
+    kept = smooth[::step] + ([smooth[-1]] if (len(smooth) - 1) % step else [])
+    return _latlon(kept, lat0)
+
+
+VIA_M = 400.0  # a named place this close to where a way strays most from the others names it
+# what names a way best, first: a pass or a summit, a hiking signpost, a hamlet, a lake, a wood
+_VIA_RANK = (("mountain_pass", None), ("natural", "saddle"), ("natural", "peak"), ("information", "guidepost"),
+             ("place", None), ("water", None), ("natural", "water"), ("natural", "wood"), ("landuse", "forest"))
+
+
+def via_query(lat: float, lon: float) -> str:
+    """Overpass QL: the named places, signposts, passes, lakes and woods around a point (twice VIA_M: when nothing is
+    that close, the nearest farther one still tells the way apart)."""
+    at = f"around:{2 * VIA_M:.0f},{lat:.5f},{lon:.5f}"
+    return (f'[out:json][timeout:30];(node({at})[name][~"^(natural|place|mountain_pass|information|water)$"~"."];'
+            f'way({at})[name][~"^(natural|water|landuse)$"~"."];);out center tags;')
+
+
+def pick_via(elements: list, lat: float, lon: float, avoid: tuple = ()) -> Optional[str]:
+    """The best name for a way that strays from the others at (lat, lon), from an Overpass answer: within VIA_M the
+    kind of place first (``_VIA_RANK``), then the nearest; farther (up to twice VIA_M), the nearest. Names in
+    ``avoid`` (the start, the take-off) are skipped."""
+    k = math.cos(math.radians(lat))
+    best = None
+    farther = None
+    for el in elements or []:
+        tags = el.get("tags") or {}
+        name = re.sub(r"\s*\([^)]*\)\s*$", "", (tags.get("name") or "").strip())  # « Les Corbassières (Ferme) »
+        if not name or any(name.lower() == (a or "").lower() for a in avoid):
+            continue
+        rank = next((i for i, (key, val) in enumerate(_VIA_RANK) if key in tags and (val is None or tags[key] == val)), None)
+        if rank is None:
+            continue
+        c = el if "lat" in el else el.get("center") or {}
+        if "lat" not in c:
+            continue
+        d = math.hypot((c["lon"] - lon) * 111320.0 * k, (c["lat"] - lat) * 110540.0)
+        if d <= VIA_M and (best is None or (rank, d) < best[0]):
+            best = ((rank, d), name)
+        elif d <= 2 * VIA_M and (farther is None or d < farther[0]):
+            farther = (d, name)
+    return best[1] if best else farther[1] if farther else None
+
+
+def stray_point(line: list, others: list[list]) -> list:
+    """The point of ``line`` farthest from every other line: where this way is its own."""
+    lat0 = line[0][0]
+    others_pts = [resample(o, lat0) for o in others]
+    pts = _xy(line, lat0)
+    def gap(p):
+        return min(min(math.hypot(p[0] - q[0], p[1] - q[1]) for q in o) for o in others_pts)
+    return line[max(range(len(pts)), key=lambda i: gap(pts[i]))]
+
+
+def routes_of(climbs: list[Climb], via=None) -> list[dict]:
+    """``[{name, start_place, line, outing_ids}]`` for one take-off. A start with one way: « From La Clusaz ». A start
+    with several: each way named after a place it goes by and the others do not, « via Les Corbassières »
+    (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…"""
     out = []
-    seen = Counter()
     for g in group(climbs):
         place = Counter(c.start_place for c in g if c.start_place).most_common(1)
         place = place[0][0] if place else None
-        seen[place] += 1
-        name = f"From {place}" if place else "From an unnamed start"
-        if seen[place] > 1:
-            name += f" (variant {seen[place]})"
-        out.append({"name": name, "start_place": place, "line": central(g).line, "outing_ids": [c.id for c in g]})
+        out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
+                    "line": median_line(g), "outing_ids": [c.id for c in g]})
+    by_place: dict = {}
+    for r in out:
+        by_place.setdefault(r["start_place"], []).append(r)
+    for place, ways in by_place.items():
+        if len(ways) < 2:
+            continue
+        used = set()
+        for n, r in enumerate(ways, start=1):
+            name = None
+            if via:
+                lat, lon = stray_point(r["line"], [w["line"] for w in ways if w is not r])
+                try:
+                    name = via(lat, lon, (place,))
+                except Exception:  # OpenStreetMap could not answer: a plain name, made again at the next sync
+                    name = None
+            r["name"] = f"via {name}" if name and name not in used else "Main way" if n == 1 else f"Way {n}"
+            used.add(name)
     return out

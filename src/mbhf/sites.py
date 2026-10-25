@@ -12,6 +12,9 @@ An outing's take-off point is tied to the nearest known take-off (brief of the m
   provisional one even when the provisional one is closer (two official take-offs 40 m apart stay two: each
   outing keeps the nearer); among provisional twins the oldest wins, so the younger ones lose their outings and
   are removed by the sync;
+* a provisional take-off of the same name (accents and case aside) closer than ``TWIN_M`` and within
+  ``MAX_DALT_M``: the same take-off, tied at once (``auto``) to the oldest of such twins, unless an official
+  take-off is closer than ``AUTO_M`` (one take-off area, two outings that took off 250 m apart);
 * closer than ``AUTO_M``: tied at once (``auto``);
 * between ``AUTO_M`` and ``CONFIRM_M``: tied, to be confirmed by hand (``to_confirm``);
 * farther, or more than ``MAX_DALT_M`` higher or lower (two take-offs on either side of a ridge): a new
@@ -27,12 +30,18 @@ from __future__ import annotations
 import math
 import re
 import statistics
+import unicodedata
 from typing import Iterable, Optional
+
+from .titles import clean_name
 
 SAME_SPOT_M = 50.0
 AUTO_M = 100.0
 CONFIRM_M = 200.0
 MAX_DALT_M = 100.0
+# provisional twins: a provisional take-off of the same name within this distance (and MAX_DALT_M) is the same one;
+# on 25 October 2026 the Pointe de Beauregard (252 m), La Tournette (224 m) and Le Môle (235 m) were each two
+TWIN_M = 300.0
 SOURCE_RANK = {"ffvl": 0, "osm": 1, "provisional": 2}  # the first wins when two are as close
 
 
@@ -71,13 +80,20 @@ def _number(value) -> Optional[float]:
 
 
 def ffvl_takeoffs(terrains: Iterable[dict]) -> list[dict]:
-    """The take-offs of the FFVL open-data file (terrains.json)."""
+    """The paragliding take-offs of the FFVL open-data file (terrains.json): a site for speed riding, kites or hang
+    gliders only is left out (Sarah, 25 October 2026); a site for paragliding and speed riding stays."""
     out = []
     for t in terrains:
         if "décollage" not in (t.get("flying_functions_text") or "") or t.get("latitude") is None:
             continue
+        usages = t.get("possible_usages_text")
+        if usages is not None and "parapente" not in usages:
+            continue
         out.append({
-            "source": "ffvl", "source_id": str(t["suid"]), "name": pretty_name(t.get("toponym") or ""),
+            # the take-off's own name, cleaned (src/mbhf/titles.py): « LA CLUSAZ - CRET DU LOUP (ETE 1ER MAI…) »
+            # -> « Crêt du Loup »
+            "source": "ffvl", "source_id": str(t["suid"]),
+            "name": clean_name(t.get("toponym"), (pretty_name(t.get("city") or ""),)) or pretty_name(t.get("toponym") or ""),
             "lat": float(t["latitude"]), "lon": float(t["longitude"]), "alt": _number(t.get("altitude")),
             "country_code": "FR", "wind_ok": t.get("wind_orientations_ok") or None,
             "hike_and_fly": (t.get("hike_and_fly_description") or "").strip() or None,
@@ -105,7 +121,8 @@ def osm_takeoffs(elements: Iterable[dict]) -> list[dict]:
         if lat is None:
             continue
         out.append({
-            "source": "osm", "source_id": f"{el.get('type', 'node')}/{el['id']}", "name": tags["name"].strip(),
+            "source": "osm", "source_id": f"{el.get('type', 'node')}/{el['id']}",
+            "name": clean_name(tags["name"]) or tags["name"].strip(),
             "lat": float(lat), "lon": float(lon), "alt": _number(tags.get("ele")),
             "country_code": None, "wind_ok": tags.get("free_flying:wind_direction") or None,
             "hike_and_fly": None, "ffvl_status": None,
@@ -146,18 +163,36 @@ class SiteIndex:
         return sorted(found, key=lambda x: (x[0], SOURCE_RANK.get(x[1]["source"], 9)))
 
 
-def attach(lat: float, lon: float, alt: Optional[float], index: SiteIndex) -> tuple[Optional[dict], Optional[float], str]:
+def same_name(a: Optional[str], b: Optional[str]) -> bool:
+    """Two take-off names that say the same, whatever the accents, case and punctuation."""
+    def key(s):
+        s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+        return re.sub(r"[^a-z0-9]+", " ", s).strip()
+    return bool(key(a)) and key(a) == key(b)
+
+
+def attach(lat: float, lon: float, alt: Optional[float], index: SiteIndex,
+           name: Optional[str] = None) -> tuple[Optional[dict], Optional[float], str]:
     """The take-off an outing's take-off point belongs to: (site, distance in metres, status), where status is
-    ``auto``, ``to_confirm`` or ``provisional`` (no site close enough: make one)."""
-    near = index.near(lat, lon, CONFIRM_M)
+    ``auto``, ``to_confirm`` or ``provisional`` (no site close enough: make one). ``name``: what the outing's own
+    provisional take-off would be called; a provisional one of that name within TWIN_M is the same take-off."""
+    near = index.near(lat, lon, max(CONFIRM_M, TWIN_M))
     same = [x for x in near if x[0] <= SAME_SPOT_M]
-    if same:  # the same spot: no altitude test (two take-offs on either side of a ridge are never this close)
-        # an official take-off first (the nearest: the Suchet's two summits, 40 m apart, stay two); among provisional
-        # twins the oldest, so that the others lose their outings and are removed by the sync
-        d, s = min(same, key=lambda x: (SOURCE_RANK.get(x[1]["source"], 9),
-                                        (x[1].get("id") or 0) if x[1]["source"] == "provisional" else x[0]))
+    official = [x for x in same if x[1]["source"] != "provisional"]
+    if official:  # the same spot: no altitude test (two take-offs on either side of a ridge are never this close)
+        # the nearest official take-off (the Suchet's two summits, 40 m apart, stay two)
+        d, s = min(official, key=lambda x: (SOURCE_RANK.get(x[1]["source"], 9), x[0]))
+        return s, round(d), "auto"
+    twins = [x for x in near if x[1]["source"] == "provisional" and (
+        x[0] <= SAME_SPOT_M or (x[0] <= TWIN_M and same_name(name, x[1].get("name"))
+                                and (alt is None or x[1].get("alt") is None or abs(alt - x[1]["alt"]) <= MAX_DALT_M)))]
+    if twins and not any(d <= AUTO_M for d, s in near if s["source"] != "provisional"):
+        # among provisional twins the oldest, so that the others lose their outings and are removed by the sync
+        d, s = min(twins, key=lambda x: x[1].get("id") or 0)
         return s, round(d), "auto"
     for d, s in near:
+        if d > CONFIRM_M:
+            break
         if alt is not None and s.get("alt") is not None and abs(alt - s["alt"]) > MAX_DALT_M:
             continue  # same spot on the map, but another side of the mountain
         return s, round(d), ("auto" if d <= AUTO_M else "to_confirm")
@@ -166,7 +201,8 @@ def attach(lat: float, lon: float, alt: Optional[float], index: SiteIndex) -> tu
 
 def provisional_site(outing: dict) -> dict:
     """A take-off made from an outing that no known take-off is close to."""
-    name = outing.get("takeoff_name") or outing.get("summit_name") or outing.get("title") or "Take-off"
+    # not the outing's title: it may lose a village prefix (src/mbhf/titles.py)
+    name = clean_name(outing.get("takeoff_name")) or clean_name(outing.get("summit_name")) or "Take-off"
     if outing.get("takeoff_alt") is not None and name == "Take-off":
         name = f"Take-off · {round(outing['takeoff_alt']):,} m"
     return {

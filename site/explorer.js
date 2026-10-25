@@ -2,6 +2,8 @@
 // take-off (grouped when zoomed out), and, for the take-off that is clicked, the climbs on foot that reached it
 // and the list of its outings. Flights are never drawn. Filters by season and year apply to everything.
 
+import { groupName, sectorOf } from './sectors.js';
+import { routeNumbers, routeSheet } from './routesheet.js';
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 
@@ -30,6 +32,10 @@ const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35,
 const CLIMB = { color: '#1f4fff', weight: 3, opacity: 0.9 };
 const CLIMB_HOT = { color: '#e0161b', weight: 5, opacity: 1 };
 const CLIMB_BACK = { color: '#1f4fff', weight: 2, opacity: 0.25 };
+// the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per start
+const ROUTE_W = 4;
+const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 3, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
+const PALETTE = ['#fc4c02', '#2b6cb0', '#2f855a', '#805ad5', '#b7791f', '#c53030'];
 const SEASONS = {
   summer: { label: 'Summer (May–Oct)', months: [5, 6, 7, 8, 9, 10] },
   winter: { label: 'Winter (Nov–Apr)', months: [11, 12, 1, 2, 3, 4] },
@@ -323,12 +329,18 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   let heatRoutes;
   let legendText;
   let current = null; // the spot shown in the panel
+  // a sheet's address (#/map/route/12) is written without a page change: the map stays as it is. The one the page
+  // was opened with is read before anything rewrites it.
+  const setHash = (hash) => { if (location.hash !== hash) history.replaceState(null, '', hash); };
+  const asked = location.hash.match(/^#\/map\/route\/(\d+)/);
+  let sheetToOpen = null;
   let request = 0; // a slow answer for a spot we already left must not draw over the new one
 
   function overview() {
+    setHash('#/map');
     current = null;
     request += 1;
-    if (climbs) climbs.clearLayers();
+    if (climbs) { climbs.eachLayer((l) => l.closeTooltip()); climbs.clearLayers(); }
     element.querySelector('.explorer').classList.remove('has-spot');
     side.replaceChildren(
       h('h2', null, 'Take-offs'),
@@ -345,6 +357,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
 
   // markers again after each move: spots close on screen become one group
   function draw() {
+    // a marker taken away under the pointer gets no mouseout: its tooltip would stay on the map
+    markers.eachLayer((mk) => mk.closeTooltip());
     markers.clearLayers();
     const zoom = map.getZoom();
     const cells = new Map();
@@ -357,7 +371,10 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       const n = group.reduce((a, sp) => a + sp.outings.length, 0);
       if (group.length === 1) {
         const sp = group[0];
-        const mk = L.marker([sp.lat, sp.lon], { icon: icon(n, sp === current ? 'spot on' : 'spot'), title: sp.name, riseOnHover: true });
+        const mk = L.marker([sp.lat, sp.lon], { icon: icon(n, sp === current ? 'spot on' : 'spot'), riseOnHover: true });
+        // no `title`: the browser's own tooltip came on top of this one and stayed while the pointer did not move;
+        // the name stays readable for a screen reader
+        mk.on('add', () => mk.getElement().setAttribute('aria-label', sp.name));
         // a node, not a string: Leaflet would read a string as HTML, and names come from OpenStreetMap
         mk.bindTooltip(h('span', null, `${sp.name} · ${plural(n, 'outing')} · ${plural(sp.pilots, 'pilot')}`), { direction: 'top', offset: [0, -14] });
         mk.on('click', () => openSpot(sp));
@@ -365,8 +382,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       } else {
         const lat = group.reduce((a, sp) => a + sp.lat, 0) / group.length;
         const lon = group.reduce((a, sp) => a + sp.lon, 0) / group.length;
-        const mk = L.marker([lat, lon], { icon: icon(n, 'group'), title: `${group.length} take-offs` });
-        mk.bindTooltip(h('span', null, `${group.length} take-offs · ${plural(n, 'outing')} — click to zoom in`), { direction: 'top', offset: [0, -16] });
+        const mk = L.marker([lat, lon], { icon: icon(n, 'group') });
+        // named by its flying sector(s) (site/sectors.js): « Lac d'Annecy · 8 take-offs », not « 8 take-offs »
+        const where = groupName(group);
+        mk.bindTooltip(h('span', null, h('b', null, where), ` · ${group.length} take-offs · ${plural(n, 'outing')} — click to zoom in`), { direction: 'top', offset: [0, -16] });
+        mk.on('add', () => mk.getElement().setAttribute('aria-label', `${where}, ${group.length} take-offs`));
         mk.on('click', () => map.fitBounds(L.latLngBounds(group.map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 15 }));
         markers.addLayer(mk);
       }
@@ -461,6 +481,10 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   async function openSpot(sp) {
     current = sp;
     const mine = ++request;
+    const routeId = sheetToOpen; // the sheet the page's address asks for (once)
+    sheetToOpen = null;
+    if (!routeId) setHash('#/map');
+    climbs.eachLayer((l) => l.closeTooltip()); // a line taken away under the pointer keeps its tooltip otherwise
     climbs.clearLayers();
     element.querySelector('.explorer').classList.add('has-spot');
     draw();
@@ -470,7 +494,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       h('div', { class: 'side-head' },
         h('div', null,
           h('h2', null, sp.name),
-          h('p', { class: 'hint' }, `${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
+          h('p', { class: 'hint' }, `${sectorOf(sp.lat, sp.lon) ? `${sectorOf(sp.lat, sp.lon)} · ` : ''}${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
       siteFacts(sp), status, list);
     side.scrollTop = 0;
@@ -555,50 +579,83 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       return li;
     }
 
-    // the list: one group per route (or per start place for the outings not in a route yet), largest first, sorted
-    // as chosen, PAGE outings at a time
+    // the list: one group per route (or per start place for the outings not in a route yet), gathered under their
+    // start: a start with several ways is a folder (« From La Clusaz » holds « via Bois de la Colombière » and « via
+    // Les Corbassières »). Largest first, sorted as chosen, PAGE outings at a time
     const groups = new Map();
     const labels = new Map();
+    const placeOf = new Map();
     for (const o of sp.outings) {
       const route = siteRoutes.get(o.route_id);
       const key = route ? `route:${route.id}` : `place:${o.start_place || ''}`;
       labels.set(key, route ? route.name : `From ${o.start_place || 'an unnamed start'}`);
       groups.set(key, [...(groups.get(key) || []), o]);
     }
+    // a route's start: the start place most of its outings share (as the server names it, src/mbhf/routes.py)
+    for (const [key, outings] of groups) {
+      const tally = new Map();
+      for (const o of outings) if (o.start_place) tally.set(o.start_place, (tally.get(o.start_place) || 0) + 1);
+      placeOf.set(key, [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '');
+    }
     const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const starts = new Map();
+    for (const [key, outings] of ordered) starts.set(placeOf.get(key), [...(starts.get(placeOf.get(key)) || []), [key, outings]]);
+    const count = (ways) => ways.reduce((n, [, outings]) => n + outings.length, 0);
+    const startList = [...starts.entries()].sort((a, b) => count(b[1]) - count(a[1]));
+    // one colour per start; its busiest way in a full line, the others dotted
+    const look = new Map();
+    startList.forEach(([, ways], i) => ways.forEach(([key], j) => look.set(key, { color: PALETTE[i % PALETTE.length], main: j === 0 })));
 
-    // a line per route, the thicker the more outings (of the ones the filters keep)
+    // a thin line per route on a white casing (the number of outings is in the list, not in the width)
     const routeLines = new Map();
     for (const [key, outings] of ordered) {
       const route = key.startsWith('route:') ? siteRoutes.get(Number(key.slice(6))) : null;
       if (!route || !route.line || route.line.length < 2) continue;
-      const style = { ...CLIMB, opacity: 0.85, weight: Math.round(3 + 2 * Math.log2(outings.length)) };
+      const { color, main } = look.get(key);
+      const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round', dashArray: main ? null : '1 8' };
+      const casing = L.polyline(route.line, { ...ROUTE_CASING, interactive: false }).addTo(climbs);
       const line = L.polyline(route.line, style).addTo(climbs);
-      line.bindTooltip(h('span', null, `${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
+      const place = placeOf.get(key);
+      const several = (starts.get(place) || []).length > 1;
+      line.bindTooltip(h('span', null, `${several ? `From ${place} · ` : ''}${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
       // a route lights up under the pointer; a click keeps it lit (and opens it in the list), a second click lets it go
-      line.on('mouseover', () => paintRoute(key, true));
-      line.on('mouseout', () => paintRoute(key, false));
+      // one label at a time, whatever the browser says of the lines the pointer left
+      line.on('mouseover', () => {
+        for (const drawn of routeLines.values()) if (drawn.line !== line) drawn.line.closeTooltip();
+        paintRoutes([key]);
+      });
+      line.on('mouseout', () => paintRoutes([]));
       line.on('click', () => selectRoute(key));
-      routeLines.set(key, { line, style });
+      routeLines.set(key, { line, casing, style });
       bounds.extend(line.getBounds());
     }
     let selectedRoute = null;
-    const paintRoute = (key, hover) => {
-      const drawn = routeLines.get(key);
-      if (!drawn) return;
-      const lit = hover || selectedRoute === key;
-      drawn.line.setStyle(lit ? { ...CLIMB_HOT, weight: drawn.style.weight + 1 } : drawn.style);
-      if (lit) drawn.line.bringToFront();
+    // the lit routes (hovered, kept) stand out; when some are lit, the others fade
+    const paintRoutes = (keys) => {
+      const lit = new Set([...keys, ...(selectedRoute ? [selectedRoute] : [])]);
+      for (const [key, drawn] of routeLines) {
+        const on = lit.has(key);
+        if (!keys.includes(key)) drawn.line.closeTooltip(); // only the hovered line has its label
+        drawn.casing.setStyle({ ...ROUTE_CASING, weight: ROUTE_CASING.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.3 : ROUTE_CASING.opacity });
+        drawn.line.setStyle({ ...drawn.style, weight: drawn.style.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.35 : drawn.style.opacity });
+        // only a kept route comes to the front: moving the hovered line in the page lost its mouseout, so its
+        // label stayed on the map
+        if (key === selectedRoute) { drawn.casing.bringToFront(); drawn.line.bringToFront(); }
+      }
     };
     function selectRoute(key) {
-      const before = selectedRoute;
-      selectedRoute = before === key ? null : key;
-      if (before) paintRoute(before, false);
-      if (selectedRoute) { paintRoute(selectedRoute, true); open.add(selectedRoute); }
+      selectedRoute = selectedRoute === key ? null : key;
+      paintRoutes([]);
+      if (selectedRoute) { open.add(selectedRoute); open.add(`start:${placeOf.get(selectedRoute)}`); }
       renderList();
       const group = selectedRoute && list.querySelector(`[data-key="${selectedRoute}"]`);
       if (group) group.scrollIntoView({ block: 'nearest' });
     }
+    const swatch = (key) => {
+      const i = h('i', { class: look.get(key) && !look.get(key).main ? 'swatch dotted' : 'swatch' });
+      if (look.get(key)) i.style.setProperty('--c', look.get(key).color); // a property, not an attribute: the page's CSP
+      return i;
+    };
     const median = (xs) => {
       const v = xs.filter((x) => x != null).sort((a, b) => a - b);
       return v.length ? v[Math.floor((v.length - 1) / 2)] : null;
@@ -615,41 +672,92 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     }
     const sortPick = h('select', { id: 'm-sort', 'aria-label': 'Sort the outings' },
       Object.entries(SORTS).map(([k, s]) => h('option', { value: k }, s.label)));
-    const open = new Set(sp.outings.length <= PAGE ? ordered.map((g) => g[0]) : [ordered[0][0]]);
+    const small = sp.outings.length <= PAGE;
+    const open = new Set(small ? [...ordered.map((g) => g[0]), ...startList.map(([p]) => `start:${p}`)]
+      : [ordered[0][0], `start:${placeOf.get(ordered[0][0])}`]);
     const pages = new Map();
+    // one way: its outings under « From La Clusaz » or « via Les Corbassières »
+    function wayGroup(key, outings, by) {
+      const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
+      const n = pages.get(key) || PAGE;
+      const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
+      // a way of the server has its sheet: numbers, altitude profile, GPX (site/routesheet.js)
+      const sheetLink = key.startsWith('route:') && siteRoutes.has(Number(key.slice(6)))
+        ? h('button', { class: 'link sheet-link', onclick: () => showSheet(key) }, 'Route sheet: profile, time, GPX →') : null;
+      const left = items.length - n;
+      const more = left > 0
+        ? h('button', { class: 'more', onclick: () => { pages.set(key, n + PAGE); renderList(); } },
+          left > PAGE ? `Show ${PAGE} more (${left} left)` : `Show the last ${plural(left, 'outing')}`)
+        : null;
+      const numbers = typical(outings);
+      const summary = h('summary', null, routeLines.has(key) ? swatch(key) : null, labels.get(key),
+        h('span', { class: 'badge', title: plural(outings.length, 'outing') }, fmtInt(outings.length)),
+        key.startsWith('route:') && numbers ? h('span', { class: 'route-nums' }, numbers) : null);
+      if (routeLines.has(key)) {
+        summary.addEventListener('mouseenter', () => paintRoutes([key]));
+        summary.addEventListener('mouseleave', () => paintRoutes([]));
+      }
+      const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, sheetLink, body, more);
+      group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
+      return group;
+    }
     function renderList() {
       const by = SORTS[sortPick.value].by;
-      list.replaceChildren(...ordered.map(([key, outings]) => {
-        const items = outings.slice().sort((a, b) => by(a, b, climbOfId));
-        const n = pages.get(key) || PAGE;
-        const body = h('ul', { class: 'out-list' }, items.slice(0, n).map(item));
-        const left = items.length - n;
-        const more = left > 0
-          ? h('button', { class: 'more', onclick: () => { pages.set(key, n + PAGE); renderList(); } },
-            left > PAGE ? `Show ${PAGE} more (${left} left)` : `Show the last ${plural(left, 'outing')}`)
-          : null;
-        const numbers = typical(outings);
-        const summary = h('summary', null, labels.get(key), h('span', { class: 'hint' }, ` · ${plural(outings.length, 'outing')}`),
-          key.startsWith('route:') && numbers ? h('span', { class: 'route-nums' }, numbers) : null);
-        if (routeLines.has(key)) {
-          summary.addEventListener('mouseenter', () => paintRoute(key, true));
-          summary.addEventListener('mouseleave', () => paintRoute(key, false));
-        }
-        const group = h('details', { class: selectedRoute === key ? 'start-group on' : 'start-group', 'data-key': key, open: open.has(key) }, summary, body, more);
-        group.addEventListener('toggle', () => { if (group.open) open.add(key); else open.delete(key); });
-        return group;
+      list.replaceChildren(...startList.map(([place, ways]) => {
+        if (ways.length === 1) return wayGroup(ways[0][0], ways[0][1], by);
+        // a start with several ways: a folder of them
+        const fkey = `start:${place}`;
+        const keys = ways.map(([key]) => key);
+        const summary = h('summary', null, swatch(keys[0]), `From ${place || 'an unnamed start'}`,
+          h('span', { class: 'hint' }, ` · ${ways.length} ways`), h('span', { class: 'badge' }, fmtInt(count(ways))));
+        summary.addEventListener('mouseenter', () => paintRoutes(keys));
+        summary.addEventListener('mouseleave', () => paintRoutes([]));
+        const folder = h('details', { class: 'start-folder', 'data-key': fkey, open: open.has(fkey) }, summary,
+          h('div', { class: 'ways' }, ways.map(([key, outings]) => wayGroup(key, outings, by))));
+        folder.addEventListener('toggle', () => { if (folder.open) open.add(fkey); else open.delete(fkey); });
+        return folder;
       }));
+    }
+    // the sheet of one way, in place of the take-off's panel (back to it with its button)
+    function showSheet(key) {
+      const route = siteRoutes.get(Number(key.slice(6)));
+      const outings = groups.get(key) || [];
+      const place = placeOf.get(key);
+      const several = (starts.get(place) || []).length > 1;
+      // « From La Clusaz · via Bois de la Colombière »; a start's only way is already named « From Les Verrier »
+      const way = !several && /^from /i.test(route.name) ? route.name : `From ${place || 'an unnamed start'} · ${route.name}`;
+      const panel = [...side.childNodes];
+      const scroll = side.scrollTop;
+      setHash(`#/map/route/${route.id}`);
+      selectedRoute = key;
+      paintRoutes([]);
+      const back = () => {
+        setHash('#/map');
+        selectedRoute = null;
+        paintRoutes([]);
+        side.replaceChildren(...panel);
+        side.scrollTop = scroll;
+      };
+      side.replaceChildren(routeSheet({
+        route, way, link: `${location.origin}${location.pathname}#/map/route/${route.id}`, onBack: back,
+        takeoff: { name: sp.name, alt: sp.alt }, swatch: swatch(key),
+        numbers: routeNumbers(outings, (o) => climbOfId.get(o.id)),
+        outings: h('ul', { class: 'out-list' }, outings.slice().sort((a, b) => SORTS.recent.by(a, b, climbOfId)).map(item)),
+      }));
+      side.scrollTop = 0;
+      map.fitBounds(L.latLngBounds(route.line), { padding: [30, 30], maxZoom: 15 });
     }
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, 'Sort'), sortPick));
     renderList();
     status.textContent = byRoute
-      ? `${plural(routeLines.size, 'route')} up to this take-off: the thicker the line, the more outings. Hover a route to light it and click it to keep it lit; hover an outing to see its own climb.`
+      ? `${plural(routeLines.size, 'way')} up to this take-off, one colour per start (a dotted line: another way from the same start). Each line runs down the middle of its outings' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.`
       : crowded
         ? `${plural(climbOfId.size, 'climb')}: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.`
         : 'Hover an outing to light its climb; click it to keep it lit.';
     if (lines.size) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     if (crowded && map.getZoom() < ROUTES_ZOOM) map.setZoom(ROUTES_ZOOM); // close enough for the heat of the ways up
+    if (routeId && siteRoutes.has(routeId)) showSheet(`route:${routeId}`);
   }
 
   const start = () => {
@@ -682,6 +790,13 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     if (spots.length) map.fitBounds(L.latLngBounds(spots.map((sp) => [sp.lat, sp.lon])), { padding: [40, 40], maxZoom: 11 });
     else map.setView([45.92, 6.87], 9); // Mont Blanc, until the first outing is confirmed
     pickHeat();
+    // a sheet's address: its take-off opened on it (in all seasons if the season shown hides it)
+    const wantedRoute = asked && routes.find((r) => r.id === Number(asked[1]));
+    if (wantedRoute) {
+      const holder = () => spots.find((s) => s.siteIds.has(wantedRoute.site_id));
+      if (!holder() && seasonPick.value) { seasonPick.value = ''; applyFilters(); }
+      if (holder()) { sheetToOpen = wantedRoute.id; openSpot(holder()); }
+    }
     seasonPick.addEventListener('change', applyFilters);
     yearPick.addEventListener('change', applyFilters);
     for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);

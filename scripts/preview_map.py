@@ -155,14 +155,20 @@ def register_in_memory(rows: list[dict], outings: list, with_osm: bool = True) -
     print("outings tied: " + ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())), flush=True)
 
     # the routes of each take-off, as scripts/sync_sites.py makes them (src/mbhf/routes.py)
-    from mbhf.routes import Climb, routes_of
+    from mbhf.routes import Climb, pick_via, routes_of, via_query
+    from mbhf.places import fetch_overpass
+
+    def via(lat, lon, avoid):  # as the sync names the ways of a start (OpenStreetMap)
+        if not with_osm:
+            return None
+        return pick_via(fetch_overpass(via_query(lat, lon), attempts=1, timeout=60).get("elements", []), lat, lon, avoid)
     by_site = {}
     for o in outings:
         if len((o[13] or {}).get("line") or []) > 1:
             by_site.setdefault(o[14], []).append(Climb(o[0], o[13]["line"], o[9]))
     route_of, routes = {}, []
     for site_id, climbs in by_site.items():
-        for r in routes_of(climbs):
+        for r in routes_of(climbs, via):
             rid = len(routes) + 1
             routes.append([rid, site_id, r["name"], r["line"]])
             for oid in r["outing_ids"]:
@@ -233,8 +239,10 @@ def main() -> int:
                 return self.send_json([])
             super().do_GET()
 
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", args.port), Handler) as httpd:
+    # several requests at a time: a browser connection left open must not hold up the others
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    socketserver.ThreadingTCPServer.daemon_threads = True
+    with socketserver.ThreadingTCPServer(("127.0.0.1", args.port), Handler) as httpd:
         kind = "public outings of the live site (read-only)" if args.real else "made-up outings"
         print(f"{len(outings)} {kind}\nopen http://127.0.0.1:{args.port}/#/map   (Ctrl-C to stop)", flush=True)
         try:

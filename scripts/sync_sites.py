@@ -10,7 +10,8 @@ Run by GitHub Actions (.github/workflows/sites.yml) once a week and when asked. 
    provisional take-off made from it); an outing tied by hand (``manual``) is left alone;
 5. each provisional take-off is moved to the median of its outings' take-off points (it starts as the first outing's
    point), and the outings are tied again; ones no outing uses any more are removed;
-6. the routes of every take-off are made again from the climbs (src/mbhf/routes.py) and the outings tied to them.
+6. every outing gets the title of its take-off, « Pointe de Beauregard » (src/mbhf/titles.py);
+7. the routes of every take-off are made again from the climbs (src/mbhf/routes.py) and the outings tied to them.
 ``--dry-run`` reads everything and prints what it would do, without writing.
 New outings are tied when the server checks them (process_pending.py), with the take-offs already in the register.
 """
@@ -24,16 +25,19 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 from mbhf.sites import (SiteIndex, attach, centre_of, ffvl_takeoffs, metres, osm_takeoffs,  # noqa: E402
                         overpass_query, provisional_site, without_doubles)
+from mbhf.titles import outing_title  # noqa: E402
 
 FFVL_DATASETS = "https://www.data.gouv.fr/api/1/organizations/federation-francaise-de-vol-libre/datasets/?page_size=50"
 # the main Overpass server is often busy (502): public mirrors are tried in turn
 OVERPASS_URLS = ("https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
                  "https://overpass.kumi.systems/api/interpreter")
-OUTING_COLUMNS = "id,title,takeoff_name,summit_name,takeoff_lat,takeoff_lon,takeoff_alt,country_code,takeoff_site_id,takeoff_site_status,takeoff_site_m"
+OUTING_COLUMNS = ("id,title,takeoff_name,summit_name,start_place,start_commune,takeoff_lat,takeoff_lon,takeoff_alt,"
+                  "country_code,takeoff_site_id,takeoff_site_status,takeoff_site_m")
 SITE_COLUMNS = ("source", "source_id", "name", "lat", "lon", "alt", "country_code", "wind_ok", "hike_and_fly", "ffvl_status")
 
 
@@ -126,15 +130,36 @@ class Register:
 
 def tie_outing(outing: dict, index: SiteIndex, register: Register) -> tuple[str, dict]:
     """Tie one outing (making a provisional take-off when none is close); returns (status, site)."""
-    site, metres, status = attach(outing["takeoff_lat"], outing["takeoff_lon"], outing.get("takeoff_alt"), index)
+    own = provisional_site(outing)
+    site, metres, status = attach(outing["takeoff_lat"], outing["takeoff_lon"], outing.get("takeoff_alt"), index, own["name"])
     if site is None:
-        site = register.upsert([provisional_site(outing)])[0]
+        site = register.upsert([own])[0]
         index.add(site)
         metres = 0
     if (outing.get("takeoff_site_id"), outing.get("takeoff_site_status")) != (site["id"], status):
         register.tie(outing["id"], site["id"], status, metres)
         outing["takeoff_site_id"], outing["takeoff_site_status"] = site["id"], status
     return status, site
+
+
+def title_from_site(site: Optional[dict], outing: dict) -> Optional[str]:
+    """The outing's title from its take-off in the register: « Pointe de Beauregard »."""
+    if not site:
+        return None
+    return outing_title(site.get("name"), outing.get("start_place"), outing.get("start_commune"))
+
+
+def retitle(register: Register, outings: list[dict], assigned: dict, sites_by_id: dict) -> int:
+    """Give every outing the title of its take-off (src/mbhf/titles.py). Returns how many changed."""
+    changed = 0
+    for o in outings:
+        title = title_from_site(sites_by_id.get(assigned.get(o["id"])), o)
+        if title and title != o.get("title"):
+            changed += 1
+            if not register.dry:
+                register.api.patch(o["id"], {"title": title})
+            o["title"] = title
+    return changed
 
 
 def tie_all(outings: list[dict], index: SiteIndex, register: Register, provisional_by_id: dict):
@@ -210,6 +235,8 @@ def sync(api, dry_run: bool = False) -> None:
     unused = [s["id"] for s in provisional if s["id"] not in used]
     register.delete_sites(unused)
     print(f"provisional take-offs no longer used, removed: {len(unused)}")
+    sites_by_id = {s["id"]: s for s in official} | provisional_by_id
+    print(f"titles given from the take-off: {retitle(register, outings, assigned, sites_by_id)}")
     try:
         made = sum(rebuild_routes(register, site_id) for site_id in used if site_id is not None)
         print(f"routes: {made} for {len(used)} take-offs")
@@ -220,13 +247,23 @@ def sync(api, dry_run: bool = False) -> None:
 def rebuild_routes(register: Register, site_id: int) -> int:
     """Make the routes of one take-off again from the climbs of its public outings (src/mbhf/routes.py), and tie
     the outings to them. Returns how many routes."""
-    from mbhf.routes import Climb, routes_of
+    from mbhf.routes import Climb, pick_via, routes_of, via_query
 
     rows = register.select("outings", f"select=id,climb,start_place&takeoff_site_id=eq.{site_id}"
                                       "&status=eq.published&verified=is.true&hidden=is.false")
     climbs = [Climb(r["id"], r["climb"]["line"], r.get("start_place"))
               for r in rows if len((r.get("climb") or {}).get("line") or []) > 1]
-    routes = routes_of(climbs)
+
+    def via(lat, lon, avoid):  # the place a way goes by, from OpenStreetMap (only for a start with several ways)
+        query = urllib.parse.urlencode({"data": via_query(lat, lon)}).encode()
+        for url in OVERPASS_URLS:
+            try:
+                return pick_via(get_json(url, query, timeout=60).get("elements", []), lat, lon, avoid)
+            except Exception:
+                time.sleep(2)
+        return None
+
+    routes = routes_of(climbs, via)
     if register.dry:
         return len(routes)
     # the take-off's routes are made again: the old ones go (their outings lose their route_id until just below)

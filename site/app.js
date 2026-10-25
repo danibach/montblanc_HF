@@ -774,7 +774,8 @@ function previewRow(res, places) {
     engine_version: res.engine && res.engine.version, score_version: o.score_version, started_at: o.started_at,
     flight_path_km: o.flight_path_km, places_pending: !places,
     flights: (o.flights || []).map(({ i_start, i_end, ...rest }) => rest),
-    title: (pl.takeoff && pl.takeoff.kind === 'site' && pl.takeoff.name) || (pl.summit && pl.summit.name) || pl.start_place || 'Hike & Fly outing', // shown through outingTitle()
+    // « {take-off} from {start} », made by the engine (src/mbhf/titles.py); the server then names the take-off of the register
+    title: pl.title || (pl.takeoff && pl.takeoff.kind === 'site' && pl.takeoff.name) || (pl.summit && pl.summit.name) || pl.start_place || 'Hike & Fly outing', // shown through outingTitle()
     outing_date: o.date, duration_s: o.duration_s, score: o.score, dplus_m: o.dplus_m, dminus_m: o.dminus_m,
     walk_km: o.walk_km, flight_free_km: o.flight_free_km, warnings: o.warnings,
     country_name: pl.country && pl.country.name, country_code: pl.country && pl.country.code,

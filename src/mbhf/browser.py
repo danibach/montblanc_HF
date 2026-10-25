@@ -18,6 +18,7 @@ from .analyse import (AnalysisError, ends_of, finish, prepare_bytes, prepare_fil
 from .multi import Ends, groups
 from .terrain import parse_elevations, sample_flights
 from .places import overpass_query, resolve_places
+from .rows import place_title
 
 GENERIC_ERROR = (
     "Something went wrong while reading this file. Check that it is the complete export of a "
@@ -136,7 +137,11 @@ def places_query(outing_json: str) -> Optional[str]:
 
 
 def resolve_places_json(outing_json: str, overpass_json: str) -> str:
-    return json.dumps(resolve_places(json.loads(outing_json), json.loads(overpass_json)), ensure_ascii=False)
+    """The names, and the title made from them (the same as the server's, src/mbhf/titles.py)."""
+    outing = json.loads(outing_json)
+    places = resolve_places(outing, json.loads(overpass_json))
+    places["title"] = place_title(places, outing.get("date"), (outing.get("summit") or {}).get("alt"))
+    return json.dumps(places, ensure_ascii=False)
 
 
 def terrain_json(sha256: str, response_json: str) -> str:
