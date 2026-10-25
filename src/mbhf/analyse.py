@@ -14,7 +14,7 @@ from .models import Point, Track, TrackError
 from .multi import Ends, chain_problem, combined_sha256
 from .outing import OutingConfig, build_outing, build_trace
 from .parsers import load_track
-from .parsers.common import clean_altitudes
+from .parsers.common import clean_altitudes, drop_jumps
 from .segment import SegmenterConfig, segment_track
 from .terrain import apply_terrain, elevation_query, sample_flights
 
@@ -83,8 +83,9 @@ def read_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> tuple
         except TrackError as exc:
             raise AnalysisError(advice.file_problem(shown, str(exc), data)) from exc
     track.source = shown
-    cleaned, blanked = clean_altitudes(track.points)
-    if blanked:
+    kept, jumped = drop_jumps(track.points)
+    cleaned, blanked = clean_altitudes(kept)
+    if blanked or jumped:
         track = Track(points=cleaned, source=track.source, fmt=track.fmt, hint=track.hint, warnings=track.warnings)
 
     if sum(1 for p in track.points if p.alt is not None) < 0.5 * len(track.points):
@@ -93,6 +94,8 @@ def read_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> tuple
     info = {"name": shown, "format": ext[1:], "size": len(data), "sha256": sha256_hex(data), "fixes": len(track.points)}
     if blanked:
         info["altitude_ignored"] = blanked
+    if jumped:
+        info["position_ignored"] = jumped
     return track, info
 
 
@@ -126,9 +129,9 @@ def prepare_files(parts: list[tuple[str, bytes]], max_bytes: int = MAX_FILE_BYTE
     info = {"name": " + ".join(names), "format": infos[0]["format"], "size": sum(i["size"] for i in infos),
             "sha256": combined_sha256([i["sha256"] for i in infos]), "fixes": sum(i["fixes"] for i in infos),
             "parts": infos}
-    ignored = sum(i.get("altitude_ignored", 0) for i in infos)
-    if ignored:
-        info["altitude_ignored"] = ignored
+    for key in ("altitude_ignored", "position_ignored"):
+        if sum(i.get(key, 0) for i in infos):
+            info[key] = sum(i.get(key, 0) for i in infos)
     return _prepare(track, info)
 
 
@@ -139,6 +142,9 @@ def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
     ignored = prepared.info.get("altitude_ignored")
     if ignored:
         notes = list(notes or []) + [f"{ignored} altitude reading{'s were' if ignored != 1 else ' was'} obviously wrong (0 m or a one-fix spike) and ignored"]
+    jumped = prepared.info.get("position_ignored")
+    if jumped:
+        notes = list(notes or []) + [f"{jumped} position{'s' if jumped != 1 else ''} far away and back at an impossible speed (a receiver error) ignored"]
     if notes:
         outing["warnings"] = list(outing["warnings"]) + [n for n in notes if n not in outing["warnings"]]
     # the words shown when the outing does not count (None when it counts)

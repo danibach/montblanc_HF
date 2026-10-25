@@ -122,3 +122,67 @@ def clean_altitudes(
     if not blank:
         return points, 0
     return [p if p.alt == al else replace(p, alt=al) for p, al in zip(points, alts)], blank
+
+
+def _dist_m(a: Point, b: Point) -> float:
+    k = math.pi / 180.0
+    x = (b.lon - a.lon) * k * math.cos((a.lat + b.lat) * k / 2.0)
+    return 6371000.0 * math.hypot(x, (b.lat - a.lat) * k)
+
+
+def drop_jumps(points: list[Point], max_kmh: float = 150.0, back_m: float = 1000.0, away_m: float = 2000.0,
+               within_s: float = 3600.0, before_s: float = 600.0, anchor_every_s: float = 20.0) -> tuple[list[Point], int]:
+    """Drop the position errors that go somewhere and come back; returns (points, how many were dropped).
+
+    A step faster than ``max_kmh`` (no walker, wing or mountain road gets there) marks a suspect stretch. If, in
+    less than ``within_s`` after it, the track comes back within ``back_m`` of where it was in the ``before_s``
+    before it, after going at least ``away_m`` from there, everything in between was never there: a receiver
+    that lost the sky, seen on a night at 3,800 m on Mont Blanc (drifting off, then 5 km away at up to
+    3,000 km/h for 14 minutes, then back). Left alone it was a 25 km ride that cut the climb in two. The fix the
+    track comes back closest to is kept, the rest of the detour dropped. A single wild fix is dropped too. A fast
+    stretch with no way back (a motorway, a train) is kept."""
+    n = len(points)
+    keep = [True] * n
+    i = 1
+    while i < n:
+        a, b = points[i - 1], points[i]
+        dt = (b.t - a.t).total_seconds()
+        step = _dist_m(a, b)
+        # two fixes of the same second far apart: as impossible as a step too fast
+        if not (step / dt * 3.6 > max_kmh if dt > 0 else step > 50.0):
+            i += 1
+            continue
+        # where the track was before the fast step, latest first, one fix every anchor_every_s
+        anchors, last = [], None
+        for k in range(i - 1, -1, -1):
+            if (b.t - points[k].t).total_seconds() > before_s:
+                break
+            if last is None or (points[last].t - points[k].t).total_seconds() >= anchor_every_s:
+                anchors.append(k)
+                last = k
+        # how far the track went from each of them, up to the fast step
+        far = {k: max(_dist_m(points[k], points[m]) for m in range(k + 1, i + 1)) for k in anchors}
+        found, j = None, i + 1
+        while j < n and (points[j].t - b.t).total_seconds() <= within_s:
+            if j == i + 1 and _dist_m(a, points[j]) <= back_m and _dist_m(a, b) > away_m:
+                found = (i - 1, j)  # one wild fix
+                break
+            close = []
+            for k in anchors:
+                d = _dist_m(points[k], points[j])
+                far[k] = max(far[k], d)
+                if far[k] >= away_m and d <= back_m:
+                    close.append((d, k))
+            if close:
+                found = (min(close)[1], j)
+                break
+            j += 1
+        if found:
+            k, j = found
+            for m in range(k + 1, j):
+                keep[m] = False
+            i = j + 1  # the step into j came from a dropped fix
+        else:
+            i = max(j, i + 1)  # no way back: the whole window is kept, not searched again
+    dropped = keep.count(False)
+    return ([p for p, k in zip(points, keep) if k], dropped) if dropped else (points, 0)
