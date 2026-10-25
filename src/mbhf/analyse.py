@@ -150,10 +150,36 @@ def with_terrain(prepared: Prepared, elevations: Optional[list]) -> dict:
     return finish(prepared, seg, notes)
 
 
-def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES, elevation_fetch=None) -> dict:
+MAX_MANUAL_FLIGHTS = 20
+MAX_MANUAL_SECONDS = 3 * 24 * 3600
+
+
+def clean_manual_ranges(value) -> list:
+    """The hand-marked flights as sent by a browser, checked: ``[[from, to], ...]`` in seconds after the first fix.
+    Raises ``AnalysisError`` when it is not that (the server never trusts what a browser sends)."""
+    bad = AnalysisError("The flights marked by hand are not valid.")
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_MANUAL_FLIGHTS:
+        raise bad
+    out = []
+    for item in value:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise bad
+        a, b = item
+        if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in (a, b)):
+            raise bad
+        if not (0 <= a <= MAX_MANUAL_SECONDS and 0 <= b <= MAX_MANUAL_SECONDS) or a == b:
+            raise bad
+        out.append([float(a), float(b)])
+    return out
+
+
+def analyse_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES, elevation_fetch=None, manual_ranges=None) -> dict:
     """Analyse one track file. ``elevation_fetch(samples) -> [metres] | None`` switches the terrain check on
     (the server passes ``terrain.fetch_elevations``). Raises ``AnalysisError`` with a message fit to show."""
     prepared = prepare_bytes(name, data, max_bytes)
+    if manual_ranges:
+        # flights marked by the participant on the map override the automatic ground check (decided 25 Oct 2026)
+        return finish(with_manual_flights(prepared, clean_manual_ranges(manual_ranges)))
     if elevation_fetch is None:
         return finish(prepared)
     samples = sample_flights(prepared.track, prepared.seg)

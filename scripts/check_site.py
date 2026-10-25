@@ -345,9 +345,16 @@ with sync_playwright() as p:
     page.wait_for_selector("#mark-result .notice", timeout=60000)
     check("points" in page.inner_text("#mark-result .notice-ok") if page.locator("#mark-result .notice-ok").count() else False,
           "recalculated with the hand-marked flight: " + page.inner_text("#mark-result").replace("\n", " ")[:120])
+    page.click("#mark-publish")
+    page.wait_for_selector("#mark-result .notice-ok:has-text('Published')", timeout=30000)
+    marked = [json.loads(c[2]) for c in calls if c[0] == "BODY" and c[1] == "outings"]
+    check(len(marked) == 1 and marked[0].get("manual_flights") and len(marked[0]["manual_flights"][0]) == 2,
+          "publishing sends the marked flights: " + json.dumps(marked[0].get("manual_flights") if marked else None)[:60])
+    check(marked and marked[0].get("status") == "published" and not ({"verified", "hidden", "user_id"} & set(marked[0])), "marked outing published like any other")
+    calls.clear()  # the checks below count the uploads of the normal track
     page.click("text=Back to the list")
-    page.wait_for_selector("#refused .refused-item", timeout=15000)
-    check(True, "back on Upload, the list is still there")
+    page.wait_for_selector("#view h1:has-text('Upload a track')", timeout=15000)
+    check(page.locator("#refused .refused-item").count() == 0, "back on Upload: the published track left the list")
 
     page.set_input_files("#track", GPX)
     page.wait_for_selector("#publish", timeout=60000)
