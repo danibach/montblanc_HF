@@ -605,8 +605,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
       const several = (starts.get(place) || []).length > 1;
       line.bindTooltip(h('span', null, `${several ? `From ${place} · ` : ''}${route.name} · ${plural(outings.length, 'outing')}`), { sticky: true });
       // a route lights up under the pointer; a click keeps it lit (and opens it in the list), a second click lets it go
-      // bringToFront takes the hovered line out of the page and puts it back: the browser may then never say the
-      // pointer left it, so the tooltips are closed here rather than left to Leaflet (they stayed on the map)
+      // one label at a time, whatever the browser says of the lines the pointer left
       line.on('mouseover', () => {
         for (const drawn of routeLines.values()) if (drawn.line !== line) drawn.line.closeTooltip();
         paintRoutes([key]);
@@ -625,7 +624,9 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
         if (!keys.includes(key)) drawn.line.closeTooltip(); // only the hovered line has its label
         drawn.casing.setStyle({ ...ROUTE_CASING, weight: ROUTE_CASING.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.3 : ROUTE_CASING.opacity });
         drawn.line.setStyle({ ...drawn.style, weight: drawn.style.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.35 : drawn.style.opacity });
-        if (on) { drawn.casing.bringToFront(); drawn.line.bringToFront(); }
+        // only a kept route comes to the front: moving the hovered line in the page lost its mouseout, so its
+        // label stayed on the map
+        if (key === selectedRoute) { drawn.casing.bringToFront(); drawn.line.bringToFront(); }
       }
     };
     function selectRoute(key) {
