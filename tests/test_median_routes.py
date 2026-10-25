@@ -50,6 +50,15 @@ def test_provisional_twins_of_the_same_name_are_one_take_off():
     assert same_name("Le Môle", "le mole") and not same_name("", "")
 
 
+def test_speed_riding_only_take_offs_are_left_out():
+    from mbhf.sites import ffvl_takeoffs
+    base = {"flying_functions_text": "décollage", "latitude": 45.9, "longitude": 6.45, "altitude": 1500}
+    sites = ffvl_takeoffs([{**base, "suid": 1, "toponym": "LA CLUSAZ - SPEED-RIDING", "possible_usages_text": "speed-riding"},
+                           {**base, "suid": 2, "toponym": "PLAN PRAZ", "possible_usages_text": "parapente;speed-riding"},
+                           {**base, "suid": 3, "toponym": "LAC", "possible_usages_text": "kite eau"}])
+    assert [s["source_id"] for s in sites] == ["2"]
+
+
 def test_titles():
     assert clean_name("LA CLUSAZ - AIGUILLE DES CALVAIRES (ETE)", ("La Clusaz",)) == "Aiguille des Calvaires"
     assert clean_name("La Clusaz - Cret du Loup (Ete 1er Mai au 31 Octobre)", ("La Clusaz",)) == "Crêt du Loup"

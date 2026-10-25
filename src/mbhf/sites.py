@@ -80,10 +80,14 @@ def _number(value) -> Optional[float]:
 
 
 def ffvl_takeoffs(terrains: Iterable[dict]) -> list[dict]:
-    """The take-offs of the FFVL open-data file (terrains.json)."""
+    """The paragliding take-offs of the FFVL open-data file (terrains.json): a site for speed riding, kites or hang
+    gliders only is left out (Sarah, 25 October 2026); a site for paragliding and speed riding stays."""
     out = []
     for t in terrains:
         if "décollage" not in (t.get("flying_functions_text") or "") or t.get("latitude") is None:
+            continue
+        usages = t.get("possible_usages_text")
+        if usages is not None and "parapente" not in usages:
             continue
         out.append({
             "source": "ffvl", "source_id": str(t["suid"]), "name": pretty_name(t.get("toponym") or ""),
