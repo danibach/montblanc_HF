@@ -45,6 +45,9 @@ th { color: var(--muted); font-weight: 600; font-size: .85rem; background: var(-
 td.wrap { white-space: normal; }
 .note-line { margin-top: .2rem; }
 .note-line:empty { display: none; }
+.note-line summary { cursor: pointer; }
+.note-line ul { margin: .2rem 0 0; padding-left: 1.1rem; }
+td.file-cell { min-width: 14rem; overflow-wrap: anywhere; }
 /* a table wider than the screen scrolls sideways: keep the scroll bar visible */
 .table-wrap { scrollbar-width: auto; }
 .table-wrap::-webkit-scrollbar { height: 12px; }
@@ -182,3 +185,15 @@ th[aria-sort] { color: var(--ink); }
 /* The heat map is a canvas laid over the whole map: without this it catches the mouse and the lines under it
    (routes, climbs) can be neither hovered nor clicked. The map still drags and zooms through it. */
 .leaflet-heatmap-layer { pointer-events: none; }
+
+/* Upload: refused tracks without a flight, and the tool to mark one by hand */
+.refused { margin-top: 1.5rem; }
+.refused-item { display: flex; gap: .8rem; align-items: center; justify-content: space-between; padding: .7rem .9rem; border: 1px solid var(--line); border-radius: 8px; margin: .5rem 0; background: var(--card); }
+.refused-item .why { flex: 1; min-width: 0; }
+.refused-item .why b { overflow-wrap: anywhere; }
+.refused-item .why p { margin: .2rem 0 0; }
+.refused-item .button { flex: none; }
+.map-tall { height: max(320px, calc(100svh - 24rem)); }
+.mark-list { list-style: none; padding: 0; margin: .6rem 0; }
+.mark-list li { display: flex; gap: .8rem; justify-content: space-between; align-items: center; padding: .4rem .7rem; border: 1px solid var(--line); border-radius: 8px; margin-bottom: .35rem; background: var(--card); }
+@media (max-width: 640px) { .refused-item { flex-direction: column; align-items: stretch; } }

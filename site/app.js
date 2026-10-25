@@ -6,13 +6,15 @@
 //   #/ranking          ranking of participants (by year or all time)
 //   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
+//   #/mark             mark the flights of a refused track by hand, on a map (opened from the Upload page)
 //   #/login            sign in
 
 import { CONFIG } from './config.js';
 import * as api from './api.js';
-import { analyseFile, checkTerrain, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
+import { analyseFile, analyseFiles, analyseManual, checkTerrain, groupFiles, lookUpPlaces, onEngineStatus, startEngine } from './engine.js';
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
 import { buildExplorer } from './explorer.js';
+import { buildMarkTool } from './mark.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
@@ -409,6 +411,37 @@ function nameForm(title) {
 
 // ---------------------------------------------------------------- upload
 
+// Tracks refused because they hold no flight, kept in memory (the files cannot go in the address) so the list
+// survives a visit to the marking tool and back. Emptied when new files are chosen.
+let noFlight = [];
+let refusedBox = null;     // where the list is drawn on the Upload page
+let markTarget = null;     // the entry the marking tool works on
+
+function renderNoFlight() {
+  if (!refusedBox) return;
+  if (!noFlight.length) { refusedBox.replaceChildren(); return; }
+  refusedBox.replaceChildren(
+    h('h2', null, `Without a flight (${noFlight.length})`),
+    h('p', { class: 'hint' }, 'No flight was found in these tracks, so they do not count. If one of them does hold a flight, mark it yourself on the map.'),
+    ...noFlight.map((it) => h('div', { class: 'refused-item' },
+      h('div', { class: 'why' }, h('b', null, fileLabel(it.file)), h('p', { class: 'hint' }, it.message)),
+      h('a', { class: 'button', href: '#/mark', onclick: () => { markTarget = it; } }, 'Mark the flight by hand'))));
+}
+
+/** The name of a track: a File, or the Files of one outing in several files (« a.gpx + b.gpx »). */
+const fileLabel = (f) => (Array.isArray(f) ? f.map((x) => x.name).join(' + ') : f.name);
+
+/** Remember a refused track when the reason is that it holds no flight (res: the result of the analysis). ``file``
+ * is a File, or the Files of one outing in several files: the flight is then marked on the joined track. */
+function noteNoFlight(file, res) {
+  const o = res.outing;
+  if (o.status === 'ok' || o.reason !== 'no_flight' || !res.trace) return;
+  if (noFlight.some((it) => it.file === file)) return;
+  noFlight.push({ file, res, message: refusalText(o) });
+  renderNoFlight();
+}
+
+
 async function pageUpload() {
   setNav('upload');
   if (!api.state.user) {
@@ -421,13 +454,15 @@ async function pageUpload() {
   const engineMsg = h('span', { class: 'hint', role: 'status', id: 'engine-status' }, 'Preparing the analysis…');
   const unsubscribe = onEngineStatus((text, state) => { engineMsg.textContent = text; engineMsg.dataset.state = state; });
   const out = h('div', { id: 'preview' });
+  refusedBox = h('div', { id: 'refused', class: 'refused' });
   const input = h('input', { type: 'file', id: 'track', accept: '.igc,.gpx,.kml,.tcx,.fit', multiple: true });
   const drop = h('div', { class: 'drop', id: 'drop' },
     h('p', null, h('b', null, 'Drop your tracks here'), ' or choose one or several files'),
     h('p', null, input),
     h('p', { class: 'hint' }, `IGC, GPX, KML, TCX or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB each. The analysis runs in your browser: a single file is sent only when you publish it.`),
+    h('p', { class: 'hint' }, `One outing in several files (a bike ride to the start, the climb and flight, the ride home): drop them together, they are offered to be joined.`),
     h('p', { class: 'hint' }, `Several files at once: each one is analysed and, by default, published as soon as it is ready. Keep the page open until the list is finished. At most 20 uploads per day, and up to 1,000 per day during the first two weeks of your account.`),
-    h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused.'));
+    h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused, unless you mark the flight by hand afterwards.'));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => {
@@ -436,10 +471,13 @@ async function pageUpload() {
   });
   input.addEventListener('change', () => {
     const files = Array.from(input.files);
+    noFlight = [];
+    renderNoFlight();
     if (files.length === 1) analyse(files[0], out).catch(fail);
     else if (files.length > 1) analyseBatch(files, out).catch(fail);
   });
-  show(h('h1', null, 'Upload a track'), drop, h('p', null, engineMsg), out);
+  show(h('h1', null, 'Upload a track'), drop, h('p', null, engineMsg), out, refusedBox);
+  renderNoFlight();
   startEngine().catch(() => {});
   window.addEventListener('hashchange', unsubscribe, { once: true });
 }
@@ -457,6 +495,7 @@ async function analyse(file, out) {
     return out.replaceChildren(notice('error', h('p', null, e.message)));
   }
   const o = res.outing;
+  noteNoFlight(file, res);
   const places = await lookUpPlaces(o);
   const pv = previewRow(res, places);
 
@@ -509,11 +548,19 @@ function refusalText(o) {
  */
 async function analyseBatch(fileList, out) {
   const files = fileList.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const items = files.map((file) => ({
-    file, state: 'waiting', pv: null,
-    cells: { name: h('td', { class: 'wrap' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
+  // files that follow one another (a ride to the start, the climb and flight, the ride home) make one outing
+  // if the pilot agrees (src/mbhf/multi.py)
+  let units = files.map((f) => [f]);
+  out.replaceChildren(h('p', { class: 'hint pad', id: 'busy' }, 'Looking for files that make one outing…'));
+  try {
+    const groups = await groupFiles(files);
+    if (groups.some((g) => g.length > 1)) units = await confirmGroups(groups.map((g) => g.map((k) => files[k])), out);
+  } catch (_) { /* not essential: each file is then an outing of its own */ }
+  const items = units.map((parts) => ({
+    file: parts.length === 1 ? parts[0] : parts, parts, state: 'waiting', pv: null,
+    cells: { name: h('td', { class: 'wrap file-cell' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
   }));
-  for (const it of items) it.cells.name.append(h('div', null, it.file.name), it.cells.notes);
+  for (const it of items) it.cells.name.append(h('div', null, it.parts.map((f) => f.name).join(' + ')), it.cells.notes);
   const set = (it, state, text, kind) => {
     it.state = state;
     it.cells.result.replaceChildren(text);
@@ -558,7 +605,11 @@ async function analyseBatch(fileList, out) {
 
   // 0. skip what this account has already sent (a restarted batch picks up where it stopped)
   try {
-    const hashes = await Promise.all(items.map(async (it) => { it.hash = await api.sha256Hex(await it.file.arrayBuffer()); return it.hash; }));
+    const hashes = await Promise.all(items.map(async (it) => {
+      const own = await Promise.all(it.parts.map(async (f) => api.sha256Hex(await f.arrayBuffer())));
+      it.hash = own.length === 1 ? own[0] : await api.combinedSha256(own);
+      return it.hash;
+    }));
     const sent = await api.alreadySent(hashes);
     for (const it of items) if (sent.has(it.hash)) { set(it, 'duplicate', 'Already submitted before', 'warn-text'); it.cells.score.textContent = '–'; }
   } catch (_) { /* not essential */ }
@@ -572,8 +623,8 @@ async function analyseBatch(fileList, out) {
     summary.textContent = `Analysing file ${n} of ${todo.length}…`;
     set(it, 'busy', 'Analysing…');
     try {
-      if (it.file.size > CONFIG.MAX_FILE_MB * 1024 * 1024) throw new Error(`Larger than ${CONFIG.MAX_FILE_MB} MB: export only this activity, not a whole year`);
-      let res = await analyseFile(it.file);
+      if (it.parts.some((f) => f.size > CONFIG.MAX_FILE_MB * 1024 * 1024)) throw new Error(`Larger than ${CONFIG.MAX_FILE_MB} MB: export only this activity, not a whole year`);
+      let res = it.parts.length === 1 ? await analyseFile(it.file) : await analyseFiles(it.parts);
       res = await checkTerrain(res);
       const o = res.outing;
       it.cells.dplus.textContent = fmtInt(o.dplus_m);
@@ -588,9 +639,14 @@ async function analyseBatch(fileList, out) {
         if (auto.checked) await send(it);
       } else {
         it.cells.score.textContent = '–';
+        noteNoFlight(it.file, res);
         set(it, 'refused', `Not counted: ${refusalText(o)}`, 'warn-text');
       }
-      it.cells.notes.textContent = (o.warnings || []).join(' · ');
+      // the notes folded under « 12 notes »: an outing in several files has many (pauses, rides, gaps)
+      const notes = o.warnings || [];
+      it.cells.notes.replaceChildren(...(notes.length ? [h('details', null,
+        h('summary', null, `${notes.length} note${notes.length > 1 ? 's' : ''}`),
+        h('ul', null, notes.map((n) => h('li', null, n))))] : []));
     } catch (e) {
       set(it, 'error', e.message || 'This file could not be analysed.', 'error-text');
     }
@@ -625,6 +681,88 @@ async function analyseBatch(fileList, out) {
     status.textContent = '';
     summary.replaceChildren(...describe());
   });
+}
+
+/** Ask whether the files that follow one another make one outing (one box per group, ticked). Resolves to the
+ * outings to analyse: each a list of Files in time order. */
+function confirmGroups(groups, out) {
+  const fmt = (f) => f.name;
+  const boxes = [];
+  const rows = groups.filter((g) => g.length > 1).map((g, k) => {
+    const box = h('input', { type: 'checkbox', id: `join-${k}`, checked: true });
+    boxes.push([box, g]);
+    return h('li', null, h('label', { for: `join-${k}` }, box, ` Join as one outing: ${g.map(fmt).join(' → ')}`));
+  });
+  return new Promise((resolve) => {
+    const go = h('button', { class: 'primary', id: 'join-continue' }, 'Continue');
+    go.addEventListener('click', () => {
+      const joined = new Set(boxes.filter(([b]) => b.checked).map(([, g]) => g));
+      resolve(groups.flatMap((g) => (g.length > 1 && joined.has(g) ? [g] : g.map((f) => [f]))));
+    });
+    out.replaceChildren(notice('info',
+      h('p', null, h('b', null, 'These files follow one another. '), 'Each file starts soon after the previous one ended, close to where it ended: together they can make one outing (for example a bike ride to the start, the climb and the flight, the ride home). The original files are kept and joined again on our side.'),
+      h('ul', null, ...rows),
+      h('p', null, go)));
+  });
+}
+
+// ---------------------------------------------------------------- mark flights by hand
+
+function pageMark() {
+  setNav('upload');
+  const item = markTarget;
+  if (!api.state.user || !item) {
+    return show(h('h1', null, 'Mark a flight by hand'),
+      notice('info', h('p', null, 'Choose the track on the ', link('#/upload', 'Upload page'), ' first: the file has to be there for the map.')));
+  }
+  const result = h('div', { id: 'mark-result' });
+  const recalc = h('button', { class: 'primary', id: 'mark-recalc', disabled: true }, 'Recalculate with these flights');
+  const tool = buildMarkTool(item.res.trace, (count) => { recalc.disabled = count === 0; });
+  recalc.addEventListener('click', async () => {
+    recalc.disabled = true;
+    result.replaceChildren(h('p', { class: 'hint pad' }, 'Analysing…'));
+    try {
+      const ranges = tool.ranges();
+      const res = await analyseManual(item.file, ranges); // no ground check: the marking overrides it
+      const o = res.outing;
+      if (o.status === 'ok') {
+        const places = await lookUpPlaces(o);
+        const pv = { ...previewRow(res, places), manual_flights: ranges };
+        const publish = h('button', { class: 'primary', id: 'mark-publish' }, 'Publish this outing');
+        const status = h('span', { class: 'hint', role: 'status' });
+        publish.addEventListener('click', async () => {
+          publish.disabled = true;
+          try {
+            const id = await api.submitTrack(item.file, (t) => { status.textContent = t; }, pv);
+            noFlight = noFlight.filter((it) => it !== item);
+            result.replaceChildren(notice('ok', h('p', null, 'Published with the flights you marked. The server uses them too when it checks the result: the "Validation pending" badge disappears within a few minutes.'),
+              h('p', null, link(`#/outing/${id}`, 'See your outing'), ' · ', link('#/upload', 'Back to the list'))));
+          } catch (e) {
+            status.textContent = '';
+            publish.disabled = false;
+            result.prepend(notice('error', h('p', null, e.message)));
+          }
+        });
+        result.replaceChildren(
+          notice('ok', h('p', null, h('b', null, `${fmtInt(o.score)} points`), ` — ${fmtInt(o.dplus_m)} m climbed on foot and ${fmtInt(o.dminus_m)} m flown down.`)),
+          h('div', { class: 'publish-bar' },
+            h('div', { class: 'row' }, publish, status),
+            h('p', { class: 'hint' }, 'Not published yet. By publishing you agree that this track — map, profile and statistics — is shown publicly. The original file stays private. Your marked flights are published with it and are not checked against the ground.')));
+      } else {
+        result.replaceChildren(notice('error', h('p', null, refusalText(o))));
+      }
+    } catch (e) {
+      result.replaceChildren(notice('error', h('p', null, e.message)));
+    }
+    recalc.disabled = tool.ranges().length === 0;
+  });
+  show(h('h1', null, 'Mark a flight by hand'),
+    h('p', null, h('b', null, fileLabel(item.file)), ' — ', item.message),
+    h('p', { class: 'hint' }, 'The track is drawn in green on foot, orange in flight and grey in a vehicle. Click the take-off, then the landing: the stretch between them becomes a flight (in blue). Your marking overrides the automatic ground check, so a track whose altitudes were flattened onto the terrain can still be entered: only mark what was really a flight.'),
+    tool.element,
+    h('div', { class: 'row' }, recalc, link('#/upload', 'Back to the list')),
+    result);
+  tool.start();
 }
 
 /** A preview shaped like a database row, from the browser's own analysis. */
@@ -728,6 +866,7 @@ async function route() {
     else if (path[0] === 'outing' && path[1]) { loading(); await pageOuting(token, path[1]); }
     else if (path[0] === 'user' && path[1]) { loading(); await pageUser(token, path[1]); }
     else if (path[0] === 'upload') await pageUpload();
+    else if (path[0] === 'mark') pageMark();
     else if (path[0] === 'login') pageLogin();
     else { location.hash = '#/'; }
   } catch (err) {
