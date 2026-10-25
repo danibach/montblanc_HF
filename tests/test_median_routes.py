@@ -41,12 +41,17 @@ def test_provisional_twins_of_the_same_name_are_one_take_off():
     older = {"id": 1428, "source": "provisional", "name": "Pointe de Beauregard", "lat": 45.89349, "lon": 6.407655, "alt": 1633.5}
     younger = {"id": 2885, "source": "provisional", "name": "Pointe de Beauregard", "lat": 45.89452, "lon": 6.40475, "alt": 1623}
     index = SiteIndex([older, younger])
-    site, d, status = attach(45.89452, 6.40475, 1625, index, "Pointe de Beauregard")
-    assert site["id"] == 1428 and status == "auto" and 240 < d < 260
-    # another name 250 m away stays its own take-off
-    assert attach(45.89452, 6.40475, 1625, SiteIndex([older]), "Tête de Cabeau")[2] == "provisional"
+    # the two take-offs of the Pointe de Beauregard (north and south, 252 m apart) stay two: Dani, 25 October 2026
+    assert attach(45.89452, 6.40475, 1625, SiteIndex([older]), "Pointe de Beauregard")[2] == "provisional"
+    assert attach(45.89452, 6.40475, 1625, index, "Pointe de Beauregard")[0]["id"] == 2885
+    # an outing 100 m from the older one, same name: the same take-off
+    near = (older["lat"] + 100 / 111320, older["lon"])
+    site, d, status = attach(near[0], near[1], 1633, SiteIndex([older]), "Pointe de Beauregard")
+    assert site["id"] == 1428 and status == "auto" and 90 < d < 110
+    # another name 100 m away is tied by distance alone (the twin rule needs the same name)
+    assert attach(near[0], near[1], 1633, SiteIndex([older]), "Tête de Cabeau")[2] == "auto"
     # and 108 m higher or lower is another spot (La Tournette, summit and shoulder)
-    assert attach(45.89452, 6.40475, 1740, SiteIndex([older]), "Pointe de Beauregard")[2] == "provisional"
+    assert attach(near[0], near[1], 1740, SiteIndex([older]), "Pointe de Beauregard")[2] == "provisional"
     assert same_name("Le Môle", "le mole") and not same_name("", "")
 
 
