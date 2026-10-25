@@ -223,7 +223,7 @@ async function outingsSection(token, { path, userId, showPilot, empty }) {
 async function pageAll(token) {
   setNav('all');
   const section = await outingsSection(token, { path: 'all', showPilot: true, empty: h('p', null, 'No outing yet for these filters.') });
-  if (section) show(h('h1', null, 'All Hike & Fly outings'), section);
+  if (section) show(h('h1', null, 'Outings'), section);
 }
 
 // My H&Fs is the pilot page of the signed-in person, at the address "#/".
@@ -240,20 +240,48 @@ async function pageRanking(token) {
   const bar = await filterBar(q, (v) => goFilters('ranking', v), { yearLabel: 'All time' });
   const rows = await api.getRanking({ year: q.year, country: q.country });
   if (token !== routeToken) return;
-  const body = rows.map((r, i) => h('tr', null,
-    h('td', { class: 'num' }, i + 1),
-    h('td', null, link(`#/user/${r.user_id}`, pilotName(r))),
+  // The rank is the place in the full ranking, so it stays the same when the search narrows the list.
+  const entries = rows.map((r, i) => ({ r, rank: i + 1, name: pilotName(r) }));
+  const rowOf = ({ r, rank, name }) => h('tr', null,
+    h('td', { class: 'num' }, rank),
+    h('td', null, link(`#/user/${r.user_id}`, name)),
     h('td', { class: 'num' }, fmtInt(r.outings)),
     h('td', { class: 'num' }, fmtInt(r.dplus)),
     h('td', { class: 'num' }, fmtInt(r.dminus)),
-    h('td', { class: 'num score' }, fmtInt(r.score))));
+    h('td', { class: 'num score' }, fmtInt(r.score)));
+  const tableNode = rows.length
+    ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Score', num: true }], entries.map(rowOf))
+    : null;
+
+  // Search a pilot by name: case and accents ignored, every word must be found in the name.
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const search = h('input', { type: 'search', id: 'f-pilot', placeholder: 'Search a pilot…', autocomplete: 'off', 'aria-label': 'Search a pilot' });
+  const found = h('p', { class: 'hint' });
+  const none = h('div', null, notice('info', h('p', null, 'No pilot matches this search.')));
+  none.hidden = true;
+  const apply = () => {
+    const words = fold(search.value).split(/\s+/).filter(Boolean);
+    const hits = entries.filter((e) => words.every((w) => fold(e.name).includes(w)));
+    if (tableNode) {
+      tableNode.querySelector('tbody').replaceChildren(...hits.map(rowOf));
+      tableNode.hidden = !hits.length;
+    }
+    none.hidden = !words.length || hits.length > 0;
+    found.textContent = words.length && hits.length ? `${hits.length} of ${entries.length} pilots` : '';
+  };
+  search.addEventListener('input', apply);
+  const searchBox = rows.length
+    ? h('div', { class: 'filters' }, h('div', { class: 'field' }, h('label', { for: 'f-pilot' }, 'Pilot'), search))
+    : null;
+
   show(
-    h('h1', null, 'Ranking'),
+    h('h1', null, 'Pilotes'),
     h('p', { class: 'sub' }, 'Sum of the scores of all outings. Score = D+ on foot + D− in flight (metres).'),
     bar,
-    rows.length
-      ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Score', num: true }], body)
-      : notice('info', h('p', null, 'No outing yet for these filters.')));
+    searchBox,
+    tableNode || notice('info', h('p', null, 'No outing yet for these filters.')),
+    found,
+    none);
 }
 
 async function pageMap(token) {
