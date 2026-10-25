@@ -4,7 +4,7 @@
 
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
-import { ffvlLayer } from './ffvl.js';
+import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
 // Take-offs closer than this are the same spot. Only for this page: nothing is stored.
 const SAME_SPOT_M = 150;
@@ -459,6 +459,15 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     searchBox.setAttribute('aria-expanded', 'false');
   }
 
+  // the FFVL card of a take-off of ours that is an official one: winds on a rose, walk, warnings, restrictions…
+  function ffvlFacts(sp) {
+    const site = sp.site && sp.site.source === 'ffvl' && ffvl.sites.find((f) => String(f.id) === String(sp.site.source_id));
+    if (!site) return null;
+    const box = h('div', { class: 'ffvl-in-panel' }, h('p', { class: 'hint' }, 'Loading the FFVL card…'));
+    ffvl.info(site.id).catch(() => ({})).then((info) => box.replaceChildren(ffvlCard(site, info)));
+    return box;
+  }
+
   async function openSpot(sp) {
     current = sp;
     const mine = ++request;
@@ -473,7 +482,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, `${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
-      siteFacts(sp), status, list);
+      siteFacts(sp), ffvlFacts(sp), status, list);
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
@@ -673,7 +682,9 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     // the official FFVL take-offs ▲ and landings ▼ (from zoom 10 on), with their card on a click (site/ffvl.js)
     const overlays = { 'Heat map': heat, 'Take-offs': markers };
     if (ffvl.sites.length) {
-      overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info).addTo(map);
+      // where a take-off of ours is drawn (within 100 m), the ▲ goes beside its marker
+      const taken = (lat, lon) => spots.some((sp) => Math.abs(sp.lat - lat) < 0.0009 && Math.abs(sp.lon - lon) < 0.0013);
+      overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
     }
     // open on a wide map, folded into its button on a narrow one (a phone): open, it hid the markers under it
     L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);

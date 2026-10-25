@@ -59,7 +59,8 @@ function linked(text) {
     : part));
 }
 
-function card(site, info) {
+/** The FFVL card of a site: on its ▲ ▼ popup, and in the side panel of a take-off of ours that is an FFVL one. */
+export function card(site, info) {
   const st = STATUS[site.status] || { cls: 'unknown', label: site.status || 'Status unknown' };
   const winds = String(site.winds || '').toUpperCase().split(/[;,\s]+/).filter(Boolean).map((d) => EN[d] || d);
   const row = (label, value) => (value == null || value === '' ? null : [h('dt', null, label), h('dd', null, linked(value))]);
@@ -80,9 +81,10 @@ function card(site, info) {
 
 /**
  * A layer of the FFVL sites for ``map``: markers for the ones in view from MIN_ZOOM on, redrawn as the map moves.
- * ``loadInfo(id)`` reads a site's card when it is clicked.
+ * ``loadInfo(id)`` reads a site's card when it is clicked. ``taken(lat, lon)``: true where a take-off of ours (with
+ * outings) is drawn; the ▲ goes to its top-right corner there, above it, instead of hiding under it.
  */
-export function ffvlLayer(L, map, sites, loadInfo) {
+export function ffvlLayer(L, map, sites, loadInfo, taken = () => false) {
   const layer = L.layerGroup();
   const shown = new Map();
   const cards = new Map(); // the cards already read
@@ -94,8 +96,12 @@ export function ffvlLayer(L, map, sites, loadInfo) {
     for (const s of sites) {
       if (shown.has(s.id) || !view.contains([s.lat, s.lon])) continue;
       const st = STATUS[s.status] || { cls: 'unknown' };
-      const icon = L.divIcon({ className: 'ffvl-mark', html: triangles(s.kind, st.cls), iconSize: [s.kind === 'TL' ? 36 : 18, 16] });
-      const mk = L.marker([s.lat, s.lon], { icon, title: `${s.name} (FFVL ${(KIND[s.kind] || '').toLowerCase()})`, zIndexOffset: -500 });
+      const beside = taken(s.lat, s.lon);
+      const size = [s.kind === 'TL' ? 36 : 18, 16];
+      // beside a marker of ours: its anchor out of the icon, so the triangle sits on the circle's top-right corner
+      const icon = L.divIcon({ className: beside ? 'ffvl-mark beside' : 'ffvl-mark', html: triangles(s.kind, st.cls), iconSize: size,
+        iconAnchor: beside ? [-6, 26] : [size[0] / 2, size[1] / 2] });
+      const mk = L.marker([s.lat, s.lon], { icon, title: `${s.name} (FFVL ${(KIND[s.kind] || '').toLowerCase()})`, zIndexOffset: beside ? 1000 : -500 });
       mk.bindPopup(h('div', { class: 'ffvl-card' }, h('p', { class: 'hint' }, 'Loading…')), { maxWidth: 320, minWidth: 260 });
       mk.on('popupopen', async () => {
         if (!cards.has(s.id)) cards.set(s.id, await loadInfo(s.id).catch(() => ({})));

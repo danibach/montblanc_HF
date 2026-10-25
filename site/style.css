@@ -211,3 +211,6 @@ th[aria-sort] { color: var(--ink); }
 .rose circle { fill: #f9fafb; stroke: #e5e7eb; }
 .rose .on { fill: #16a34a; opacity: .8; }
 .rose text { font-size: 8px; fill: #374151; }
+/* the same card in the side panel of a take-off of ours that is an FFVL one: light, as on the map's popup */
+.ffvl-in-panel { margin: .6rem 0 .8rem; }
+.ffvl-in-panel .ffvl-card { background: #fff; border-radius: 10px; padding: .7rem .8rem; }
