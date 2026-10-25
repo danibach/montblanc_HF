@@ -558,7 +558,7 @@ async function analyseBatch(fileList, out) {
   } catch (_) { /* not essential: each file is then an outing of its own */ }
   const items = units.map((parts) => ({
     file: parts.length === 1 ? parts[0] : parts, parts, state: 'waiting', pv: null,
-    cells: { name: h('td', { class: 'wrap' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
+    cells: { name: h('td', { class: 'wrap file-cell' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
   }));
   for (const it of items) it.cells.name.append(h('div', null, it.parts.map((f) => f.name).join(' + ')), it.cells.notes);
   const set = (it, state, text, kind) => {
@@ -642,7 +642,11 @@ async function analyseBatch(fileList, out) {
         noteNoFlight(it.file, res);
         set(it, 'refused', `Not counted: ${refusalText(o)}`, 'warn-text');
       }
-      it.cells.notes.textContent = (o.warnings || []).join(' · ');
+      // the notes folded under « 12 notes »: an outing in several files has many (pauses, rides, gaps)
+      const notes = o.warnings || [];
+      it.cells.notes.replaceChildren(...(notes.length ? [h('details', null,
+        h('summary', null, `${notes.length} note${notes.length > 1 ? 's' : ''}`),
+        h('ul', null, notes.map((n) => h('li', null, n))))] : []));
     } catch (e) {
       set(it, 'error', e.message || 'This file could not be analysed.', 'error-text');
     }

@@ -45,6 +45,9 @@ th { color: var(--muted); font-weight: 600; font-size: .85rem; background: var(-
 td.wrap { white-space: normal; }
 .note-line { margin-top: .2rem; }
 .note-line:empty { display: none; }
+.note-line summary { cursor: pointer; }
+.note-line ul { margin: .2rem 0 0; padding-left: 1.1rem; }
+td.file-cell { min-width: 14rem; overflow-wrap: anywhere; }
 /* a table wider than the screen scrolls sideways: keep the scroll bar visible */
 .table-wrap { scrollbar-width: auto; }
 .table-wrap::-webkit-scrollbar { height: 12px; }
