@@ -1,13 +1,14 @@
 name: Backup
 
 # Every Monday (and when asked): copy the tables, the accounts and the original track files (scripts/backup.py),
-# pack them, encrypt them with the BACKUP_PASSPHRASE secret (AES-256, gpg) and keep the result 90 days as this
-# run's artifact. Free, nothing outside GitHub. The repository is public, so anyone signed in to GitHub can
-# download the artifact: it is useless without the passphrase. Keep the passphrase in a password manager, outside
-# GitHub (a secret cannot be read back). How to restore: README, section "Backups".
+# pack them, encrypt them with the BACKUP_PASSPHRASE secret (AES-256, gpg) and store the result in a PRIVATE
+# repository (vars.BACKUP_REPO, by default danibach/montblanc_HF-backups), keeping the last BACKUP_KEEP of them.
+# Nothing is left in this public repository: no artifact. The private repository holds one commit only (it is written
+# again each time), so it does not grow with the weeks. Free, nothing outside GitHub. How to restore: README, "Backups".
 #
-# Needs the secrets of process.yml (SUPABASE_URL, SUPABASE_SERVICE_KEY) and BACKUP_PASSPHRASE (a long random
-# passphrase). Without BACKUP_PASSPHRASE the run fails on purpose: never an unencrypted backup.
+# Needs the secrets of process.yml (SUPABASE_URL, SUPABASE_SERVICE_KEY), BACKUP_PASSPHRASE (a long random passphrase,
+# kept in a password manager too: a secret cannot be read back) and BACKUP_REPO_TOKEN (a fine-grained token with
+# "Contents: read and write" on the private repository only). Without them the run fails on purpose.
 
 on:
   schedule:
@@ -28,11 +29,16 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      BACKUP_REPO_TOKEN: ${{ secrets.BACKUP_REPO_TOKEN }}
+      BACKUP_REPO: ${{ vars.BACKUP_REPO || 'danibach/montblanc_HF-backups' }}
+      BACKUP_KEEP: "12"         # weekly backups kept: about three months
     steps:
       - uses: actions/checkout@v4
 
-      - name: A passphrase is set
-        run: test -n "$BACKUP_PASSPHRASE" || { echo "Add the BACKUP_PASSPHRASE secret first"; exit 1; }
+      - name: The secrets are set
+        run: |
+          test -n "$BACKUP_PASSPHRASE" || { echo "Add the BACKUP_PASSPHRASE secret first"; exit 1; }
+          test -n "$BACKUP_REPO_TOKEN" || { echo "Add the BACKUP_REPO_TOKEN secret first"; exit 1; }
 
       - name: Copy everything
         run: python3 scripts/backup.py backup
@@ -47,9 +53,21 @@ jobs:
           echo "NAME=$NAME" >> "$GITHUB_ENV"
           ls -l "$NAME.tar.gz.gpg"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.NAME }}
-          path: ${{ env.NAME }}.tar.gz.gpg
-          retention-days: 90
-          if-no-files-found: error
+      - name: Store it in the private repository
+        run: |
+          set -euo pipefail
+          mkdir store && cd store
+          git init -q -b main
+          git remote add origin "https://x-access-token:${BACKUP_REPO_TOKEN}@github.com/${BACKUP_REPO}.git"
+          # the backups already there (none the first time)
+          if git fetch -q --depth 1 origin main 2>/dev/null; then git checkout -q FETCH_HEAD -- . ; fi
+          # GitHub refuses files over 100 MB: the backup goes in parts of 90 MB (cat them back to restore)
+          mkdir -p "$NAME"
+          split -b 90m -d -a 2 "../$NAME.tar.gz.gpg" "$NAME/$NAME.tar.gz.gpg.part-"
+          # only the last BACKUP_KEEP backups
+          ls -d hf-tracks-backup-*/ 2>/dev/null | sort | head -n "-${BACKUP_KEEP}" | xargs -r rm -rf
+          git add -A
+          git -c user.name="hf-tracks backup" -c user.email="actions@users.noreply.github.com" commit -q -m "Backup $NAME"
+          # one commit, written again each time: the repository keeps the last backups, not every week since the start
+          git push -q -f origin HEAD:main
+          echo "stored in ${BACKUP_REPO}: $(ls -d hf-tracks-backup-*/ | wc -l) backups"

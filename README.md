@@ -73,14 +73,21 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 
 Every Monday, the "Backup" action (`.github/workflows/backup.yml`, also run by hand from the Actions tab) copies the
 tables (with the traces), the accounts and the original track files (`scripts/backup.py`), encrypts them with
-`BACKUP_PASSPHRASE` and keeps the file 90 days as the run's artifact: about thirteen weekly backups. Free, nothing
-outside GitHub; the repository being public, the artifact can be downloaded by any GitHub user, but it is useless
-without the passphrase. Without the secret the run fails rather than keep an unencrypted backup.
+`BACKUP_PASSPHRASE` (AES-256) and stores the file in a **private** repository, `danibach/montblanc_HF-backups` by
+default (repository variable `BACKUP_REPO`), keeping the last 12 (about three months). Nothing is left in this public
+repository. The private repository is written again each time (one commit), so it does not grow with the weeks.
+Free, nothing outside GitHub. Without its secrets the run fails rather than store an unencrypted or public copy.
 
-To restore: download the artifact of the run (Actions > Backup > the run > Artifacts), then
+Once (Dani): create the private repository `montblanc_HF-backups` (empty is fine); a fine-grained personal access
+token with "Contents: read and write" on that repository only, saved here as the secret `BACKUP_REPO_TOKEN`; a long
+random passphrase saved as the secret `BACKUP_PASSPHRASE` and in a password manager (a secret cannot be read back).
+Then run the action once by hand and check that a folder `hf-tracks-backup-YYYY-MM-DD` appears in the private repository.
+
+To restore: take the folder of the backup from the private repository, then
 
 ```bash
-gpg -d hf-tracks-backup-YYYY-MM-DD.tar.gz.gpg > backup.tar.gz && tar -xzf backup.tar.gz
+cat hf-tracks-backup-YYYY-MM-DD.tar.gz.gpg.part-* > backup.tar.gz.gpg   # the parts of 90 MB, in order
+gpg -d backup.tar.gz.gpg > backup.tar.gz && tar -xzf backup.tar.gz         # asks the passphrase
 python scripts/restore_backup.py backup          # writes backup/restore.sql
 ```
 

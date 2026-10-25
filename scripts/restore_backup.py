@@ -1,6 +1,7 @@
 """Put a backup back (scripts/backup.py): an SQL file for the tables and the accounts, and the track files.
 
-    gpg -d hf-tracks-backup-YYYY-MM-DD.tar.gz.gpg > backup.tar.gz && tar -xzf backup.tar.gz   # asks the passphrase
+    cat hf-tracks-backup-YYYY-MM-DD.tar.gz.gpg.part-* > backup.tar.gz.gpg   # from the private backup repository
+    gpg -d backup.tar.gz.gpg > backup.tar.gz && tar -xzf backup.tar.gz         # asks the passphrase
     python scripts/restore_backup.py backup                  # writes backup/restore.sql
     SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...  python scripts/restore_backup.py backup --upload-files
 

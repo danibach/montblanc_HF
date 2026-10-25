@@ -3,7 +3,7 @@
     SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...  python scripts/backup.py <folder>
 
 Run by GitHub Actions (.github/workflows/backup.yml) every Monday and when asked: the folder is then packed,
-encrypted with the BACKUP_PASSPHRASE secret and kept 90 days as the run's artifact. The free Supabase plan keeps no
+encrypted with the BACKUP_PASSPHRASE secret and stored in a private repository (the last 12). The free Supabase plan keeps no
 backup of its own. Only the standard library is needed. What lands in the folder:
 
 * ``tables/<name>.json``: every row of each table (outings with their traces, profiles, reports; the take-off
