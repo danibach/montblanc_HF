@@ -15,6 +15,7 @@ import { analyseFile, analyseFiles, analyseManual, checkTerrain, groupFiles, loo
 import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './charts.js';
 import { buildExplorer } from './explorer.js';
 import { buildMarkTool } from './mark.js';
+import { buildHelp } from './help.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 
 const view = $('#view');
@@ -34,6 +35,7 @@ function renderAccount() {
   } else {
     box.append(h('a', { href: '#/login' }, 'Sign in'));
   }
+  box.append(h('a', { href: '#/help', class: 'help-link' }, 'Help'));
 }
 
 function renderFooter() {
@@ -710,6 +712,11 @@ function confirmGroups(groups, out) {
 
 // ---------------------------------------------------------------- mark flights by hand
 
+function pageHelp() {
+  setNav(null);
+  show(buildHelp());
+}
+
 function pageMark() {
   setNav('upload');
   const item = markTarget;
@@ -869,6 +876,7 @@ async function route() {
     else if (path[0] === 'user' && path[1]) { loading(); await pageUser(token, path[1]); }
     else if (path[0] === 'upload') await pageUpload();
     else if (path[0] === 'mark') pageMark();
+    else if (path[0] === 'help') pageHelp();
     else if (path[0] === 'login') pageLogin();
     else { location.hash = '#/'; }
   } catch (err) {
