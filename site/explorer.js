@@ -2,9 +2,9 @@
 // take-off (grouped when zoomed out), and, for the take-off that is clicked, the climbs on foot that reached it
 // and the list of its outings. Flights are never drawn. Filters by season and year apply to everything.
 
+import { groupName, sectorOf } from './sectors.js';
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
-import { groupName, sectorOf } from './sectors.js';
 
 // Take-offs closer than this are the same spot. Only for this page: nothing is stored.
 const SAME_SPOT_M = 150;
