@@ -11,7 +11,11 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from .analyse import AnalysisError, finish, prepare_bytes, terrain_query_for, with_terrain
+from datetime import datetime
+
+from .analyse import (AnalysisError, ends_of, finish, prepare_bytes, prepare_files, read_bytes, terrain_query_for,
+                      with_manual_flights, with_terrain)
+from .multi import Ends, groups
 from .terrain import parse_elevations, sample_flights
 from .places import overpass_query, resolve_places
 
@@ -29,8 +33,55 @@ def analyse_json(name: str, data: bytes) -> str:
 
     ``result["terrain"]["query"]`` is what the page may ask the elevation service for; the answer goes to
     ``terrain_json``, which returns the result again with the check applied."""
+    return _result_json(lambda: prepare_bytes(name, bytes(data)))
+
+
+_PARTS: list = []  # the files of one outing in several files, added one by one (parts_add)
+
+
+def parts_clear() -> None:
+    _PARTS.clear()
+
+
+def parts_add(name: str, data: bytes) -> None:
+    _PARTS.append((name, bytes(data)))
+
+
+def analyse_parts_json() -> str:
+    """``analyse_json`` for the files added with ``parts_add``, joined into one outing (multi.py)."""
+    parts = list(_PARTS)
+    _PARTS.clear()
+    return _result_json(lambda: prepare_files(parts))
+
+
+def ends_json(name: str, data: bytes) -> str:
+    """When and where a file starts and ends: ``{"ok": true, "ends": {...}}`` (read only, not analysed)."""
     try:
-        prepared = prepare_bytes(name, bytes(data))
+        track, _ = read_bytes(name, bytes(data))
+    except AnalysisError as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": GENERIC_ERROR, "detail": type(exc).__name__}, ensure_ascii=False)
+    e = ends_of(track)
+    return json.dumps({"ok": True, "ends": {"t0": e.t0.isoformat(), "lat0": e.lat0, "lon0": e.lon0,
+                                            "t1": e.t1.isoformat(), "lat1": e.lat1, "lon1": e.lon1}})
+
+
+def groups_json(ends_list_json: str) -> str:
+    """The files (by position in the list, ``None`` for a file that could not be read) that follow one another
+    and make one outing: ``[[0, 2, 3], [1], …]``."""
+    items = json.loads(ends_list_json)
+    known = [k for k, e in enumerate(items) if e]
+    ends = [Ends(datetime.fromisoformat(items[k]["t0"]), items[k]["lat0"], items[k]["lon0"],
+                 datetime.fromisoformat(items[k]["t1"]), items[k]["lat1"], items[k]["lon1"]) for k in known]
+    out = [[known[k] for k in g] for g in groups(ends)]
+    out += [[k] for k, e in enumerate(items) if not e]
+    return json.dumps(out)
+
+
+def _result_json(prepare) -> str:
+    try:
+        prepared = prepare()
         result = finish(prepared)
         _LAST.clear()
         _LAST[result["file"]["sha256"]] = prepared
@@ -40,6 +91,43 @@ def analyse_json(name: str, data: bytes) -> str:
     except Exception as exc:  # never show internals; the type name helps support
         return json.dumps({"ok": False, "error": GENERIC_ERROR, "detail": type(exc).__name__}, ensure_ascii=False)
     result["engine"]["where"] = "browser"
+    return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
+
+
+def manual_json(name: str, data: bytes, ranges_json: str) -> str:
+    """Like ``analyse_json``, for a file whose flights the participant marked on the map.
+
+    ``ranges_json`` is ``[[from, to], ...]`` in seconds after the first fix (the trace's ``t0``). The answer has the
+    same shape. The terrain check is NOT run on hand-marked flights (``terrain.query`` is None): the marking overrides
+    it, so that tracks whose altitudes were flattened onto the terrain (by a track editor, or by the device itself)
+    can still be entered, with the flight's D- and FAI free distance computed from the marked stretch."""
+    return _manual_json(lambda: prepare_bytes(name, bytes(data)), ranges_json)
+
+
+def manual_parts_json(ranges_json: str) -> str:
+    """``manual_json`` for the files added with ``parts_add``, joined into one outing (multi.py): the ranges are in
+    seconds after the first fix of the first file."""
+    parts = list(_PARTS)
+    _PARTS.clear()
+    return _manual_json(lambda: prepare_files(parts), ranges_json)
+
+
+def _manual_json(prepare, ranges_json: str) -> str:
+    try:
+        ranges = [[float(a), float(b)] for a, b in json.loads(ranges_json)]
+        if not ranges:
+            raise ValueError("no range")
+        prepared = with_manual_flights(prepare(), ranges)
+        result = finish(prepared)
+        _LAST.clear()
+        _LAST[result["file"]["sha256"]] = prepared
+        result["terrain"] = {"query": None}
+    except AnalysisError as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": GENERIC_ERROR, "detail": type(exc).__name__}, ensure_ascii=False)
+    result["engine"]["where"] = "browser"
+    result["manual"] = True
     return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
 
 

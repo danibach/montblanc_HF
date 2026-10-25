@@ -45,6 +45,42 @@ self.onmessage = async (ev) => {
         data.destroy();
       }
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'manual') {
+      const data = engine.py.toPy(new Uint8Array(msg.bytes));
+      let text;
+      try {
+        text = engine.browser.manual_json(msg.name, data, JSON.stringify(msg.ranges));
+      } finally {
+        data.destroy();
+      }
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'ends') {
+      const data = engine.py.toPy(new Uint8Array(msg.bytes));
+      let text;
+      try {
+        text = engine.browser.ends_json(msg.name, data);
+      } finally {
+        data.destroy();
+      }
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
+    } else if (msg.type === 'groups') {
+      post({ type: 'result', id: msg.id, payload: JSON.parse(engine.browser.groups_json(JSON.stringify(msg.ends))) });
+    } else if (msg.type === 'analyse_parts' || msg.type === 'manual_parts') {
+      // one outing in several files: the files go in one by one, then the joined track is analysed (with the
+      // flights marked by hand for manual_parts)
+      engine.browser.parts_clear();
+      for (const f of msg.files) {
+        const data = engine.py.toPy(new Uint8Array(f.bytes));
+        try {
+          engine.browser.parts_add(f.name, data);
+        } finally {
+          data.destroy();
+        }
+      }
+      const text = msg.type === 'manual_parts'
+        ? engine.browser.manual_parts_json(JSON.stringify(msg.ranges))
+        : engine.browser.analyse_parts_json();
+      post({ type: 'result', id: msg.id, payload: JSON.parse(text) });
     } else if (msg.type === 'terrain') {
       const text = engine.browser.terrain_json(msg.sha256, JSON.stringify(msg.response));
       post({ type: 'result', id: msg.id, payload: JSON.parse(text) });

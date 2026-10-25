@@ -97,9 +97,18 @@ create table if not exists public.outings (
 );
 
 alter table public.outings add column if not exists verified boolean not null default false;
+-- one outing in several files: every stored file in time order, [{path, format, size, sha256, name}]; null for
+-- one file (file_path is then the only one). See migration-2026-10-25-file-parts.sql
+alter table public.outings add column if not exists file_parts jsonb;
 -- the climb on foot drawn on the take-off map, written by the server job only:
 -- {line: [[lat, lon], …], dplus_m, km, duration_s}, {} when there is no climb to draw
 alter table public.outings add column if not exists climb jsonb;
+-- flights the participant marked by hand on the map: [[from, to], ...] in seconds after the first fix of the track.
+-- The job uses them instead of the automatic detection (and skips the ground check); see migration-2026-10-25-manual-flights.sql
+alter table public.outings add column if not exists manual_flights jsonb;
+alter table public.outings drop constraint if exists outings_manual_flights_check;
+alter table public.outings add constraint outings_manual_flights_check
+  check (manual_flights is null or (jsonb_typeof(manual_flights) = 'array' and jsonb_array_length(manual_flights) between 1 and 20));
 
 -- the take-off register (FFVL open data, OpenStreetMap, provisional take-offs), written by the server only
 -- (scripts/sync_sites.py, scripts/process_pending.py); see migration-2026-10-23-takeoff-sites.sql
@@ -175,6 +184,14 @@ create policy "Add your own outing" on public.outings for insert to authenticate
     and dplus_m between 200 and 30000 and dminus_m between 0 and 15000
     and score = dplus_m + dminus_m
     and (trace is null or pg_column_size(trace) < 600000)
+    and (file_parts is null or (
+      jsonb_typeof(file_parts) = 'array'
+      and jsonb_array_length(file_parts) between 2 and 10
+      and not exists (
+        select 1 from jsonb_array_elements(file_parts) p
+        where not (p->>'path' like auth.uid()::text || '/%')
+          or p->>'format' not in ('gpx', 'fit', 'kml', 'igc', 'tcx'))
+    ))
   );
 
 drop policy if exists "Delete your own outing" on public.outings;
@@ -184,12 +201,12 @@ create policy "Delete your own outing" on public.outings for delete to authentic
 revoke all on public.outings from anon, authenticated;
 grant select on public.outings to anon, authenticated;
 grant insert (
-  file_path, file_format, file_size, file_sha256, status,
+  file_path, file_format, file_size, file_sha256, file_parts, status,
   engine_version, score_version, title, outing_date, started_at, duration_s, country_code, country_name,
   start_lat, start_lon, start_alt, start_place, start_commune,
   summit_name, summit_lat, summit_lon, summit_alt,
   takeoff_name, takeoff_lat, takeoff_lon, takeoff_alt, landing_lat, landing_lon, landing_alt,
-  dplus_m, dminus_m, walk_km, flight_free_km, flight_path_km, score, flights, trace, warnings, places_pending
+  dplus_m, dminus_m, walk_km, flight_free_km, flight_path_km, score, flights, trace, warnings, places_pending, manual_flights
 ) on public.outings to authenticated;
 grant delete on public.outings to authenticated;
 

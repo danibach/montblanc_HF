@@ -38,9 +38,11 @@ STARTS_AT_TOP = ("The recording starts at {alt} m, near the highest point: the c
 TOO_LITTLE_CLIMB = "Only {dplus} m of climbing on foot were recorded ({need} m needed). The climb must be in the file."
 RIDE_FROM_TOP = "No flight found: the fast descent from the top ({alt} m, at {time} UTC) was read as a ride, not a flight."
 IF_FLIGHT = (" If it was a flight, upload the original recording of your device: a file edited or merged with a track "
-             "tool often carries the map's ground altitude instead of the measured one.")
+             "tool often carries the map's ground altitude instead of the measured one. Without it, mark the flight by "
+             "hand on the Upload page.")
 EDITED_BY = (" This file was written by {editor}, a track editor, which can replace the measured altitude with the "
-             "map's ground altitude and turn a flight into a ride: send the original recording of your device instead.")
+             "map's ground altitude and turn a flight into a ride: send the original recording of your device instead, "
+             "or mark the flight by hand on the Upload page.")
 
 # Track editors and map sites whose GPX keep the points but may change the altitudes (the ``creator`` of the
 # file): Dani's Mont-Blanc files of November 2024 come from Adze, the 2019 Mont-Blanc file from a map site.
