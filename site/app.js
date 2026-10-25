@@ -275,7 +275,7 @@ async function pageRanking(token) {
     : null;
 
   show(
-    h('h1', null, 'Pilotes'),
+    h('h1', null, 'Pilots'),
     h('p', { class: 'sub' }, 'Sum of the scores of all outings. Score = D+ on foot + D− in flight (metres).'),
     bar,
     searchBox,
