@@ -14,7 +14,7 @@ from .models import Point, Track, TrackError
 from .outing import OutingConfig, build_outing, build_trace
 from .parsers import load_track
 from .parsers.common import clean_altitudes
-from .segment import SegmenterConfig, segment_track
+from .segment import FLIGHT, SegmentationResult, SegmenterConfig, _build_segments, segment_track
 from .terrain import apply_terrain, elevation_query, sample_flights
 
 ALLOWED_EXTENSIONS = (".igc", ".gpx", ".kml", ".tcx", ".fit")
@@ -54,6 +54,7 @@ class Prepared:
 
     def __init__(self, info: dict, track: Track, seg):
         self.info, self.track, self.seg = info, track, seg
+        self.notes: list[str] = []   # said with every result of this file (e.g. flights marked by hand)
 
 
 def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Prepared:
@@ -98,6 +99,7 @@ def prepare_bytes(name: str, data: bytes, max_bytes: int = MAX_FILE_BYTES) -> Pr
 def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
     """The analysis result for a prepared file (with the segmentation the terrain check settled on)."""
     seg = seg or prepared.seg
+    notes = list(prepared.notes) + list(notes or [])
     outing = build_outing(prepared.track, seg, OutingConfig())
     ignored = prepared.info.get("altitude_ignored")
     if ignored:
@@ -112,6 +114,28 @@ def finish(prepared: Prepared, seg=None, notes: Optional[list] = None) -> dict:
         "trace": build_trace(prepared.track, seg.labels, OutingConfig().max_trace_points),
         "engine": {"version": __version__},
     }
+
+
+def with_manual_flights(prepared: Prepared, ranges_s: list) -> Prepared:
+    """The same file with the flights the participant marked by hand.
+
+    ``ranges_s`` is a list of ``[from, to]``, in seconds after the first fix of the track (the ``t0`` and ``t``
+    of the trace the page draws). Every fix inside a range is a flight, whatever the engine thought; the rest
+    keeps the engine's labels. The marking overrides the terrain check: the page does not run it on these flights."""
+    pts = prepared.track.points
+    t0 = pts[0].t
+    labels = list(prepared.seg.labels)
+    for lo, hi in ranges_s:
+        lo, hi = float(lo), float(hi)
+        if hi < lo:
+            lo, hi = hi, lo
+        for i, p in enumerate(pts):
+            if lo <= (p.t - t0).total_seconds() <= hi:
+                labels[i] = FLIGHT
+    seg = SegmentationResult(segments=_build_segments(pts, labels), labels=labels, warnings=list(prepared.seg.warnings))
+    marked = Prepared(prepared.info, prepared.track, seg)
+    marked.notes = ["Flights marked by hand (the ground check is not applied to them)"]
+    return marked
 
 
 def terrain_query_for(prepared: Prepared) -> Optional[str]:

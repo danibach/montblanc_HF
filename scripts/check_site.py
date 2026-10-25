@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [os.path.join(ROOT, "src"), os.path.join(ROOT, "tests")]
-from synth import as_track, gpx_bytes, hike_and_fly, two_flights  # noqa: E402
+from synth import as_track, gpx_bytes, hike_and_fly, slow_ski_descent, two_flights  # noqa: E402
 from mbhf.analyse import analyse_bytes  # noqa: E402
 from mbhf.places import resolve_places  # noqa: E402
 from mbhf.rows import outing_row  # noqa: E402
@@ -66,6 +66,8 @@ NATIVE = RES1["outing"]
 GPX = os.path.join(SHOTS, "day.gpx")
 open(GPX, "wb").write(gpx_bytes(as_track(hike_and_fly())))
 NOTIME = os.path.join(SHOTS, "no-time.gpx")
+SKI = os.path.join(SHOTS, "ski.gpx")
+open(SKI, "wb").write(gpx_bytes(as_track(slow_ski_descent())))
 open(NOTIME, "wb").write(gpx_bytes(as_track(hike_and_fly()), with_time=False))
 print("screenshots:", SHOTS)
 
@@ -307,6 +309,45 @@ with sync_playwright() as p:
     page.set_input_files("#track", NOTIME)
     page.wait_for_selector(".notice-error", timeout=60000)
     check("timestamp" in page.inner_text(".notice-error"), "file without time refused: " + page.inner_text(".notice-error")[:90])
+
+    # a track without a flight: listed at the bottom, with a button to mark the flight by hand on a map
+    page.set_input_files("#track", SKI)
+    page.wait_for_selector("#refused .refused-item", timeout=60000)
+    check("Without a flight (1)" in page.inner_text("#refused h2") and "ski.gpx" in page.inner_text("#refused .refused-item"),
+          "no-flight track listed below the result: " + page.inner_text("#refused .why").replace("\n", " ")[:80])
+    check("flight" in page.inner_text("#refused .why").lower(), "the list gives the reason")
+    page.screenshot(path=f"{SHOTS}/5a-refused.png", full_page=True)
+    page.click("#refused a.button")
+    page.wait_for_selector(".map-tall .leaflet-container, .map-tall.leaflet-container", timeout=15000)
+    check(page.url.endswith("#/mark") and page.is_disabled("#mark-recalc"), "the button opens the map tool; recalculate waits for a flight")
+    # click the take-off and the landing of the descent (the last part of the track)
+    # the engine drew the ski descent as a vehicle ride (grey): take its two ends
+    ends = page.evaluate("""() => {
+      const map = document.querySelector('.map-tall')._map; let best = null;
+      map.eachLayer((l) => { if (l.options && l.options.color === '#8796a3' && l.getLatLngs) {
+        const p = l.getLatLngs(); if (!best || p.length > best.length) best = p; } });
+      return best && [[best[0].lat, best[0].lng], [best[best.length - 1].lat, best[best.length - 1].lng]]; }""")
+    check(ends is not None, "the descent is drawn as a vehicle ride")
+    a, z = ends
+    page.evaluate("""([a, z]) => { const m = document.querySelector('.map-tall')._map;
+      m.fitBounds([a, z], { padding: [80, 80], animate: false }); }""", [a, z])
+    page.wait_for_timeout(400)
+    def click_at(ll):
+        xy = page.evaluate("""(ll) => { const box = document.querySelector('.map-tall'); const p = box._map.latLngToContainerPoint(ll);
+          const r = box.getBoundingClientRect(); return [r.left + p.x, r.top + p.y]; }""", ll)
+        page.mouse.click(xy[0], xy[1])
+    click_at(a)
+    check("Now click the landing" in page.inner_text("#view .hint[role=status]"), "first click sets the take-off")
+    click_at(z)
+    check(page.locator(".mark-list li").count() == 1 and not page.is_disabled("#mark-recalc"), "second click marks a flight: " + page.inner_text(".mark-list").replace("\n", " "))
+    page.screenshot(path=f"{SHOTS}/5b-mark.png", full_page=True)
+    page.click("#mark-recalc")
+    page.wait_for_selector("#mark-result .notice", timeout=60000)
+    check("points" in page.inner_text("#mark-result .notice-ok") if page.locator("#mark-result .notice-ok").count() else False,
+          "recalculated with the hand-marked flight: " + page.inner_text("#mark-result").replace("\n", " ")[:120])
+    page.click("text=Back to the list")
+    page.wait_for_selector("#refused .refused-item", timeout=15000)
+    check(True, "back on Upload, the list is still there")
 
     page.set_input_files("#track", GPX)
     page.wait_for_selector("#publish", timeout=60000)
