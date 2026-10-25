@@ -122,3 +122,15 @@ def test_outings_around_a_provisional_take_off_become_auto_once_it_is_centred():
     first.update(lat=lat, lon=lon)
     index = SiteIndex([first])
     assert all(attach(a, b, 1636, index)[2] == "auto" for a, b in points)
+
+
+def test_provisional_twins_closer_than_150_m_are_one_take_off_but_not_the_two_of_beauregard():
+    north = {"id": 1, "source": "provisional", "source_id": "a", "name": "Pointe de Beauregard",
+             "lat": 45.9100, "lon": 6.4700, "alt": 1636}
+    index = SiteIndex([north])
+    # 120 m south, same name: one take-off (an outing's GPS scatter)
+    site, _, status = attach(45.9100 - 120 / 111320, 6.4700, 1636, index, "Pointe de Beauregard")
+    assert site is north and status == "auto"
+    # 252 m south, same name: the south take-off, a take-off of its own
+    site, _, status = attach(45.9100 - 252 / 111320, 6.4700, 1636, index, "Pointe de Beauregard")
+    assert site is None and status == "provisional"

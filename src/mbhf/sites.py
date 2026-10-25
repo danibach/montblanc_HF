@@ -40,8 +40,9 @@ AUTO_M = 100.0
 CONFIRM_M = 200.0
 MAX_DALT_M = 100.0
 # provisional twins: a provisional take-off of the same name within this distance (and MAX_DALT_M) is the same one;
-# on 25 October 2026 the Pointe de Beauregard (252 m), La Tournette (224 m) and Le Môle (235 m) were each two
-TWIN_M = 300.0
+# The Pointe de Beauregard (north and south take-offs, 252 m apart) and Le Môle (235 m) are two take-offs each, as
+# pilots know them (Dani, 25 October 2026): twins must be closer than that. A true twin is one outing's GPS scatter.
+TWIN_M = 150.0
 SOURCE_RANK = {"ffvl": 0, "osm": 1, "provisional": 2}  # the first wins when two are as close
 
 
