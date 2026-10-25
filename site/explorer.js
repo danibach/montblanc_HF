@@ -461,7 +461,9 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
   // the FFVL card of a take-off of ours that is an official one: winds on a rose, walk, warnings, restrictions…
   function ffvlFacts(sp) {
-    const site = sp.site && sp.site.source === 'ffvl' && ffvl.sites.find((f) => String(f.id) === String(sp.site.source_id));
+    // the map's list of take-offs has no FFVL id: the FFVL take-off within about 100 m of ours
+    const site = sp.site && sp.site.source === 'ffvl' && ffvl.sites.find((f) => f.kind.includes('T')
+      && Math.abs(f.lat - sp.site.lat) < 0.0009 && Math.abs(f.lon - sp.site.lon) < 0.0013);
     if (!site) return null;
     const box = h('div', { class: 'ffvl-in-panel' }, h('p', { class: 'hint' }, 'Loading the FFVL card…'));
     ffvl.info(site.id).catch(() => ({})).then((info) => box.replaceChildren(ffvlCard(site, info)));
@@ -482,7 +484,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, `${plural(sp.outings.length, 'confirmed outing')} · ${plural(sp.pilots, 'pilot')}${sp.alt != null ? ` · take-off at ${fmtInt(sp.alt)} m` : ''}`)),
         h('button', { class: 'link close', 'aria-label': 'Back to all take-offs', onclick: overview }, '×')),
-      siteFacts(sp), ffvlFacts(sp), status, list);
+      // replaceChildren would write a null as the text « null »
+      ...[siteFacts(sp), ffvlFacts(sp), status, list].filter(Boolean));
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
