@@ -10,7 +10,7 @@ const MUTED = '#9fb0b9';
 const GRID = '#2b3b44';
 
 /** Runs of consecutive fixes with the same mode: [{m, from, to}] (indexes into the trace arrays). */
-function runs(trace) {
+export function runs(trace) {
   const out = [];
   let from = 0;
   for (let i = 1; i <= trace.m.length; i++) {

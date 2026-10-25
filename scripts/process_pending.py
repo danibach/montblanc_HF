@@ -105,6 +105,18 @@ def look_up_places(outing: dict, attempts: int = 2, timeout: float = 40.0):
         return None
 
 
+def to_check(api: Api) -> list:
+    """The outings to check. Without the column manual_flights (migration-2026-10-25-manual-flights.sql not run
+    yet) the job still works, as before."""
+    base = f"{TO_CHECK}&order=created_at.asc&limit={BATCH}"
+    cols = "id,user_id,created_at,file_path,file_format"
+    try:
+        return api.select(f"{base}&select={cols},manual_flights")
+    except RuntimeError as exc:
+        print(f"  manual_flights not read (migration not run?): {exc}")
+        return api.select(f"{base}&select={cols}")
+
+
 def process_pending(api: Api) -> None:
     from mbhf.analyse import AnalysisError, analyse_bytes
     from mbhf.rows import outing_row
@@ -112,7 +124,7 @@ def process_pending(api: Api) -> None:
     from mbhf.duplicates import duplicate_message, same_flight
     from mbhf.advice import OUR_SIDE
 
-    for row in api.select(f"{TO_CHECK}&select=id,user_id,created_at,file_path,file_format&order=created_at.asc&limit={BATCH}"):
+    for row in to_check(api):
         print(f"outing {row['id']} ({row['file_path']})")
         try:
             data = api.download(row["file_path"])
@@ -121,7 +133,9 @@ def process_pending(api: Api) -> None:
             print(f"  file not read from storage: {exc}")
             continue
         try:
-            result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations)
+            # flights the participant marked on the map replace the automatic detection and the ground check
+            result = analyse_bytes(f"track.{row['file_format']}", data, elevation_fetch=fetch_elevations,
+                                   manual_ranges=row.get("manual_flights"))
         except AnalysisError as exc:
             reject(api, row["id"], str(exc))
             continue

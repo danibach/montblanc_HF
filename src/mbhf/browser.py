@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from .analyse import AnalysisError, finish, prepare_bytes, terrain_query_for, with_terrain
+from .analyse import AnalysisError, finish, prepare_bytes, terrain_query_for, with_manual_flights, with_terrain
 from .terrain import parse_elevations, sample_flights
 from .places import overpass_query, resolve_places
 
@@ -40,6 +40,31 @@ def analyse_json(name: str, data: bytes) -> str:
     except Exception as exc:  # never show internals; the type name helps support
         return json.dumps({"ok": False, "error": GENERIC_ERROR, "detail": type(exc).__name__}, ensure_ascii=False)
     result["engine"]["where"] = "browser"
+    return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
+
+
+def manual_json(name: str, data: bytes, ranges_json: str) -> str:
+    """Like ``analyse_json``, for a file whose flights the participant marked on the map.
+
+    ``ranges_json`` is ``[[from, to], ...]`` in seconds after the first fix (the trace's ``t0``). The answer has the
+    same shape. The terrain check is NOT run on hand-marked flights (``terrain.query`` is None): the marking overrides
+    it, so that tracks whose altitudes were flattened onto the terrain (by a track editor, or by the device itself)
+    can still be entered, with the flight's D- and FAI free distance computed from the marked stretch."""
+    try:
+        ranges = [[float(a), float(b)] for a, b in json.loads(ranges_json)]
+        if not ranges:
+            raise ValueError("no range")
+        prepared = with_manual_flights(prepare_bytes(name, bytes(data)), ranges)
+        result = finish(prepared)
+        _LAST.clear()
+        _LAST[result["file"]["sha256"]] = prepared
+        result["terrain"] = {"query": None}
+    except AnalysisError as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": GENERIC_ERROR, "detail": type(exc).__name__}, ensure_ascii=False)
+    result["engine"]["where"] = "browser"
+    result["manual"] = True
     return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
 
 
