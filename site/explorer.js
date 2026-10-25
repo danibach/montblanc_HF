@@ -660,8 +660,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       maxZoom: CONFIG.TILES_MAX_ZOOM,
       attribution: CONFIG.TILES_ATTRIBUTION,
     }).addTo(map);
-    // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL)
-    if (sites.length) map.attributionControl.addAttribution('Take-offs: FFVL (Licence Ouverte), OpenStreetMap (ODbL)');
+    // no flag, to keep the credits short on a phone
+    map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+    // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL): one short line for both
+    // the take-offs and the FFVL sites
+    if (sites.length || ffvl.sites.length) map.attributionControl.addAttribution('FFVL (Licence Ouverte), OSM (ODbL)');
     heatSpots = L.heatLayer([], HEAT_SPOTS);
     heatRoutes = L.heatLayer([], HEAT_ROUTES);
     heat = L.layerGroup().addTo(map);
@@ -671,9 +674,9 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     const overlays = { 'Heat map': heat, 'Take-offs': markers };
     if (ffvl.sites.length) {
       overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info).addTo(map);
-      map.attributionControl.addAttribution('FFVL sites: Licence Ouverte 2.0');
     }
-    L.control.layers(null, overlays, { collapsed: false }).addTo(map);
+    // open on a wide map, folded into its button on a narrow one (a phone): open, it hid the markers under it
+    L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });
