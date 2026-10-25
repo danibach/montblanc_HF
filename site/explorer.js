@@ -333,6 +333,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
   // was opened with is read before anything rewrites it.
   const setHash = (hash) => { if (location.hash !== hash) history.replaceState(null, '', hash); };
   const asked = location.hash.match(/^#\/map\/route\/(\d+)/);
+  let sheetToOpen = null;
   let request = 0; // a slow answer for a spot we already left must not draw over the new one
 
   function overview() {
@@ -477,10 +478,12 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     searchBox.setAttribute('aria-expanded', 'false');
   }
 
-  async function openSpot(sp, routeId = null) {
-    if (!routeId) setHash('#/map');
+  async function openSpot(sp) {
     current = sp;
     const mine = ++request;
+    const routeId = sheetToOpen; // the sheet the page's address asks for (once)
+    sheetToOpen = null;
+    if (!routeId) setHash('#/map');
     climbs.eachLayer((l) => l.closeTooltip()); // a line taken away under the pointer keeps its tooltip otherwise
     climbs.clearLayers();
     element.querySelector('.explorer').classList.add('has-spot');
@@ -792,7 +795,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     if (wantedRoute) {
       const holder = () => spots.find((s) => s.siteIds.has(wantedRoute.site_id));
       if (!holder() && seasonPick.value) { seasonPick.value = ''; applyFilters(); }
-      if (holder()) openSpot(holder(), wantedRoute.id);
+      if (holder()) { sheetToOpen = wantedRoute.id; openSpot(holder()); }
     }
     seasonPick.addEventListener('change', applyFilters);
     yearPick.addEventListener('change', applyFilters);
