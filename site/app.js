@@ -286,9 +286,9 @@ async function pageRanking(token) {
 
 async function pageMap(token) {
   setNav('map');
-  const [rows, sites, routes] = await Promise.all([api.getMapOutings(), api.getMapSites(), api.getMapRoutes()]);
+  const [rows, sites, routes, ffvl] = await Promise.all([api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFfvlSites()]);
   if (token !== routeToken) return;
-  const mapView = buildExplorer(rows, api.getTraces, sites, routes);
+  const mapView = buildExplorer(rows, api.getTraces, sites, routes, { sites: ffvl, info: api.getFfvlInfo });
   show(
     h('h1', null, 'Take-off map'),
     h('p', { class: 'sub' }, 'Where pilots took off after the climb, and the ways up on foot. The warmer the colour, the more outings.'),

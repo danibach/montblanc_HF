@@ -86,6 +86,40 @@ def ffvl_takeoffs(terrains: Iterable[dict]) -> list[dict]:
     return out
 
 
+# what the map's card of an official FFVL site shows, from the open-data file (``ffvl_terrains``)
+_FFVL_INFO = {"walk_min": "walking_time_from_parking_minutes", "access": "access_description",
+              "ideal": "ideal_conditions_description", "warnings": "warnings", "restrictions": "restrictions",
+              "notes": "description", "gear": "available_equipments_text", "experience": "terrain_experience_conseillee",
+              "city": "city", "league": "stru_ligue", "updated": "last_modification_timestamp", "usages": "possible_usages_text"}
+
+
+def ffvl_terrains(terrains: Iterable[dict]) -> list[dict]:
+    """The official paragliding take-offs and landings of the FFVL file, for the map (table ``ffvl_terrains``):
+    ``kind`` is ``T`` (take-off), ``L`` (landing) or ``TL``; a site for speed riding, kites or hang gliders only is
+    left out. ``info`` holds what the card shows (winds and status are columns)."""
+    from .titles import clean_name
+
+    out = []
+    for t in terrains:
+        functions = t.get("flying_functions_text") or ""
+        kind = ("T" if "décollage" in functions else "") + ("L" if "atterrissage" in functions else "")
+        usages = t.get("possible_usages_text")
+        if not kind or t.get("latitude") is None or (usages is not None and "parapente" not in usages):
+            continue
+        city = pretty_name(t.get("city") or "")
+        info = {k: t.get(v) for k, v in _FFVL_INFO.items()}
+        info = {k: (v.strip() if isinstance(v, str) else v) for k, v in info.items()
+                if v not in (None, "") and not (isinstance(v, str) and v.strip() in (".", "-", "RAS", ""))}
+        if city:
+            info["city"] = city
+        out.append({
+            "suid": int(t["suid"]), "name": clean_name(t.get("toponym"), (city,)) or pretty_name(t.get("toponym") or ""),
+            "lat": float(t["latitude"]), "lon": float(t["longitude"]), "alt": _number(t.get("altitude")),
+            "kind": kind, "status": t.get("status") or None, "winds": t.get("wind_orientations_ok") or None, "info": info,
+        })
+    return out
+
+
 def _is_landing(tags: dict) -> bool:
     text = " ".join(str(tags.get(k, "")) for k in ("free_flying:site", "name", "description")).lower()
     return tags.get("free_flying:site") == "landing" or any(w in text for w in ("atterrissage", "landing", "landeplatz"))

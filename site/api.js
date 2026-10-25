@@ -141,6 +141,22 @@ const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_
 const SITE_FIELDS = ['id', 'name', 'lat', 'lon', 'alt', 'source', 'wind_ok', 'hike_and_fly'];
 const ROUTE_FIELDS = ['id', 'site_id', 'name', 'line'];
 
+const FFVL_FIELDS = ['id', 'name', 'lat', 'lon', 'alt', 'kind', 'status', 'winds'];
+
+/** The official FFVL take-offs and landings for the map (map_ffvl()); none before the table exists. */
+export async function getFfvlSites() {
+  const { data, error } = await sb.rpc('map_ffvl');
+  if (error) return []; // migration-2026-10-25-ffvl-terrains.sql not run yet: the map shows no FFVL site
+  return (data || []).map((a) => Object.fromEntries(FFVL_FIELDS.map((k, i) => [k, a[i]])));
+}
+
+/** The card of one FFVL site (walk from the car park, warnings, restrictions…), read when it is clicked. */
+export async function getFfvlInfo(id) {
+  const { data, error } = await sb.from('ffvl_terrains').select('info').eq('suid', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data && data.info) || {};
+}
+
 /** The routes of the map's outings (the climbs that follow the same way up); none before the routes table exists. */
 export async function getMapRoutes() {
   const { data, error } = await sb.rpc('map_routes');

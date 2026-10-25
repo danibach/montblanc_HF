@@ -3,7 +3,8 @@
     SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...  python scripts/sync_sites.py [--dry-run]
 
 Run by GitHub Actions (.github/workflows/sites.yml) once a week and when asked. Steps:
-1. the FFVL take-offs, from today's open-data file on data.gouv.fr (Licence Ouverte 2.0);
+1. the FFVL take-offs, from today's open-data file on data.gouv.fr (Licence Ouverte 2.0); with its landings, also
+   written to ``ffvl_terrains`` for the map (▲ take-off, ▼ landing and their card);
 2. the named OpenStreetMap paragliding take-offs (ODbL) around the outings, minus those next to an FFVL one;
 3. both written into ``takeoff_sites`` (updated in place: the ids stay);
 4. each published outing tied by the rule of src/mbhf/sites.py (auto under 100 m, to confirm up to 200 m, else a
@@ -26,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
-from mbhf.sites import (SiteIndex, attach, centre_of, ffvl_takeoffs, metres, osm_takeoffs,  # noqa: E402
+from mbhf.sites import (SiteIndex, attach, centre_of, ffvl_takeoffs, ffvl_terrains, metres, osm_takeoffs,  # noqa: E402
                         overpass_query, provisional_site, without_doubles)
 
 FFVL_DATASETS = "https://www.data.gouv.fr/api/1/organizations/federation-francaise-de-vol-libre/datasets/?page_size=50"
@@ -114,6 +115,21 @@ class Register:
             out += json.loads(raw)
         return out
 
+    def write_ffvl(self, terrains: list[dict]) -> int:
+        """The FFVL take-offs and landings of the map (table ffvl_terrains), all written again; the ones gone from
+        the file are removed. Returns how many."""
+        if self.dry or not terrains:
+            return len(terrains)
+        for i in range(0, len(terrains), 500):
+            self.api.request("POST", "/rest/v1/ffvl_terrains?on_conflict=suid", terrains[i:i + 500],
+                             extra={"Prefer": "resolution=merge-duplicates,return=minimal"})
+        kept = {t["suid"] for t in terrains}
+        gone = [t for t in self.select("ffvl_terrains", "select=suid") if t["suid"] not in kept]
+        for i in range(0, len(gone), 100):
+            ids = ",".join(str(t["suid"]) for t in gone[i:i + 100])
+            self.api.request("DELETE", f"/rest/v1/ffvl_terrains?suid=in.({ids})")
+        return len(terrains)
+
     def tie(self, outing_id: str, site_id: int, status: str, metres) -> None:
         if not self.dry:
             self.api.patch(outing_id, {"takeoff_site_id": site_id, "takeoff_site_status": status, "takeoff_site_m": metres})
@@ -182,8 +198,13 @@ def sync(api, dry_run: bool = False) -> None:
     outings = register.select("outings", f"select={OUTING_COLUMNS}&status=eq.published&takeoff_lat=not.is.null&order=created_at.asc")
     print(f"published outings with a take-off: {len(outings)}")
 
-    ffvl = ffvl_takeoffs(ffvl_file())
+    raw = ffvl_file()
+    ffvl = ffvl_takeoffs(raw)
     print(f"FFVL take-offs: {len(ffvl)}")
+    try:  # the official take-offs and landings shown on the map (migration-2026-10-25-ffvl-terrains.sql)
+        print(f"FFVL sites for the map: {register.write_ffvl(ffvl_terrains(raw))}")
+    except RuntimeError as exc:
+        print(f"FFVL sites for the map not written: {exc}")
     osm = osm_around([(o["takeoff_lat"], o["takeoff_lon"]) for o in outings]) if outings else []
     if osm is None:
         print("OpenStreetMap unavailable: kept as they are this time")

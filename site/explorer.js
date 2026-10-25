@@ -4,6 +4,7 @@
 
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
+import { ffvlLayer } from './ffvl.js';
 
 // Take-offs closer than this are the same spot. Only for this page: nothing is stored.
 const SAME_SPOT_M = 150;
@@ -282,7 +283,7 @@ function season(o) {
  * full tracks; ``sites`` are the take-offs of the register (getMapSites()). Returns {element, start}: start() is
  * called once the element is in the page.
  */
-export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
+export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = { sites: [], info: null }) {
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': 'Map of the take-offs' });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
@@ -666,7 +667,13 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = []) {
     heat = L.layerGroup().addTo(map);
     climbs = L.featureGroup().addTo(map);
     markers = L.layerGroup().addTo(map);
-    L.control.layers(null, { 'Heat map': heat, 'Take-offs': markers }, { collapsed: false }).addTo(map);
+    // the official FFVL take-offs ▲ and landings ▼ (from zoom 10 on), with their card on a click (site/ffvl.js)
+    const overlays = { 'Heat map': heat, 'Take-offs': markers };
+    if (ffvl.sites.length) {
+      overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info).addTo(map);
+      map.attributionControl.addAttribution('FFVL sites: Licence Ouverte 2.0');
+    }
+    L.control.layers(null, overlays, { collapsed: false }).addTo(map);
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });
