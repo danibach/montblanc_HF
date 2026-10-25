@@ -64,7 +64,7 @@ export function buildHelp() {
     h('section', { id: 'help-rules' },
       h('h2', null, 'What counts as an outing'),
       h('ul', null,
-        h('li', null, 'At least one flight, and at least 200 m of climbing on foot, both in the recorded track. A track that starts at the top, without the climb, does not count.'),
+        h('li', null, 'At least one flight, and at least 200 m of climbing on foot, both within the recorded track, in any order (e.g. a flight followed by a hike to the next take-off counts). Climbs by motorised means, such as a lift ride or a vehicle, do not count.'),
         h('li', null, 'A flight must lose at least 30 m of height and glide with a ratio of at least 4 (a speed-riding wing 4 to 5, a paraglider 7 to 9). Take-off does not have to be at the summit.'),
         h('li', null, 'A descent slower than about 18 km/h, or one that follows the ground (ski, run, bike), is not a flight. The tracks are compared with the ground altitude (Open-Meteo).'),
         h('li', null, 'Altitudes recorded as 0 m are ignored, with a warning: a receiver without an altitude fix would otherwise count thousands of metres of climb.'),
