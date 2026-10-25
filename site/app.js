@@ -250,9 +250,11 @@ async function pageRanking(token) {
     h('td', { class: 'num' }, fmtInt(r.outings)),
     h('td', { class: 'num' }, fmtInt(r.dplus)),
     h('td', { class: 'num' }, fmtInt(r.dminus)),
+    h('td', { class: 'num' }, fmtDist(r.walk_km)),
+    h('td', { class: 'num' }, fmtDist(r.flight_km)),
     h('td', { class: 'num score' }, fmtInt(r.score)));
   const tableNode = rows.length
-    ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Score', num: true }], entries.map(rowOf))
+    ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Hike (km)', num: true }, { label: 'Fly (km)', num: true }, { label: 'Score', num: true }], entries.map(rowOf))
     : null;
 
   // Search a pilot by name: case and accents ignored, every word must be found in the name.
