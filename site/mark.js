@@ -1,9 +1,9 @@
 // The tool to mark flights by hand on the map, for a track the analysis found no flight in.
 // Click the take-off on the track, then the landing: that stretch is a flight. Several flights can be marked.
 
-import { CONFIG } from './config.js';
 import { h, fmtInt } from './util.js';
 import { MODE_COLOURS, runs } from './charts.js';
+import { fullScreenButton, inWinter, simpleBackground } from './basemaps.js';
 
 const PICK_PX = 40;          // a click this close to the track (in pixels) picks its nearest fix
 const MARK_COLOUR = '#4aa3c8';
@@ -90,7 +90,8 @@ export function buildMarkTool(trace, onChange) {
     if (!window.L) { box.append(h('p', { class: 'hint pad' }, 'The map could not be loaded.')); return; }
     const L = window.L;
     map = L.map(box);
-    L.tileLayer(CONFIG.TILES_URL, { subdomains: CONFIG.TILES_SUBDOMAINS, maxZoom: CONFIG.TILES_MAX_ZOOM, attribution: CONFIG.TILES_ATTRIBUTION }).addTo(map);
+    simpleBackground(L, map, inWinter(trace.t0)); // the site's own map (site/basemaps.js)
+    fullScreenButton(L, map);
     const all = [];
     for (const r of runs(trace)) {
       const line = [];

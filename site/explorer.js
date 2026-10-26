@@ -4,7 +4,7 @@
 
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
-import { can3D, mapPanel, view3D } from './basemaps.js';
+import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
@@ -776,6 +776,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
   const start = () => {
     map = L.map(mapBox, { worldCopyJump: true });
+    fullScreenButton(L, map); // the map fills the screen (a phone's map is small)
     // no flag, to keep the credits short on a phone
     map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
     // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL): one short line for both

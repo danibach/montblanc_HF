@@ -251,8 +251,10 @@ const ICONS = {
   slopes: ['M3 20h18', 'M3 20 19 6', 'M14 20a7 7 0 0 0-2-5'],
   pistes: ['M4 19 20 13', 'M6 9l5 3 2 4', 'M9 6.5a1.5 1.5 0 1 0 0-.1'],
   grip: ['M9 6h.01', 'M15 6h.01', 'M9 12h.01', 'M15 12h.01', 'M9 18h.01', 'M15 18h.01'],
+  expand: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
+  shrink: ['M9 4v5H4', 'M15 4v5h5', 'M9 20v-5H4', 'M15 20v-5h5'],
 };
-function icon(name, cls = 'mp-icon') {
+export function icon(name, cls = 'mp-icon') {
   const s = document.createElementNS(SVG, 'svg');
   s.setAttribute('viewBox', '0 0 24 24');
   s.setAttribute('aria-hidden', 'true');
@@ -629,4 +631,86 @@ export async function view3D({ line, title, winter }) {
     status.textContent = 'The 3D view needs a recent browser with WebGL, and the map service to answer.';
     fly.hidden = true;
   }
+}
+
+/**
+ * The background of the site's smaller maps (an outing's page, the marking tool): our Topo map, or Winter for an
+ * outing in winter (November to April); OpenTopoMap until it is ready, and for good without WebGL.
+ */
+export function simpleBackground(L, map, winter = false) {
+  const topo = L.tileLayer(CONFIG.TILES_URL, { subdomains: CONFIG.TILES_SUBDOMAINS, maxZoom: CONFIG.TILES_MAX_ZOOM, attribution: CONFIG.TILES_ATTRIBUTION }).addTo(map);
+  (async () => {
+    const dem = await loadMaplibre();
+    const style = hfStyle(await libertyStyle(), winter ? PALETTES.winter : PALETTES.summer, dem);
+    L.maplibreGL({ style, attribution: `${OFM} · ${RELIEF}`, interactive: false }).addTo(map);
+    map.removeLayer(topo);
+    map.getContainer().classList.add('hf-base');
+  })().catch(() => { /* OpenTopoMap stays */ });
+}
+
+/** A month of November to April: the winter colouring. */
+export const inWinter = (date) => [10, 11, 0, 1, 2, 3].includes(new Date(date).getMonth());
+
+const PROFILE_ZOOM = 13; // about 7 m a pixel: the 5 m (France) and 2 m (Switzerland) terrain, read close enough
+/**
+ * The ground altitude under each point of ``line`` ([[lat, lon], …]), read from Mapterhorn's terrain tiles
+ * (terrarium: height = R × 256 + G + B / 256 − 32768), or null when they cannot be read.
+ */
+export async function terrainAltitudes(line) {
+  try {
+    const n = 2 ** PROFILE_ZOOM;
+    const where = line.map(([lat, lon]) => {
+      const s = Math.sin((lat * Math.PI) / 180);
+      return [((lon + 180) / 360) * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n];
+    });
+    const tiles = new Map();
+    for (const [x, y] of where) tiles.set(`${Math.floor(x)}/${Math.floor(y)}`, null);
+    await Promise.all([...tiles.keys()].map(async (key) => {
+      const res = await fetch(DEM_URL.replace('{z}', PROFILE_ZOOM).replace('{x}/{y}', key));
+      if (!res.ok) throw new Error(`terrain ${res.status}`);
+      const img = await createImageBitmap(await res.blob());
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      tiles.set(key, ctx.getImageData(0, 0, img.width, img.height));
+    }));
+    return where.map(([x, y]) => {
+      const data = tiles.get(`${Math.floor(x)}/${Math.floor(y)}`);
+      const px = Math.min(data.width - 1, Math.floor((x % 1) * data.width));
+      const py = Math.min(data.height - 1, Math.floor((y % 1) * data.height));
+      const i = (py * data.width + px) * 4;
+      return data.data[i] * 256 + data.data[i + 1] + data.data[i + 2] / 256 - 32768;
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * A full-screen button for ``map`` (under the zoom buttons): the map fills the screen, the button or Escape brings
+ * it back. Handy on a phone, where the map is small.
+ */
+export function fullScreenButton(L, map) {
+  const control = L.control({ position: 'topleft' });
+  control.onAdd = () => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'map-full-button';
+    const set = (full) => {
+      map.getContainer().classList.toggle('map-full', full);
+      document.body.classList.toggle('map-full-open', full);
+      b.replaceChildren(icon(full ? 'shrink' : 'expand', 'mp-full-icon'));
+      b.setAttribute('aria-label', full ? 'Leave full screen' : 'Full screen');
+      b.title = b.getAttribute('aria-label');
+      setTimeout(() => map.invalidateSize(), 50);
+    };
+    L.DomEvent.disableClickPropagation(b);
+    b.addEventListener('click', () => set(!map.getContainer().classList.contains('map-full')));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && map.getContainer().classList.contains('map-full')) set(false); });
+    set(false);
+    return b;
+  };
+  control.addTo(map);
 }
