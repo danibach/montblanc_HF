@@ -25,6 +25,16 @@ Titles: an outing is named after its take-off, « Pointe de Beauregard from Les 
 
 My H&Fs (the entry page: the signed-in person's own pilot page) and All (everyone's outings), both with distances and filters by year and country · outing page (map, profile, stats, GPX download) · user page (totals, filters by year and country, sortable list) · user ranking (sum of scores, by year or all time) · take-off map (heat map of the take-offs zoomed out and of the ways up on foot zoomed in, weighted by pilots; take-off markers; filters by season and year, opening on the current season, and by D+, distance and time of the climb; outings shown at the take-off of the register (`takeoff_sites`: FFVL open data, Licence Ouverte 2.0, and OpenStreetMap, ODbL, refreshed weekly by `scripts/sync_sites.py`; under 100 m tied at once, 100–200 m to confirm, farther a provisional take-off; a provisional take-off of the same name within 150 m and 100 m of height is the same one; FFVL sites for speed riding, kites or hang gliders only are left out), with its source, good winds and FFVL hike & fly notes; its climbs gathered into routes (`routes`, `src/mbhf/routes.py`: starts under 500 m apart and lines within 150 m along 80 % of the way), one median line per route (every climb laid along the most central one, the middle of them kept), the ways of one start gathered in a folder and named « via … » after a place each goes by (OpenStreetMap), drawn thin on a white casing, one colour per start, with median D+, distance and time; search for a take-off, a summit or a start place; a click shows the climbs on foot that reached the take-off (past 30, only their heat map, and one outing's climb on hover) and its outings, grouped by start place, sorted, 20 at a time, never the flights; `map_outings()` in the database, `site/explorer.js`; the climbs are stored by the server job, `src/mbhf/climb.py`) · upload (one file, or several at once: each is analysed in the browser, the list is reviewed, then published together; at most 20 uploads per day, 1,000 during the first two weeks of an account; files that follow one another — each starting at most 14 h after the previous one ended and within 2 km of where it ended, without overlap, 7 days and 10 files at most — are offered to be joined into one outing, such as a bike ride to the start, the climb and flight and the ride home: `src/mbhf/multi.py`, the time between two files is a recording gap like any other, the original files are kept, listed in `file_parts`, and joined again by the server job) · sign in.
 
+## Languages
+
+The site is in French, English, German and Italian. The language is the one the visitor picked with the selector in the header (kept in this browser), else the first language of the browser's list (`navigator.languages`) that the site has (Swiss German is read in standard German), else English. The browser's language is used rather than the place of the connection: it is what the visitor reads, and a static page never sees the visitor's address. Numbers and dates are written by `Intl` in the visitor's own format (1 234 / 1,234 / 1’234; « 29 sept. 2021 »).
+
+The texts are in `site/i18n/<code>.js`, one file per language with the same keys, loaded when needed (English is always loaded and is what a missing text falls back to); `site/i18n.js` holds the detection and `t()` / `tr()`. No text is translated on the fly and none leaves the site. A text is a string with `{name}` places, or `{ one, other }` for a plural. `tests/test_i18n.py` checks that the four files have the same keys, places and plural forms, and that every text the code asks for exists and is used.
+
+To add a language: copy `site/i18n/en.js` to `<code>.js` and translate it, add the code to `LANGS` in `site/i18n.js`, and run `pytest tests/test_i18n.py`. The German and Italian texts have not yet been read by a native speaker.
+
+Limits: the messages written by the engine and the server (warnings, the reason a track is refused) are English, and an outing's stored title keeps its English form in the database (it is written again in the visitor's language when shown).
+
 ## How it works
 
 ```
@@ -49,7 +59,7 @@ The outing is published at once on the browser's analysis, with a "Validation pe
 | OpenStreetMap | place names, country (Overpass), map tiles (OpenTopoMap, fair use) |
 | Open-Meteo | ground altitude under the flights (free, no key; terms: non-commercial use) |
 
-Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (front end), `supabase/schema-v2.sql` (database).
+Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (front end; its texts in `site/i18n/`), `supabase/schema-v2.sql` (database).
 
 ## Set-up (once)
 

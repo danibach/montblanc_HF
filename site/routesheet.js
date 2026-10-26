@@ -6,6 +6,7 @@
 
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur } from './util.js';
+import { t } from './i18n.js';
 import { terrainAltitudes } from './basemaps.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -93,7 +94,7 @@ function profile(line, alts) {
   const top = alts.map((a, i) => `${x(d[i]).toFixed(1)},${y(a).toFixed(1)}`).join(' ');
   const text = (attrs, s) => { const t = svg('text', attrs); t.textContent = s; return t; };
   return svg('svg', { class: 'route-profile', viewBox: `0 0 ${W} ${H}`, role: 'img',
-    'aria-label': `Altitude profile: from ${fmtInt(alts[0])} m to ${fmtInt(alts[alts.length - 1])} m over ${fmtKm(total)}` },
+    'aria-label': t('sheet.profileAria', { from: fmtInt(alts[0]), to: fmtInt(alts[alts.length - 1]), km: fmtKm(total) }) },
   svg('polygon', { class: 'area', points: `${x(0)},${H - pad.b} ${top} ${x(total)},${H - pad.b}` }),
   svg('polyline', { class: 'line', points: top }),
   text({ x: pad.l - 4, y: y(hi) + 4, 'text-anchor': 'end' }, fmtInt(hi)),
@@ -130,29 +131,29 @@ export function routeSheet({ route, takeoff, way, numbers, link, onBack, swatch,
   const n = numbers;
   const fact = (label, value, hint) => h('div', { class: 'fact' }, h('span', { class: 'hint' }, label), h('b', null, value),
     hint ? h('span', { class: 'hint' }, hint) : null);
-  const profileBox = h('div', { class: 'route-profile-box' }, h('p', { class: 'hint' }, 'Loading the altitude profile…'));
+  const profileBox = h('div', { class: 'route-profile-box' }, h('p', { class: 'hint' }, t('sheet.loadingProfile')));
   const name = `${takeoff.name} · ${way}`;
-  const about = `The way up to ${takeoff.name}, down the middle of ${n.climbs} climbs of pilots (H&F Tracks). Not a marked trail: check the way on the ground.`;
+  const about = t('sheet.about', { takeoff: takeoff.name, n: n.climbs });
   let alts = null;
-  const gpx = h('button', { class: 'primary' }, 'Download the way up (GPX)');
+  const gpx = h('button', { class: 'primary' }, t('sheet.gpx'));
   gpx.addEventListener('click', () => download(`${name.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '')}.gpx`, routeGpx(route.line, alts, name, about)));
-  const copy = h('button', null, 'Copy the link');
+  const copy = h('button', null, t('sheet.copy'));
   copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(link); copy.textContent = 'Link copied'; } catch (_) { copy.textContent = link; }
-    setTimeout(() => { copy.textContent = 'Copy the link'; }, 2500);
+    try { await navigator.clipboard.writeText(link); copy.textContent = t('sheet.copied'); } catch (_) { copy.textContent = link; }
+    setTimeout(() => { copy.textContent = t('sheet.copy'); }, 2500);
   });
   const sheet = h('div', { class: 'route-sheet' },
     h('button', { class: 'link back', onclick: onBack }, `← ${takeoff.name}`),
     h('h2', null, swatch, way),
-    h('p', { class: 'hint' }, `Up to ${takeoff.name}${takeoff.alt != null ? ` (${fmtInt(takeoff.alt)} m)` : ''} · ${n.outings} outing${n.outings > 1 ? 's' : ''} · ${n.pilots} pilot${n.pilots > 1 ? 's' : ''}`),
+    h('p', { class: 'hint' }, `${t('sheet.upTo', { name: takeoff.name })}${takeoff.alt != null ? ` (${fmtInt(takeoff.alt)} m)` : ''} · ${t('unit.outing', { n: n.outings })} · ${t('unit.pilot', { n: n.pilots })}`),
     h('div', { class: 'facts' },
-      n.km != null ? fact('Distance', fmtKm(n.km)) : null,
+      n.km != null ? fact(t('sheet.distance'), fmtKm(n.km)) : null,
       n.dplus != null ? fact('D+', `${fmtInt(n.dplus)} m`) : null,
-      n.time != null ? fact('Time up', fmtDur(n.time),
-        n.climbs > 1 ? (n.climbs >= 4 ? `most: ${fmtDur(n.timeLow)} – ${fmtDur(n.timeHigh)}` : `${fmtDur(n.timeLow)} – ${fmtDur(n.timeHigh)}`) : null) : null),
+      n.time != null ? fact(t('sheet.timeUp'), fmtDur(n.time),
+        n.climbs > 1 ? (n.climbs >= 4 ? t('sheet.most', { low: fmtDur(n.timeLow), high: fmtDur(n.timeHigh) }) : `${fmtDur(n.timeLow)} – ${fmtDur(n.timeHigh)}`) : null) : null),
     profileBox,
-    h('div', { class: 'row route-actions' }, gpx, on3D ? h('button', { onclick: on3D }, 'View in 3D') : null, copy),
-    h('p', { class: 'hint' }, `${n.climbs > 1 ? `Medians of ${n.climbs} climbs; the line runs down their middle` : 'From one climb'}. Not a marked trail: check the way, the snow and the weather on the ground.`),
+    h('div', { class: 'row route-actions' }, gpx, on3D ? h('button', { onclick: on3D }, t('sheet.view3d')) : null, copy),
+    h('p', { class: 'hint' }, `${n.climbs > 1 ? t('sheet.medians', { n: n.climbs }) : t('sheet.fromOne')}. ${t('sheet.warning')}`),
     outings);
   (async () => {
     const fine = await terrainAltitudes(route.line);
@@ -161,9 +162,9 @@ export function routeSheet({ route, takeoff, way, numbers, link, onBack, swatch,
     alts = a;
     if (a && a.every((v) => v != null)) {
       profileBox.replaceChildren(profile(route.line, a),
-        h('p', { class: 'hint' }, `${fmtInt(a[0])} m → ${fmtInt(a[a.length - 1])} m · ground altitude: ${source}`));
+        h('p', { class: 'hint' }, t('sheet.groundAlt', { from: fmtInt(a[0]), to: fmtInt(a[a.length - 1]), source })));
     } else {
-      profileBox.replaceChildren(h('p', { class: 'hint' }, 'No altitude profile: the elevation service did not answer.'));
+      profileBox.replaceChildren(h('p', { class: 'hint' }, t('sheet.noProfile')));
     }
   });
   return sheet;

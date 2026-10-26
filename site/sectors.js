@@ -5,6 +5,7 @@
 // names the group by its take-offs).
 
 import { SECTORS } from './sector-points.js';
+import { t } from './i18n.js';
 
 const MAX_KM = 15;
 
@@ -47,5 +48,5 @@ export function groupName(group) {
   const names = [...tally.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
   if (names.length) return names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '');
   const top = [...group].sort((a, b) => b.outings.length - a.outings.length)[0];
-  return `${top.name} + ${group.length - 1} other${group.length > 2 ? 's' : ''}`;
+  return t('sector.others', { name: top.name, n: group.length - 1 });
 }

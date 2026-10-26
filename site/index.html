@@ -17,17 +17,18 @@
 <body>
   <header class="site">
     <a class="site-name" href="#/">H&amp;F Tracks</a>
-    <nav id="nav" aria-label="Main">
-      <a href="#/" data-route="home">My H&amp;Fs</a>
-      <a href="#/all" data-route="all">All</a>
-      <a href="#/ranking" data-route="ranking">Pilots</a>
-      <a href="#/map" data-route="map">Map</a>
-      <a href="#/upload" data-route="upload">Upload</a>
+    <nav id="nav" aria-label="Main" data-i18n-label="nav.label">
+      <a href="#/" data-route="home" data-i18n="nav.home">My H&amp;Fs</a>
+      <a href="#/all" data-route="all" data-i18n="nav.all">All</a>
+      <a href="#/ranking" data-route="ranking" data-i18n="nav.ranking">Pilots</a>
+      <a href="#/map" data-route="map" data-i18n="nav.map">Map</a>
+      <a href="#/upload" data-route="upload" data-i18n="nav.upload">Upload</a>
     </nav>
+    <div id="lang-pick" class="lang-pick"></div>
     <div id="account" class="account"></div>
   </header>
 
-  <main id="view" tabindex="-1"><p class="hint pad">Loading…</p></main>
+  <main id="view" tabindex="-1"><p class="hint pad" data-i18n="common.loading">Loading…</p></main>
 
   <footer class="site" id="footer"></footer>
 </body>

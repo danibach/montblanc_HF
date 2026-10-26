@@ -17,6 +17,7 @@ import { buildExplorer } from './explorer.js';
 import { buildMarkTool } from './mark.js';
 import { buildHelp } from './help.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
+import { LANGS, getLang, initI18n, onLang, setLang, t, tr } from './i18n.js';
 
 const view = $('#view');
 let routeToken = 0;       // a slow answer for a page we already left must not draw over the new page
@@ -29,23 +30,37 @@ function renderAccount() {
   if (api.state.user) {
     const name = api.state.profile && api.state.profile.display_name;
     box.append(
-      h('a', { href: `#/user/${api.state.user.id}` }, name || 'Your page'),
-      h('button', { class: 'link', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, 'Sign out'),
+      h('a', { href: `#/user/${api.state.user.id}` }, name || t('account.yourPage')),
+      h('button', { class: 'link', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut')),
     );
   } else {
-    box.append(h('a', { href: '#/login' }, 'Sign in'));
+    box.append(h('a', { href: '#/login' }, t('account.signIn')));
   }
-  box.append(h('a', { href: '#/help', class: 'help-link' }, 'Help'));
+  box.append(h('a', { href: '#/help', class: 'help-link' }, t('account.help')));
+}
+
+/** The language selector, in the header. The names are written in their own language, so each can be found. */
+function renderLangPick() {
+  const select = h('select', { id: 'lang', 'aria-label': t('lang.label'), title: t('lang.label') },
+    LANGS.map((l) => h('option', { value: l.code, lang: l.code, selected: l.code === getLang() }, l.name)));
+  select.addEventListener('change', () => setLang(select.value, { save: true }));
+  $('#lang-pick').replaceChildren(select);
+}
+
+/** The texts of index.html (menu, loading line): marked data-i18n, in English there as a fallback without script. */
+function renderStatic() {
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-label]')) el.setAttribute('aria-label', t(el.dataset.i18nLabel));
 }
 
 function renderFooter() {
   const f = $('#footer');
   const lines = [
-    h('p', null, 'Published tracks are public: map, profile and statistics. The original file stays private.'),
-    h('p', null, 'Place names come from OpenStreetMap and ground altitudes from Open-Meteo (the preview sends them a few points of the flight). Scores are automatic: D+ on foot plus D− in flight, in metres.'),
+    h('p', null, t('footer.public')),
+    h('p', null, t('footer.sources')),
   ];
   if (CONFIG.CONTACT_EMAIL) {
-    lines.push(h('p', null, 'To remove a track or an account: ', h('a', { href: `mailto:${CONFIG.CONTACT_EMAIL}` }, CONFIG.CONTACT_EMAIL), ' (or use the delete buttons).'));
+    lines.push(h('p', null, tr('footer.remove', { mail: h('a', { href: `mailto:${CONFIG.CONTACT_EMAIL}` }, CONFIG.CONTACT_EMAIL) })));
   }
   f.replaceChildren(...lines);
 }
@@ -62,11 +77,11 @@ function show(...nodes) {
 }
 
 function loading() {
-  show(h('p', { class: 'hint pad' }, 'Loading…'));
+  show(h('p', { class: 'hint pad' }, t('common.loading')));
 }
 
 function fail(err) {
-  show(notice('error', h('p', null, (err && err.message) || 'Something went wrong. Try again.')));
+  show(notice('error', h('p', null, (err && err.message) || t('common.error'))));
 }
 
 // ---------------------------------------------------------------- shared pieces
@@ -89,24 +104,24 @@ function coords(lat, lon) {
 function outingDetail(o) {
   const trace = o.trace;
   const mapView = trace ? buildMap(trace, [
-    { lat: o.start_lat, lon: o.start_lon, alt: o.start_alt, label: 'Start on foot', colour: '#2b6cb0' },
-    { lat: o.summit_lat, lon: o.summit_lon, alt: o.summit_alt, label: o.summit_name || 'Highest point on foot', colour: '#3f8f46' },
-    { lat: o.takeoff_lat, lon: o.takeoff_lon, alt: o.takeoff_alt, label: 'Take-off', colour: '#e0552b' },
-    { lat: o.landing_lat, lon: o.landing_lon, alt: o.landing_alt, label: 'Landing', colour: '#7b3fa0' },
+    { lat: o.start_lat, lon: o.start_lon, alt: o.start_alt, label: t('detail.startFoot'), colour: '#2b6cb0' },
+    { lat: o.summit_lat, lon: o.summit_lon, alt: o.summit_alt, label: o.summit_name || t('detail.summit'), colour: '#3f8f46' },
+    { lat: o.takeoff_lat, lon: o.takeoff_lon, alt: o.takeoff_alt, label: t('detail.takeoff'), colour: '#e0552b' },
+    { lat: o.landing_lat, lon: o.landing_lon, alt: o.landing_alt, label: t('detail.landing'), colour: '#7b3fa0' },
   ]) : null;
   const detail = h('div', null,
     h('div', { class: 'stats' },
-      stat(fmtInt(o.score), 'Score', true),
-      stat(`${fmtInt(o.dplus_m)} m`, 'D+ on foot'),
-      stat(`${fmtInt(o.dminus_m)} m`, 'D− in flight'),
-      stat(fmtKm(o.walk_km), 'Distance on foot'),
-      stat(fmtKm(o.flight_free_km), 'Free distance FAI'),
-      stat(fmtDur(o.duration_s), 'Duration')),
+      stat(fmtInt(o.score), t('stat.score'), true),
+      stat(`${fmtInt(o.dplus_m)} m`, t('stat.dplus')),
+      stat(`${fmtInt(o.dminus_m)} m`, t('stat.dminus')),
+      stat(fmtKm(o.walk_km), t('stat.walk')),
+      stat(fmtKm(o.flight_free_km), t('stat.freeFai')),
+      stat(fmtDur(o.duration_s), t('stat.duration'))),
     h('dl', { class: 'places' },
-      place('Start on foot', [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
-      place('Highest point on foot', `${o.summit_name || coords(o.summit_lat, o.summit_lon) || '–'}${o.summit_alt != null ? ` · ${fmtInt(o.summit_alt)} m` : ''}`),
-      place('Take-off', `${o.takeoff_name || coords(o.takeoff_lat, o.takeoff_lon) || '–'}${o.takeoff_alt != null ? ` · ${fmtInt(o.takeoff_alt)} m` : ''}`),
-      place('Country', o.country_name || o.country_code)),
+      place(t('detail.startFoot'), [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
+      place(t('detail.summit'), `${o.summit_name || coords(o.summit_lat, o.summit_lon) || '–'}${o.summit_alt != null ? ` · ${fmtInt(o.summit_alt)} m` : ''}`),
+      place(t('detail.takeoff'), `${o.takeoff_name || coords(o.takeoff_lat, o.takeoff_lon) || '–'}${o.takeoff_alt != null ? ` · ${fmtInt(o.takeoff_alt)} m` : ''}`),
+      place(t('detail.country'), o.country_name || o.country_code)),
     mapView ? mapView.element : null,
     trace ? legend() : null,
     trace ? buildProfile(trace) : null);
@@ -118,7 +133,7 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
   return rows.map((r) => h('tr', null,
     h('td', null, fmtDate(r.outing_date)),
     showPilot ? h('td', null, link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
-    h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, outingTitle(r)) : (r.title || 'Uploaded track'),
+    h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, outingTitle(r)) : (r.title || t('outing.uploadedTrack')),
       r.status === 'published' && r.verified === false ? [' ', statusBadge(r)] : null),
     h('td', { class: 'num' }, fmtInt(r.dplus_m)),
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
@@ -134,38 +149,38 @@ function fmtDist(n) {
 }
 
 function statusBadge(r) {
-  if (r.status === 'pending') return h('span', { class: 'dot pending' }, 'Processing');
-  if (r.status === 'published' && r.verified === false) return h('span', { class: 'dot pending', title: 'Published on the first analysis; the server is checking it.' }, 'Validation pending');
-  if (r.status === 'rejected') return h('span', { class: 'dot rejected', title: r.reject_reason || '' }, 'Not counted');
-  return h('span', { class: 'dot' }, 'Published');
+  if (r.status === 'pending') return h('span', { class: 'dot pending' }, t('status.processing'));
+  if (r.status === 'published' && r.verified === false) return h('span', { class: 'dot pending', title: t('status.pendingHint') }, t('status.pending'));
+  if (r.status === 'rejected') return h('span', { class: 'dot rejected', title: r.reject_reason || '' }, t('status.rejected'));
+  return h('span', { class: 'dot' }, t('status.published'));
 }
 
 function listHeaders({ showPilot = true, showStatus = false } = {}) {
   return [
-    { label: 'Date', key: 'date' },
-    showPilot ? { label: 'Pilot', key: 'pilot' } : null,
-    { label: 'Outing', key: 'outing' },
-    { label: 'D+ (m)', key: 'dplus', num: true },
-    { label: 'D− (m)', key: 'dminus', num: true },
-    { label: 'Hike (km)', key: 'hike', num: true },
-    { label: 'Fly (km)', key: 'fly', num: true },
-    { label: 'Score', key: 'score', num: true },
-    showStatus ? { label: 'Status' } : null,
+    { label: t('col.date'), key: 'date' },
+    showPilot ? { label: t('col.pilot'), key: 'pilot' } : null,
+    { label: t('col.outing'), key: 'outing' },
+    { label: t('col.dplus'), key: 'dplus', num: true },
+    { label: t('col.dminus'), key: 'dminus', num: true },
+    { label: t('col.hike'), key: 'hike', num: true },
+    { label: t('col.fly'), key: 'fly', num: true },
+    { label: t('col.score'), key: 'score', num: true },
+    showStatus ? { label: t('col.status') } : null,
   ].filter(Boolean);
 }
 
-async function filterBar(current, onChange, { yearLabel = 'All years' } = {}) {
+async function filterBar(current, onChange, { yearLabel } = {}) {
   const f = await api.getFilters();
-  const year = h('select', { id: 'f-year' }, h('option', { value: '' }, yearLabel),
+  const year = h('select', { id: 'f-year' }, h('option', { value: '' }, yearLabel || t('filter.allYears')),
     f.years.map((y) => h('option', { value: y, selected: String(y) === String(current.year || '') }, y)));
-  const country = h('select', { id: 'f-country' }, h('option', { value: '' }, 'All countries'),
+  const country = h('select', { id: 'f-country' }, h('option', { value: '' }, t('filter.allCountries')),
     f.countries.map((c) => h('option', { value: c.code, selected: c.code === current.country }, c.name)));
   const change = () => onChange({ year: year.value || '', country: country.value || '' });
   year.addEventListener('change', change);
   country.addEventListener('change', change);
   return h('div', { class: 'filters' },
-    h('div', { class: 'field' }, h('label', { for: 'f-year' }, 'Year'), year),
-    h('div', { class: 'field' }, h('label', { for: 'f-country' }, 'Country'), country));
+    h('div', { class: 'field' }, h('label', { for: 'f-year' }, t('filter.year')), year),
+    h('div', { class: 'field' }, h('label', { for: 'f-country' }, t('detail.country')), country));
 }
 
 function query() {
@@ -211,11 +226,11 @@ async function outingsSection(token, { path, userId, showPilot, empty }) {
   };
 
   const from = (page - 1) * size;
-  const count = h('p', { class: 'hint' }, total ? `${from + 1}–${from + rows.length} of ${total} outings` : '');
-  const pager = pages > 1 ? h('nav', { class: 'pager', 'aria-label': 'Pages' },
-    h('button', { disabled: page <= 1, onclick: () => go({ page: page - 1 }) }, '‹ Previous'),
-    h('span', { class: 'hint' }, `Page ${page} of ${pages}`),
-    h('button', { disabled: page >= pages, onclick: () => go({ page: page + 1 }) }, 'Next ›')) : null;
+  const count = h('p', { class: 'hint' }, total ? t('list.range', { from: from + 1, to: from + rows.length, total, n: total }) : '');
+  const pager = pages > 1 ? h('nav', { class: 'pager', 'aria-label': t('pager.label') },
+    h('button', { disabled: page <= 1, onclick: () => go({ page: page - 1 }) }, t('pager.prev')),
+    h('span', { class: 'hint' }, t('pager.page', { page, pages })),
+    h('button', { disabled: page >= pages, onclick: () => go({ page: page + 1 }) }, t('pager.next'))) : null;
 
   return [bar,
     total
@@ -226,8 +241,8 @@ async function outingsSection(token, { path, userId, showPilot, empty }) {
 // All: everyone's outings.
 async function pageAll(token) {
   setNav('all');
-  const section = await outingsSection(token, { path: 'all', showPilot: true, empty: h('p', null, 'No outing yet for these filters.') });
-  if (section) show(h('h1', null, 'Outings'), section);
+  const section = await outingsSection(token, { path: 'all', showPilot: true, empty: h('p', null, t('list.none')) });
+  if (section) show(h('h1', null, t('page.all')), section);
 }
 
 // My H&Fs is the pilot page of the signed-in person, at the address "#/".
@@ -241,7 +256,7 @@ async function pageMine(token) {
 async function pageRanking(token) {
   setNav('ranking');
   const q = query();
-  const bar = await filterBar(q, (v) => goFilters('ranking', v), { yearLabel: 'All time' });
+  const bar = await filterBar(q, (v) => goFilters('ranking', v), { yearLabel: t('filter.allTime') });
   const rows = await api.getRanking({ year: q.year, country: q.country });
   if (token !== routeToken) return;
   // The rank is the place in the full ranking, so it stays the same when the search narrows the list.
@@ -256,14 +271,14 @@ async function pageRanking(token) {
     h('td', { class: 'num' }, fmtDist(r.flight_km)),
     h('td', { class: 'num score' }, fmtInt(r.score)));
   const tableNode = rows.length
-    ? table([{ label: '#', num: true }, { label: 'Pilot' }, { label: 'Outings', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }, { label: 'Hike (km)', num: true }, { label: 'Fly (km)', num: true }, { label: 'Score', num: true }], entries.map(rowOf))
+    ? table([{ label: '#', num: true }, { label: t('col.pilot') }, { label: t('col.outings'), num: true }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }, { label: t('col.hike'), num: true }, { label: t('col.fly'), num: true }, { label: t('col.score'), num: true }], entries.map(rowOf))
     : null;
 
   // Search a pilot by name: case and accents ignored, every word must be found in the name.
   const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const search = h('input', { type: 'search', id: 'f-pilot', placeholder: 'Search a pilot…', autocomplete: 'off', 'aria-label': 'Search a pilot' });
+  const search = h('input', { type: 'search', id: 'f-pilot', placeholder: t('rank.searchPlaceholder'), autocomplete: 'off', 'aria-label': t('rank.search') });
   const found = h('p', { class: 'hint' });
-  const none = h('div', null, notice('info', h('p', null, 'No pilot matches this search.')));
+  const none = h('div', null, notice('info', h('p', null, t('rank.noMatch'))));
   none.hidden = true;
   const apply = () => {
     const words = fold(search.value).split(/\s+/).filter(Boolean);
@@ -273,19 +288,19 @@ async function pageRanking(token) {
       tableNode.hidden = !hits.length;
     }
     none.hidden = !words.length || hits.length > 0;
-    found.textContent = words.length && hits.length ? `${hits.length} of ${entries.length} pilots` : '';
+    found.textContent = words.length && hits.length ? t('rank.found', { hits: hits.length, n: entries.length }) : '';
   };
   search.addEventListener('input', apply);
   const searchBox = rows.length
-    ? h('div', { class: 'filters' }, h('div', { class: 'field' }, h('label', { for: 'f-pilot' }, 'Pilot'), search))
+    ? h('div', { class: 'filters' }, h('div', { class: 'field' }, h('label', { for: 'f-pilot' }, t('col.pilot')), search))
     : null;
 
   show(
-    h('h1', null, 'Pilots'),
-    h('p', { class: 'sub' }, 'Sum of the scores of all outings. Score = D+ on foot + D− in flight (metres).'),
+    h('h1', null, t('page.ranking')),
+    h('p', { class: 'sub' }, t('rank.sub')),
     bar,
     searchBox,
-    tableNode || notice('info', h('p', null, 'No outing yet for these filters.')),
+    tableNode || notice('info', h('p', null, t('list.none'))),
     found,
     none);
 }
@@ -296,8 +311,8 @@ async function pageMap(token) {
   if (token !== routeToken) return;
   const mapView = buildExplorer(rows, api.getTraces, sites, routes, { sites: ffvl, info: api.getFfvlInfo });
   show(
-    h('h1', null, 'Take-off map'),
-    h('p', { class: 'sub' }, 'Where pilots took off after the climb, and the ways up on foot. The warmer the colour, the more outings.'),
+    h('h1', null, t('page.map')),
+    h('p', { class: 'sub' }, t('map.sub')),
     mapView.element);
   requestAnimationFrame(() => mapView.start());
 }
@@ -306,17 +321,17 @@ async function pageOuting(token, id) {
   setNav(null);   // an outing belongs to no entry of the menu
   const o = await api.getOuting(id);
   if (token !== routeToken) return;
-  if (!o) return show(notice('error', h('p', null, 'This outing does not exist, or is not public.')));
+  if (!o) return show(notice('error', h('p', null, t('outing.missing'))));
   const mine = api.state.user && api.state.user.id === o.user_id;
   const actions = h('div', { class: 'row' });
   if (o.status === 'published' && o.trace) {
-    actions.append(h('button', { onclick: () => downloadText(`${outingTitle(o).replace(/[^\w-]+/g, '_')}.gpx`, trackToGpx(o.trace, outingTitle(o)), 'application/gpx+xml') }, 'Download GPX'));
+    actions.append(h('button', { onclick: () => downloadText(`${outingTitle(o).replace(/[^\w-]+/g, '_')}.gpx`, trackToGpx(o.trace, outingTitle(o)), 'application/gpx+xml') }, t('outing.downloadGpx')));
   }
   if (mine) {
     actions.append(h('button', { class: 'danger', onclick: async () => {
-      if (!confirm('Delete this outing and its file? This cannot be undone.')) return;
+      if (!confirm(t('outing.confirmDelete'))) return;
       try { await api.deleteOuting(o); location.hash = `#/user/${o.user_id}`; } catch (e) { fail(e); }
-    } }, 'Delete'));
+    } }, t('common.delete')));
   } else if (api.state.user && o.status === 'published') {
     actions.append(reportForm(o.id));
   }
@@ -326,25 +341,25 @@ async function pageOuting(token, id) {
       h('p', { class: 'sub' }, link(`#/user/${o.user_id}`, pilotName(o.profiles)), ` · ${fmtDate(o.outing_date)}`, o.country_name ? ` · ${o.country_name}` : '')),
     o.status !== 'published' || o.verified === false ? statusBadge(o) : null);
   if (o.status === 'pending') {
-    return show(head, notice('pending', h('p', null, 'Your track is being analysed. This usually takes a few minutes; reload this page later.')), actions);
+    return show(head, notice('pending', h('p', null, t('outing.pendingNote'))), actions);
   }
   if (o.status === 'rejected') {
-    return show(head, notice('error', h('p', null, o.reject_reason || 'This track does not count.')), actions);
+    return show(head, notice('error', h('p', null, o.reject_reason || t('outing.notCounted'))), actions);
   }
   show(head, outingDetail(o), actions,
     (o.warnings && o.warnings.length) ? h('p', { class: 'hint' }, o.warnings.join(' · ')) : null);
 }
 
 function reportForm(outingId) {
-  const reason = h('input', { type: 'text', maxlength: '500', placeholder: 'What is wrong with this outing?', 'aria-label': 'Reason' });
+  const reason = h('input', { type: 'text', maxlength: '500', placeholder: t('report.placeholder'), 'aria-label': t('report.reason') });
   const status = h('span', { class: 'hint' });
   const form = h('form', { class: 'row', onsubmit: async (ev) => {
     ev.preventDefault();
     if (!reason.value.trim()) return;
-    try { await api.reportOuting(outingId, reason.value); status.textContent = 'Thank you, the report was sent.'; reason.value = ''; }
+    try { await api.reportOuting(outingId, reason.value); status.textContent = t('report.thanks'); reason.value = ''; }
     catch (e) { status.textContent = e.message; }
-  } }, reason, h('button', null, 'Report'), status);
-  return h('details', null, h('summary', { class: 'hint' }, 'Report a problem'), form);
+  } }, reason, h('button', null, t('report.button')), status);
+  return h('details', null, h('summary', { class: 'hint' }, t('report.summary')), form);
 }
 
 // A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "" for My H&Fs.
@@ -353,8 +368,8 @@ async function pageUser(token, id, opts = {}) {
   setNav(api.state.user && api.state.user.id === id ? 'home' : null);
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
-  if (!profile) return show(notice('error', h('p', null, 'This page does not exist.')));
-  const section = await outingsSection(token, { path: opts.path != null ? opts.path : `user/${id}`, userId: id, showPilot: false, empty: h('p', null, 'No published outing for these filters.') });
+  if (!profile) return show(notice('error', h('p', null, t('user.missing'))));
+  const section = await outingsSection(token, { path: opts.path != null ? opts.path : `user/${id}`, userId: id, showPilot: false, empty: h('p', null, t('list.noneUser')) });
   if (!section) return;
   const mine = api.state.user && api.state.user.id === id;
   // The totals follow the year and country filters, like the list below them.
@@ -368,35 +383,35 @@ async function pageUser(token, id, opts = {}) {
   const nodes = [
     h('h1', null, pilotName(profile)),
     h('div', { class: 'stats' },
-      stat(fmtInt(published.length), 'Outings'),
-      stat(fmtInt(sum('score')), 'Total score', true),
-      stat(`${fmtInt(sum('dplus_m'))} m`, 'D+ on foot'),
-      stat(`${fmtInt(sum('dminus_m'))} m`, 'D− in flight'),
-      stat(fmtKm(sum('walk_km')), 'Distance on foot'),
-      stat(fmtKm(sum('flight_free_km')), 'Total distance on flight')),
+      stat(fmtInt(published.length), t('col.outings')),
+      stat(fmtInt(sum('score')), t('stat.totalScore'), true),
+      stat(`${fmtInt(sum('dplus_m'))} m`, t('stat.dplus')),
+      stat(`${fmtInt(sum('dminus_m'))} m`, t('stat.dminus')),
+      stat(fmtKm(sum('walk_km')), t('stat.walk')),
+      stat(fmtKm(sum('flight_free_km')), t('stat.totalFlight'))),
   ];
-  if (mine && !profile.display_name) nodes.push(nameForm('Choose the name shown next to your outings'));
+  if (mine && !profile.display_name) nodes.push(nameForm(t('name.choose')));
   if (mine && others.length) {
-    nodes.push(h('h2', null, 'Waiting or not counted'),
+    nodes.push(h('h2', null, t('user.others')),
       table(listHeaders({ showPilot: false, showStatus: true }), others.map((r) => h('tr', null,
         h('td', null, fmtDate(r.outing_date) === '–' ? fmtDate(r.created_at) : fmtDate(r.outing_date)),
-        h('td', { class: 'wrap' }, r.status === 'rejected' ? (r.reject_reason || 'Not counted') : 'Uploaded track'),
+        h('td', { class: 'wrap' }, r.status === 'rejected' ? (r.reject_reason || t('status.rejected')) : t('outing.uploadedTrack')),
         h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
         h('td', { class: 'num' }, ''), h('td', { class: 'num' }, ''),
         h('td', null, statusBadge(r), ' ', h('button', { class: 'link', onclick: async () => {
-          if (!confirm('Delete this upload?')) return;
+          if (!confirm(t('user.confirmDeleteUpload'))) return;
           try { await api.deleteOuting(r); pageUser(++routeToken, id, opts).catch(fail); } catch (e) { fail(e); }
-        } }, 'Delete'))))));
+        } }, t('common.delete')))))));
   }
-  nodes.push(h('h2', null, 'Outings'), section);
+  nodes.push(h('h2', null, t('col.outings')), section);
   if (mine) {
-    nodes.push(h('h2', null, 'Your account'),
+    nodes.push(h('h2', null, t('user.account')),
       h('div', { class: 'card' },
-        h('p', { class: 'hint' }, `Signed in as ${api.state.user.email || ''}. Deleting your account deletes your page, your outings and your original files.`),
+        h('p', { class: 'hint' }, t('user.accountNote', { email: api.state.user.email || '' })),
         h('button', { class: 'danger', onclick: async () => {
-          if (!confirm('Delete your account, all your outings and your files? This cannot be undone.')) return;
+          if (!confirm(t('user.confirmDeleteAccount'))) return;
           try { await api.deleteAccount(); location.hash = '#/'; } catch (e) { fail(e); }
-        } }, 'Delete my account')));
+        } }, t('user.deleteAccount'))));
   }
   show(nodes);
 }
@@ -406,11 +421,11 @@ function nameForm(title) {
   const msg = h('p', { class: 'hint', role: 'status' });
   return h('form', { class: 'card', onsubmit: async (ev) => {
     ev.preventDefault();
-    try { await api.setDisplayName(input.value); msg.textContent = 'Saved.'; route(); } catch (e) { msg.textContent = e.message; }
+    try { await api.setDisplayName(input.value); msg.textContent = t('name.saved'); route(); } catch (e) { msg.textContent = e.message; }
   } },
     h('label', { for: 'display-name' }, title),
-    h('div', { class: 'row' }, input, h('button', { class: 'primary' }, 'Save')),
-    h('p', { class: 'hint' }, 'Shown publicly. Pick a name or pseudonym of your choice (2 to 40 characters).'), msg);
+    h('div', { class: 'row' }, input, h('button', { class: 'primary' }, t('common.save'))),
+    h('p', { class: 'hint' }, t('name.hint')), msg);
 }
 
 // ---------------------------------------------------------------- upload
@@ -420,16 +435,17 @@ function nameForm(title) {
 let noFlight = [];
 let refusedBox = null;     // where the list is drawn on the Upload page
 let markTarget = null;     // the entry the marking tool works on
+let batchBusy = false;     // a batch of files is being analysed or published: a change of language must not redraw the page
 
 function renderNoFlight() {
   if (!refusedBox) return;
   if (!noFlight.length) { refusedBox.replaceChildren(); return; }
   refusedBox.replaceChildren(
-    h('h2', null, `Without a flight (${noFlight.length})`),
-    h('p', { class: 'hint' }, 'No flight was found in these tracks, so they do not count. If one of them does hold a flight, mark it yourself on the map.'),
+    h('h2', null, t('upload.noFlightTitle', { n: noFlight.length })),
+    h('p', { class: 'hint' }, t('upload.noFlightNote')),
     ...noFlight.map((it) => h('div', { class: 'refused-item' },
       h('div', { class: 'why' }, h('b', null, fileLabel(it.file)), h('p', { class: 'hint' }, it.message)),
-      h('a', { class: 'button', href: '#/mark', onclick: () => { markTarget = it; } }, 'Mark the flight by hand'))));
+      h('a', { class: 'button', href: '#/mark', onclick: () => { markTarget = it; } }, t('upload.markButton')))));
 }
 
 /** The name of a track: a File, or the Files of one outing in several files (« a.gpx + b.gpx »). */
@@ -449,24 +465,24 @@ function noteNoFlight(file, res) {
 async function pageUpload() {
   setNav('upload');
   if (!api.state.user) {
-    return show(h('h1', null, 'Upload a track'),
-      notice('info', h('p', null, 'You need an account to upload a track. ', link('#/login', 'Sign in'), ' — it takes one e-mail link.')));
+    return show(h('h1', null, t('upload.title')),
+      notice('info', h('p', null, tr('upload.needAccount', { link: link('#/login', t('account.signIn')) }))));
   }
   if (!api.state.profile || !api.state.profile.display_name) {
-    return show(h('h1', null, 'Upload a track'), nameForm('First, choose the name shown next to your outings'));
+    return show(h('h1', null, t('upload.title')), nameForm(t('upload.chooseName')));
   }
-  const engineMsg = h('span', { class: 'hint', role: 'status', id: 'engine-status' }, 'Preparing the analysis…');
+  const engineMsg = h('span', { class: 'hint', role: 'status', id: 'engine-status' }, t('engine.preparing'));
   const unsubscribe = onEngineStatus((text, state) => { engineMsg.textContent = text; engineMsg.dataset.state = state; });
   const out = h('div', { id: 'preview' });
   refusedBox = h('div', { id: 'refused', class: 'refused' });
   const input = h('input', { type: 'file', id: 'track', accept: '.igc,.gpx,.kml,.tcx,.fit', multiple: true });
   const drop = h('div', { class: 'drop', id: 'drop' },
-    h('p', null, h('b', null, 'Drop your tracks here'), ' or choose one or several files'),
+    h('p', null, tr('upload.drop', { b: h('b', null, t('upload.dropBold')) })),
     h('p', null, input),
-    h('p', { class: 'hint' }, `IGC, GPX, KML, TCX or FIT with timestamps and altitude, up to ${CONFIG.MAX_FILE_MB} MB each. The analysis runs in your browser: a single file is sent only when you publish it.`),
-    h('p', { class: 'hint' }, `One outing in several files (a bike ride to the start, the climb and flight, the ride home): drop them together, they are offered to be joined.`),
-    h('p', { class: 'hint' }, `Several files at once: each one is analysed and, by default, published as soon as it is ready. Keep the page open until the list is finished. At most 20 uploads per day, and up to 1,000 per day during the first two weeks of your account.`),
-    h('p', { class: 'hint' }, h('b', null, 'Original file only. '), 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused, unless you mark the flight by hand afterwards.'));
+    h('p', { class: 'hint' }, t('upload.formats', { mb: CONFIG.MAX_FILE_MB })),
+    h('p', { class: 'hint' }, t('upload.severalFilesOne')),
+    h('p', { class: 'hint' }, t('upload.severalFiles', { day: 20, first: 1000 })),
+    h('p', { class: 'hint' }, h('b', null, t('upload.originalBold') + ' '), t('upload.original')));
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => {
@@ -480,16 +496,16 @@ async function pageUpload() {
     if (files.length === 1) analyse(files[0], out).catch(fail);
     else if (files.length > 1) analyseBatch(files, out).catch(fail);
   });
-  show(h('h1', null, 'Upload a track'), drop, h('p', null, engineMsg), out, refusedBox);
+  show(h('h1', null, t('upload.title')), drop, h('p', null, engineMsg), out, refusedBox);
   renderNoFlight();
   startEngine().catch(() => {});
   window.addEventListener('hashchange', unsubscribe, { once: true });
 }
 
 async function analyse(file, out) {
-  out.replaceChildren(h('p', { class: 'hint pad', id: 'busy' }, 'Analysing…'));
+  out.replaceChildren(h('p', { class: 'hint pad', id: 'busy' }, t('upload.analysing')));
   if (file.size > CONFIG.MAX_FILE_MB * 1024 * 1024) {
-    return out.replaceChildren(notice('error', h('p', null, `This file is larger than ${CONFIG.MAX_FILE_MB} MB. Export only this activity, not a whole year.`)));
+    return out.replaceChildren(notice('error', h('p', null, t('upload.tooBig', { mb: CONFIG.MAX_FILE_MB }))));
   }
   let res;
   try {
@@ -504,18 +520,18 @@ async function analyse(file, out) {
   const pv = previewRow(res, places);
 
   const verdict = o.status === 'ok'
-    ? notice('ok', h('p', null, h('b', null, `${fmtInt(o.score)} points`), ` — ${fmtInt(o.dplus_m)} m climbed on foot and ${fmtInt(o.dminus_m)} m flown down.`))
+    ? notice('ok', scoreLine(o))
     : notice('error', h('p', null, refusalText(o)));
   const others = (o.warnings || []).filter((w) => w !== o.reason_text);
   if (o.status !== 'ok' && others.length) verdict.append(h('p', { class: 'hint' }, others.join(' · ')));
-  const publish = h('button', { class: 'primary', id: 'publish', disabled: o.status !== 'ok' }, 'Publish this outing');
+  const publish = h('button', { class: 'primary', id: 'publish', disabled: o.status !== 'ok' }, t('upload.publish'));
   const status = h('span', { class: 'hint', role: 'status' });
   publish.addEventListener('click', async () => {
     publish.disabled = true;
     try {
       const id = await api.submitTrack(file, (t) => { status.textContent = t; }, pv);
-      out.replaceChildren(notice('ok', h('p', null, 'Published. The server now checks the result: the "Validation pending" badge disappears within a few minutes once it is confirmed.'),
-        h('p', null, link(`#/outing/${id}`, 'See your outing'))));
+      out.replaceChildren(notice('ok', h('p', null, t('upload.published')),
+        h('p', null, link(`#/outing/${id}`, t('upload.seeOuting')))));
     } catch (e) {
       status.textContent = '';
       publish.disabled = false;
@@ -524,7 +540,7 @@ async function analyse(file, out) {
   });
   const actions = h('div', { class: 'publish-bar' },
     h('div', { class: 'row' }, publish, status),
-    h('p', { class: 'hint' }, 'Not published yet. By publishing you agree that this track — map, profile and statistics — is shown publicly. The original file stays private. The result is computed again on our side before it is confirmed.'));
+    h('p', { class: 'hint' }, t('upload.consent')));
   out.replaceChildren(...[
     verdict,
     o.status === 'ok' ? actions : null,
@@ -536,13 +552,19 @@ async function analyse(file, out) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** « 2,300 points — 1,200 m climbed on foot and 1,100 m flown down. » */
+function scoreLine(o) {
+  return h('p', null, h('b', null, t('upload.points', { n: Math.round(o.score) })),
+    t('upload.verdictRest', { up: fmtInt(o.dplus_m), down: fmtInt(o.dminus_m) }));
+}
+
 /** Why the outing does not count and what to do: written by the engine (src/mbhf/advice.py), as on the server. */
 function refusalText(o) {
   if (o.reason_text) return o.reason_text;
   if (o.reason === 'no_flight') {
-    return (o.warnings || []).some((w) => w.includes('follows the ground')) ? 'The descent follows the ground (ski, bike or run): no flight' : 'No flight found';
+    return (o.warnings || []).some((w) => w.includes('follows the ground')) ? t('refuse.ground') : t('refuse.noFlight');
   }
-  return 'Less than 200 m climbed on foot';
+  return t('refuse.littleClimb');
 }
 
 /**
@@ -555,14 +577,14 @@ async function analyseBatch(fileList, out) {
   // files that follow one another (a ride to the start, the climb and flight, the ride home) make one outing
   // if the pilot agrees (src/mbhf/multi.py)
   let units = files.map((f) => [f]);
-  out.replaceChildren(h('p', { class: 'hint pad', id: 'busy' }, 'Looking for files that make one outing…'));
+  out.replaceChildren(h('p', { class: 'hint pad', id: 'busy' }, t('batch.grouping')));
   try {
     const groups = await groupFiles(files);
     if (groups.some((g) => g.length > 1)) units = await confirmGroups(groups.map((g) => g.map((k) => files[k])), out);
   } catch (_) { /* not essential: each file is then an outing of its own */ }
   const items = units.map((parts) => ({
     file: parts.length === 1 ? parts[0] : parts, parts, state: 'waiting', pv: null,
-    cells: { name: h('td', { class: 'wrap file-cell' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, 'Waiting'), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
+    cells: { name: h('td', { class: 'wrap file-cell' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, t('batch.waiting')), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
   }));
   for (const it of items) it.cells.name.append(h('div', null, it.parts.map((f) => f.name).join(' + ')), it.cells.notes);
   const set = (it, state, text, kind) => {
@@ -570,38 +592,38 @@ async function analyseBatch(fileList, out) {
     it.cells.result.replaceChildren(text);
     it.cells.result.className = kind || '';
   };
-  const summary = h('p', { role: 'status', id: 'batch-summary' }, `Preparing ${items.length} files…`);
+  const summary = h('p', { role: 'status', id: 'batch-summary' }, t('batch.preparing', { n: items.length }));
   const auto = h('input', { type: 'checkbox', id: 'send-as-you-go', checked: true });
-  const publish = h('button', { class: 'primary', id: 'publish-all', disabled: true }, 'Publish');
+  const publish = h('button', { class: 'primary', id: 'publish-all', disabled: true }, t('batch.publish'));
   const status = h('span', { class: 'hint', role: 'status' });
   const grid = table(
-    [{ label: 'File and notes' }, { label: 'Outing', cls: 'hide-narrow' }, { label: 'Result' }, { label: 'Score', num: true }, { label: 'D+ (m)', num: true }, { label: 'D− (m)', num: true }],
+    [{ label: t('batch.colFile') }, { label: t('col.outing'), cls: 'hide-narrow' }, { label: t('batch.colResult') }, { label: t('col.score'), num: true }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }],
     items.map((it) => h('tr', null, it.cells.name, it.cells.title, it.cells.result, it.cells.score, it.cells.dplus, it.cells.dminus)));
   out.replaceChildren(
     summary,
-    h('label', { class: 'row', for: 'send-as-you-go' }, auto, ' Publish each outing as soon as it is analysed (recommended for long lists: nothing is lost if you close the page)'),
-    h('p', { class: 'hint' }, 'By publishing you agree that these tracks — map, profile and statistics — are shown publicly. The original files stay private. Each result is computed again on our side before it is confirmed. There is a daily limit on uploads: if it is reached, the rest is kept in the list so you can send those files again tomorrow. Keep this page open until the list is finished.'),
+    h('label', { class: 'row', for: 'send-as-you-go' }, auto, ' ' + t('batch.auto')),
+    h('p', { class: 'hint' }, t('batch.consent')),
     h('div', { class: 'publish-bar' }, h('div', { class: 'row' }, publish, status)), grid);
   const alive = () => out.isConnected;
-  let busy = true;
-  const warn = (ev) => { if (busy) { ev.preventDefault(); ev.returnValue = ''; } };
+  batchBusy = true;
+  const warn = (ev) => { if (batchBusy) { ev.preventDefault(); ev.returnValue = ''; } };
   window.addEventListener('beforeunload', warn);
-  const finish = () => { busy = false; window.removeEventListener('beforeunload', warn); };
+  const finish = () => { batchBusy = false; window.removeEventListener('beforeunload', warn); };
   let limitReached = false;
 
   // Send one analysed outing; a duplicate or the daily limit are reported in the list, not thrown.
   const send = async (it) => {
-    if (limitReached) { set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); return false; }
-    set(it, 'busy', 'Publishing…');
+    if (limitReached) { set(it, 'unsent', t('batch.limit'), 'warn-text'); return false; }
+    set(it, 'busy', t('batch.publishing'));
     try {
       const id = await api.submitTrack(it.file, null, it.pv);
       set(it, 'published', '', 'ok-text');
-      it.cells.result.append(link(`#/outing/${id}`, 'Published'));
+      it.cells.result.append(link(`#/outing/${id}`, t('status.published')));
       return true;
     } catch (e) {
-      if (/already submitted/i.test(e.message)) set(it, 'duplicate', 'Already submitted before', 'warn-text');
-      else if (/flight is already in/i.test(e.message)) set(it, 'duplicate', e.message, 'warn-text');
-      else if (/daily upload limit/i.test(e.message)) { limitReached = true; set(it, 'unsent', 'Not sent: daily limit reached. Send this file again tomorrow.', 'warn-text'); }
+      if (e.code === 'duplicate_file') set(it, 'duplicate', t('batch.duplicate'), 'warn-text');
+      else if (e.code === 'duplicate_flight') set(it, 'duplicate', e.message, 'warn-text');
+      else if (e.code === 'daily_limit') { limitReached = true; set(it, 'unsent', t('batch.limit'), 'warn-text'); }
       else set(it, 'error', e.message, 'error-text');
       return false;
     }
@@ -615,7 +637,7 @@ async function analyseBatch(fileList, out) {
       return it.hash;
     }));
     const sent = await api.alreadySent(hashes);
-    for (const it of items) if (sent.has(it.hash)) { set(it, 'duplicate', 'Already submitted before', 'warn-text'); it.cells.score.textContent = '–'; }
+    for (const it of items) if (sent.has(it.hash)) { set(it, 'duplicate', t('batch.duplicate'), 'warn-text'); it.cells.score.textContent = '–'; }
   } catch (_) { /* not essential */ }
   const todo = items.filter((it) => it.state === 'waiting');
 
@@ -624,10 +646,10 @@ async function analyseBatch(fileList, out) {
   for (const it of todo) {
     if (!alive()) { finish(); return; }
     n += 1;
-    summary.textContent = `Analysing file ${n} of ${todo.length}…`;
-    set(it, 'busy', 'Analysing…');
+    summary.textContent = t('batch.analysingFile', { n, total: todo.length });
+    set(it, 'busy', t('upload.analysing'));
     try {
-      if (it.parts.some((f) => f.size > CONFIG.MAX_FILE_MB * 1024 * 1024)) throw new Error(`Larger than ${CONFIG.MAX_FILE_MB} MB: export only this activity, not a whole year`);
+      if (it.parts.some((f) => f.size > CONFIG.MAX_FILE_MB * 1024 * 1024)) throw new Error(t('batch.tooBig', { mb: CONFIG.MAX_FILE_MB }));
       let res = it.parts.length === 1 ? await analyseFile(it.file) : await analyseFiles(it.parts);
       res = await checkTerrain(res);
       const o = res.outing;
@@ -639,46 +661,46 @@ async function analyseBatch(fileList, out) {
         it.pv = previewRow(res, places);
         it.cells.title.textContent = it.pv.title;
         it.cells.score.textContent = fmtInt(o.score);
-        set(it, 'ready', 'Ready', 'ok-text');
+        set(it, 'ready', t('batch.ready'), 'ok-text');
         if (auto.checked) await send(it);
       } else {
         it.cells.score.textContent = '–';
         noteNoFlight(it.file, res);
-        set(it, 'refused', `Not counted: ${refusalText(o)}`, 'warn-text');
+        set(it, 'refused', t('batch.notCounted', { reason: refusalText(o) }), 'warn-text');
       }
       // the notes folded under « 12 notes »: an outing in several files has many (pauses, rides, gaps)
       const notes = o.warnings || [];
       it.cells.notes.replaceChildren(...(notes.length ? [h('details', null,
-        h('summary', null, `${notes.length} note${notes.length > 1 ? 's' : ''}`),
+        h('summary', null, t('batch.notes', { n: notes.length })),
         h('ul', null, notes.map((n) => h('li', null, n))))] : []));
     } catch (e) {
-      set(it, 'error', e.message || 'This file could not be analysed.', 'error-text');
+      set(it, 'error', e.message || t('engine.fileFailed'), 'error-text');
     }
   }
   finish();
   const count = (st) => items.filter((it) => it.state === st).length;
   const describe = () => [
-    h('b', null, `${count('published')} published`),
-    ` · ${count('ready')} ready to publish · ${count('refused')} not counted · ${count('duplicate')} already submitted · ${count('unsent')} not sent (daily limit) · ${count('error')} with a problem.`,
-    count('published') ? ' The server now checks each result: the "Validation pending" badge disappears within a few minutes once it is confirmed.' : '',
+    h('b', null, t('batch.sumPublished', { n: count('published') })),
+    t('batch.sumRest', { ready: count('ready'), refused: count('refused'), duplicate: count('duplicate'), unsent: count('unsent'), error: count('error') }),
+    count('published') ? ' ' + t('batch.sumChecked') : '',
   ];
   summary.replaceChildren(...describe());
 
   // 2. publish what is still waiting (the box was unticked, or a send failed)
   const waiting = () => items.filter((it) => it.state === 'ready');
   if (!waiting().length) return;
-  publish.textContent = `Publish ${waiting().length} outing${waiting().length > 1 ? 's' : ''}`;
+  publish.textContent = t('batch.publishN', { n: waiting().length });
   publish.disabled = false;
   publish.addEventListener('click', async () => {
     publish.disabled = true;
-    busy = true;
+    batchBusy = true;
     window.addEventListener('beforeunload', warn);
     const list = waiting();
     let k = 0;
     for (const it of list) {
       if (!alive()) { finish(); return; }
       k += 1;
-      status.textContent = `Publishing ${k} of ${list.length}…`;
+      status.textContent = t('batch.publishingK', { k, total: list.length });
       await send(it);
     }
     finish();
@@ -695,16 +717,16 @@ function confirmGroups(groups, out) {
   const rows = groups.filter((g) => g.length > 1).map((g, k) => {
     const box = h('input', { type: 'checkbox', id: `join-${k}`, checked: true });
     boxes.push([box, g]);
-    return h('li', null, h('label', { for: `join-${k}` }, box, ` Join as one outing: ${g.map(fmt).join(' → ')}`));
+    return h('li', null, h('label', { for: `join-${k}` }, box, ' ' + t('batch.join', { files: g.map(fmt).join(' → ') })));
   });
   return new Promise((resolve) => {
-    const go = h('button', { class: 'primary', id: 'join-continue' }, 'Continue');
+    const go = h('button', { class: 'primary', id: 'join-continue' }, t('common.continue'));
     go.addEventListener('click', () => {
       const joined = new Set(boxes.filter(([b]) => b.checked).map(([, g]) => g));
       resolve(groups.flatMap((g) => (g.length > 1 && joined.has(g) ? [g] : g.map((f) => [f]))));
     });
     out.replaceChildren(notice('info',
-      h('p', null, h('b', null, 'These files follow one another. '), 'Each file starts soon after the previous one ended, close to where it ended: together they can make one outing (for example a bike ride to the start, the climb and the flight, the ride home). The original files are kept and joined again on our side.'),
+      h('p', null, h('b', null, t('batch.followBold') + ' '), t('batch.followText')),
       h('ul', null, ...rows),
       h('p', null, go)));
   });
@@ -721,15 +743,15 @@ function pageMark() {
   setNav('upload');
   const item = markTarget;
   if (!api.state.user || !item) {
-    return show(h('h1', null, 'Mark a flight by hand'),
-      notice('info', h('p', null, 'Choose the track on the ', link('#/upload', 'Upload page'), ' first: the file has to be there for the map.')));
+    return show(h('h1', null, t('mark.title')),
+      notice('info', h('p', null, tr('mark.needTrack', { link: link('#/upload', t('mark.uploadPage')) }))));
   }
   const result = h('div', { id: 'mark-result' });
-  const recalc = h('button', { class: 'primary', id: 'mark-recalc', disabled: true }, 'Recalculate with these flights');
+  const recalc = h('button', { class: 'primary', id: 'mark-recalc', disabled: true }, t('mark.recalc'));
   const tool = buildMarkTool(item.res.trace, (count) => { recalc.disabled = count === 0; });
   recalc.addEventListener('click', async () => {
     recalc.disabled = true;
-    result.replaceChildren(h('p', { class: 'hint pad' }, 'Analysing…'));
+    result.replaceChildren(h('p', { class: 'hint pad' }, t('upload.analysing')));
     try {
       const ranges = tool.ranges();
       const res = await analyseManual(item.file, ranges); // no ground check: the marking overrides it
@@ -737,15 +759,15 @@ function pageMark() {
       if (o.status === 'ok') {
         const places = await lookUpPlaces(o);
         const pv = { ...previewRow(res, places), manual_flights: ranges };
-        const publish = h('button', { class: 'primary', id: 'mark-publish' }, 'Publish this outing');
+        const publish = h('button', { class: 'primary', id: 'mark-publish' }, t('upload.publish'));
         const status = h('span', { class: 'hint', role: 'status' });
         publish.addEventListener('click', async () => {
           publish.disabled = true;
           try {
             const id = await api.submitTrack(item.file, (t) => { status.textContent = t; }, pv);
             noFlight = noFlight.filter((it) => it !== item);
-            result.replaceChildren(notice('ok', h('p', null, 'Published with the flights you marked. The server uses them too when it checks the result: the "Validation pending" badge disappears within a few minutes.'),
-              h('p', null, link(`#/outing/${id}`, 'See your outing'), ' · ', link('#/upload', 'Back to the list'))));
+            result.replaceChildren(notice('ok', h('p', null, t('mark.published')),
+              h('p', null, link(`#/outing/${id}`, t('upload.seeOuting')), ' · ', link('#/upload', t('mark.back')))));
           } catch (e) {
             status.textContent = '';
             publish.disabled = false;
@@ -753,10 +775,10 @@ function pageMark() {
           }
         });
         result.replaceChildren(
-          notice('ok', h('p', null, h('b', null, `${fmtInt(o.score)} points`), ` — ${fmtInt(o.dplus_m)} m climbed on foot and ${fmtInt(o.dminus_m)} m flown down.`)),
+          notice('ok', scoreLine(o)),
           h('div', { class: 'publish-bar' },
             h('div', { class: 'row' }, publish, status),
-            h('p', { class: 'hint' }, 'Not published yet. By publishing you agree that this track — map, profile and statistics — is shown publicly. The original file stays private. Your marked flights are published with it and are not checked against the ground.')));
+            h('p', { class: 'hint' }, t('mark.consent'))));
       } else {
         result.replaceChildren(notice('error', h('p', null, refusalText(o))));
       }
@@ -765,11 +787,11 @@ function pageMark() {
     }
     recalc.disabled = tool.ranges().length === 0;
   });
-  show(h('h1', null, 'Mark a flight by hand'),
+  show(h('h1', null, t('mark.title')),
     h('p', null, h('b', null, fileLabel(item.file)), ' — ', item.message),
-    h('p', { class: 'hint' }, 'The track is drawn in green on foot, orange in flight and grey in a vehicle. Click the take-off, then the landing: the stretch between them becomes a flight (in blue). Your marking overrides the automatic ground check, so a track whose altitudes were flattened onto the terrain can still be entered: only mark what was really a flight.'),
+    h('p', { class: 'hint' }, t('mark.help')),
     tool.element,
-    h('div', { class: 'row' }, recalc, link('#/upload', 'Back to the list')),
+    h('div', { class: 'row' }, recalc, link('#/upload', t('mark.back'))),
     result);
   tool.start();
 }
@@ -807,14 +829,14 @@ function pageLogin() {
   let token = '';
   const needsCheck = Boolean(CONFIG.TURNSTILE_SITE_KEY);
   const captcha = h('div', { id: 'captcha' });
-  const submit = h('button', { class: 'primary', disabled: needsCheck }, 'Send me a sign-in link');
+  const submit = h('button', { class: 'primary', disabled: needsCheck }, t('login.send'));
   const form = h('form', { class: 'card', onsubmit: async (ev) => {
     ev.preventDefault();
     submit.disabled = true;
     try {
       await api.sendLink(email.value.trim(), token);
       try { localStorage.setItem('after-login', '#/upload'); } catch (_) { /* ignore */ }
-      msg.replaceChildren(notice('ok', h('p', null, `We sent a sign-in link to ${email.value.trim()}. Open it on this device.`)));
+      msg.replaceChildren(notice('ok', h('p', null, t('login.sent', { email: email.value.trim() }))));
     } catch (e) {
       msg.replaceChildren(notice('error', h('p', null, e.message)));
       // a check can be used once: ask for a new one, and wait for it before the next try
@@ -822,12 +844,12 @@ function pageLogin() {
       if (window.turnstile) window.turnstile.reset();
     } finally { submit.disabled = needsCheck && !token; }
   } },
-    h('label', { for: 'email' }, 'Your e-mail address'),
+    h('label', { for: 'email' }, t('login.email')),
     h('div', { class: 'row' }, email, submit), captcha, msg,
-    h('p', { class: 'hint' }, 'No password: you receive a link by e-mail each time you sign in. A first sign-in creates your account.'));
-  const nodes = [h('h1', null, 'Sign in'), form];
+    h('p', { class: 'hint' }, t('login.hint')));
+  const nodes = [h('h1', null, t('account.signIn')), form];
   if (CONFIG.GOOGLE_LOGIN) {
-    nodes.push(h('div', { class: 'row' }, h('button', { onclick: () => api.signInWithGoogle().catch(fail) }, 'Continue with Google')));
+    nodes.push(h('div', { class: 'row' }, h('button', { onclick: () => api.signInWithGoogle().catch(fail) }, t('login.google'))));
   }
   const hashError = sessionStorageGet('signin-error');
   if (hashError) nodes.unshift(notice('error', h('p', null, hashError)));
@@ -861,7 +883,7 @@ async function route() {
   const token = ++routeToken;
   const raw = location.hash.replace(/^#/, '');
   if (raw.startsWith('error')) {
-    try { sessionStorage.setItem('signin-error', 'That sign-in link is no longer valid. Ask for a new one.'); } catch (_) { /* ignore */ }
+    try { sessionStorage.setItem('signin-error', t('login.expired')); } catch (_) { /* ignore */ }
     history.replaceState(null, '', location.pathname + '#/login');
   }
   const path = (location.hash.replace(/^#\/?/, '').split('?')[0] || '').split('/');
@@ -885,6 +907,9 @@ async function route() {
 }
 
 (async function main() {
+  await initI18n();   // the texts of the visitor's language, before the first page is drawn
+  renderStatic();
+  renderLangPick();
   renderFooter();
   let homeUser = null;     // who My H&Fs was drawn for: it is drawn again only when that changes
   api.onSession(() => {
@@ -904,5 +929,14 @@ async function route() {
   // After the e-mail link, Supabase brings the person back with ?code=…: it has been used, hide it.
   if (location.search) history.replaceState(null, '', location.pathname + location.hash);
   window.addEventListener('hashchange', route);
+  // a change of language redraws the shell and the page; a batch of files in progress is not wiped (its page is
+  // drawn again with the next visit)
+  onLang(() => {
+    renderStatic();
+    renderLangPick();
+    renderAccount();
+    renderFooter();
+    if (!batchBusy) route();
+  });
   route();
 })();

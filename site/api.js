@@ -1,6 +1,7 @@
 // Everything that talks to Supabase: sign-in, reading outings, uploading a track, deleting.
 
 import { CONFIG } from './config.js';
+import { t } from './i18n.js';
 
 const BUCKET = 'track-files';
 
@@ -9,7 +10,7 @@ export const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPAB
 });
 
 function check({ data, error }) {
-  if (error) throw new Error(error.message || 'Request failed');
+  if (error) throw new Error(error.message || t('api.requestFailed'));
   return data;
 }
 
@@ -59,10 +60,10 @@ export async function signOut() {
 
 export async function setDisplayName(name) {
   const clean = name.replace(/\s+/g, ' ').trim();
-  if (clean.length < 2 || clean.length > 40) throw new Error('The name must have 2 to 40 characters.');
+  if (clean.length < 2 || clean.length > 40) throw new Error(t('api.nameLength'));
   const { error } = await sb.from('profiles').update({ display_name: clean }).eq('id', state.user.id);
   if (error) {
-    if (error.code === '23505') throw new Error('This name is already taken.');
+    if (error.code === '23505') throw new Error(t('api.nameTaken'));
     throw new Error(error.message);
   }
   await refreshSession();
@@ -236,10 +237,13 @@ export async function sameFlightAs(result) {
 }
 
 export function duplicateMessage(o) {
-  const what = o && o.title ? `“${o.title}”` : 'another of your outings';
+  const what = o && o.title ? `“${o.title}”` : t('api.anotherOuting');
   const when = o && o.outing_date ? ` (${o.outing_date})` : '';
-  return `This flight is already in ${what}${when}, sent from another file. The same flight counts once: to replace it, delete that outing first.`;
+  return t('api.duplicateFlight', { what, when });
 }
+
+/** An error the page tells apart by its ``code`` (the message is in the visitor's language, so it cannot be read for that). */
+const coded = (code, message) => Object.assign(new Error(message), { code });
 
 /** The fingerprint of an outing in several files: the SHA-256 of their own, one per line, in time order
  * (src/mbhf/multi.py, combined_sha256). */
@@ -252,7 +256,7 @@ export async function combinedSha256(hashes) {
 export async function submitTrack(file, onProgress, result) {
   const files = Array.isArray(file) ? file : [file];
   const twin = await sameFlightAs(result);
-  if (twin) throw new Error(duplicateMessage(twin));
+  if (twin) throw coded('duplicate_flight', duplicateMessage(twin));
   const fields = {};
   for (const k of WRITABLE) if (result && result[k] !== undefined) fields[k] = result[k];
   const parts = [];
@@ -262,12 +266,12 @@ export async function submitTrack(file, onProgress, result) {
       sha256: await sha256Hex(await f.arrayBuffer()) });
   }
   const paths = parts.map((p) => p.path);
-  onProgress && onProgress('Uploading…');
+  onProgress && onProgress(t('api.uploading'));
   for (const p of parts) {
     const up = await sb.storage.from(BUCKET).upload(p.path, p.file, { contentType: 'application/octet-stream', upsert: false });
     if (up.error) {
       await sb.storage.from(BUCKET).remove(paths);
-      throw new Error(up.error.message || 'The file could not be uploaded.');
+      throw new Error(up.error.message || t('api.uploadFailed'));
     }
   }
   const row = { ...fields, file_path: parts[0].path, file_format: parts[0].ext, status: 'published' };
@@ -282,8 +286,8 @@ export async function submitTrack(file, onProgress, result) {
   const ins = await sb.from('outings').insert(row).select('id').single();
   if (ins.error) {
     await sb.storage.from(BUCKET).remove(paths);
-    if (ins.error.code === '23505') throw new Error('This track was already submitted.');
-    if (ins.error.code === 'P0001') throw new Error('You reached the daily upload limit. Try again tomorrow.');
+    if (ins.error.code === '23505') throw coded('duplicate_file', t('api.alreadySubmitted'));
+    if (ins.error.code === 'P0001') throw coded('daily_limit', t('api.dailyLimit'));
     throw new Error(ins.error.message);
   }
   return ins.data.id;
