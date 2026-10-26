@@ -72,6 +72,23 @@ Code: `src/mbhf/` (engine), `scripts/process_pending.py` (server job), `site/` (
 7. **Backups**: add the secret `BACKUP_PASSPHRASE` (a long random passphrase, kept in a password manager outside
    GitHub too); see below.
 
+## Automatic migrations
+
+When a pull request that adds a `supabase/migration-AAAA-MM-JJ-….sql` file is merged, the "Migrate" action
+(`.github/workflows/migrate.yml`, script `scripts/apply_migrations.sh`) applies it to the Supabase database: no more
+SQL Editor by hand. Each file runs in **one transaction** (all or nothing) and is then noted in the table
+`public.applied_migrations` (row level security on, no policy: the public API cannot touch it), so it is never run
+twice. Files are applied in name order, so the date in the name is the order. A migration that fails turns the run red
+and changes nothing. Write migrations so that they can be run again (`if not exists`, `create or replace`,
+`drop policy if exists`): the first run applies every existing file once.
+
+Once (Dani): Supabase > Connect > "Session pooler" connection string (the direct one is IPv6 only, which GitHub cannot
+reach), with the database password put in place of `[YOUR-PASSWORD]`, saved as the secret `SUPABASE_DB_URL`. This secret
+gives full rights on the database: only in GitHub secrets, never in the repository or in Notion. Without it the action
+does nothing and stays green. First run by hand: Actions > Migrate > Run workflow with `dry_run` ticked (lists what would
+be applied), then again without. Do not also run a new migration by hand in the SQL Editor: it would be applied twice
+(harmless if it is re-runnable).
+
 ## Backups
 
 Every Monday, the "Backup" action (`.github/workflows/backup.yml`, also run by hand from the Actions tab) copies the

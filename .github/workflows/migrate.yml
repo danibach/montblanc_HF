@@ -1,0 +1,37 @@
+name: Migrate
+
+# Applies the new supabase/migration-*.sql files to the Supabase database when they reach main (scripts/apply_migrations.sh).
+# Every file runs in one transaction and is then noted in the table public.applied_migrations, so it is never run twice.
+# Needs the secret SUPABASE_DB_URL (Supabase > Connect > "Session pooler" connection string, with the database password in it).
+# Without that secret the run does nothing and stays green: the automatic migrations are simply off.
+# By hand: Actions > Migrate > Run workflow (the dry_run box only lists what would be applied).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migration-*.sql"
+      - "scripts/apply_migrations.sh"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list the migrations that would be applied"
+        type: boolean
+        default: false
+
+concurrency:
+  group: migrate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply the new migrations
+        run: scripts/apply_migrations.sh ${{ inputs.dry_run && '--dry-run' || '' }}
