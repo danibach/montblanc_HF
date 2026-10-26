@@ -122,9 +122,10 @@ function download(filename, text) {
 /**
  * The sheet of a way up, for the side panel of the map.
  * ``takeoff``: the take-off's name and altitude; ``way``: « From La Clusaz · via Bois de la Colombière »;
- * ``numbers``: routeNumbers(); ``link``: the address of the sheet; ``onBack``: back to the take-off.
+ * ``numbers``: routeNumbers(); ``link``: the address of the sheet; ``onBack``: back to the take-off;
+ * ``on3D``: opens the way up in 3D (none without WebGL).
  */
-export function routeSheet({ route, takeoff, way, numbers, link, onBack, swatch, outings }) {
+export function routeSheet({ route, takeoff, way, numbers, link, onBack, swatch, outings, on3D }) {
   const n = numbers;
   const fact = (label, value, hint) => h('div', { class: 'fact' }, h('span', { class: 'hint' }, label), h('b', null, value),
     hint ? h('span', { class: 'hint' }, hint) : null);
@@ -149,7 +150,7 @@ export function routeSheet({ route, takeoff, way, numbers, link, onBack, swatch,
       n.time != null ? fact('Time up', fmtDur(n.time),
         n.climbs > 1 ? (n.climbs >= 4 ? `most: ${fmtDur(n.timeLow)} – ${fmtDur(n.timeHigh)}` : `${fmtDur(n.timeLow)} – ${fmtDur(n.timeHigh)}`) : null) : null),
     profileBox,
-    h('div', { class: 'row route-actions' }, gpx, copy),
+    h('div', { class: 'row route-actions' }, gpx, on3D ? h('button', { onclick: on3D }, 'View in 3D') : null, copy),
     h('p', { class: 'hint' }, `${n.climbs > 1 ? `Medians of ${n.climbs} climbs; the line runs down their middle` : 'From one climb'}. Not a marked trail: check the way, the snow and the weather on the ground.`),
     outings);
   groundAltitudes(route.line).then((a) => {

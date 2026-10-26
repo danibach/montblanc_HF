@@ -78,6 +78,30 @@ CORS = {"access-control-allow-origin": "*", "access-control-expose-headers": "co
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 
 
+def flat_terrain_png(size=512):
+    """A terrain tile of Mapterhorn's kind (terrarium: height = R * 256 + G + B / 256 - 32768) at 1 000 m."""
+    import struct
+    import zlib
+    r, g, b = divmod(1000 + 32768, 256)[0], (1000 + 32768) % 256, 0
+    row = b"\x00" + bytes([r, g, b]) * size
+    chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(row * size)) + chunk(b"IEND", b""))
+
+
+TERRAIN = flat_terrain_png()
+# the map's own style (site/basemaps.js) is built on OpenFreeMap's: a minimal one with the same vector source
+OFM_STYLE = {"version": 8, "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+             "sources": {"openmaptiles": {"type": "vector", "tiles": ["https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf"], "maxzoom": 14}},
+             "layers": [{"id": "background", "type": "background", "paint": {"background-color": "#f6f3ee"}}]}
+
+
+def openfreemap(route):
+    if "/styles/" in route.request.url:
+        return j(route, OFM_STYLE)
+    return route.fulfill(status=200, content_type="application/x-protobuf", body=b"")  # empty vector tiles and glyphs
+
+
 def j(route, body, status=200, headers=None):
     route.fulfill(status=status, content_type="application/json", body=json.dumps(body), headers={**CORS, **(headers or {})})
 
@@ -184,10 +208,14 @@ def new_page(browser, signed_in=False, width=1280, height=900):
     page.route(re.compile(r"https://overpass-api\.de/.*"), lambda r: j(r, overpass_for(NATIVE)))
     page.route(re.compile(r"https://api\.open-meteo\.com/v1/elevation.*"), elevation_answer)
     page.route(re.compile(r"https://[^/]*tile\.opentopomap\.org/.*"), lambda r: r.fulfill(status=200, content_type="image/png", body=PNG))
+    # the backgrounds of the take-off map (site/basemaps.js)
+    page.route(re.compile(r"https://tiles\.openfreemap\.org/.*"), openfreemap)
+    page.route(re.compile(r"https://tiles\.mapterhorn\.com/.*"), lambda r: r.fulfill(status=200, content_type="image/png", body=TERRAIN))
+    page.route(re.compile(r"https://(data\.geopf\.fr|wmts\.geo\.admin\.ch|tiles\.opensnowmap\.org)/.*"), lambda r: r.fulfill(status=200, content_type="image/png", body=PNG))
     page.route(re.compile(r"https://challenges\.cloudflare\.com/.*"), lambda r: r.fulfill(
         status=200, content_type="application/javascript",
         body="window.turnstile={render:function(e,o){e.textContent='[captcha]';o.callback('test-token')},reset:function(){}};"))
-    page.on("request", lambda r: None if r.url.startswith((BASE, "blob:", "data:")) or re.match(r"https://([^/]*supabase\.co|overpass-api\.de|api\.open-meteo\.com|[^/]*tile\.opentopomap\.org|challenges\.cloudflare\.com)/", r.url) else external.append(r.url))
+    page.on("request", lambda r: None if r.url.startswith((BASE, "blob:", "data:")) or re.match(r"https://([^/]*supabase\.co|overpass-api\.de|api\.open-meteo\.com|[^/]*tile\.opentopomap\.org|challenges\.cloudflare\.com|tiles\.openfreemap\.org|tiles\.mapterhorn\.com|data\.geopf\.fr|wmts\.geo\.admin\.ch|tiles\.opensnowmap\.org)/", r.url) else external.append(r.url))
     page.on("console", lambda m: logs.append(f"{m.type}: {m.text}"))
     page.on("pageerror", lambda e: logs.append(f"pageerror: {e}"))
     return page, external, logs
@@ -262,7 +290,16 @@ with sync_playwright() as p:
     check(page.input_value("#m-season") == expected, f"map opens on the current season ({expected or 'all seasons'})")
     page.select_option("#m-season", "")
     check("1 take-off spot, 1 confirmed outing" in page.inner_text(".side"), "map counts only the verified outing: " + page.inner_text(".side")[:90])
-    check(page.locator(".leaflet-control-layers input[type=checkbox]").count() == 2, "map: heat map and take-offs can be switched")
+    # the « Map » panel (site/basemaps.js): map style, what is shown, terrain
+    page.click(".map-button")
+    panel = page.locator(".map-panel").inner_text()
+    check(all(w in panel for w in ("Topo", "Winter", "Satellite", "Heat map", "Take-offs", "Slopes", "More maps")),
+          "map: the Map panel offers the styles and the switches")
+    page.locator(".mp-row", has_text="Heat map").locator("input").click()
+    check(page.locator(".heat-legend").is_hidden(), "map: switching the heat map off hides its legend")
+    page.locator(".mp-row", has_text="Heat map").locator("input").click()
+    page.click(".mp-close")
+    check(page.locator(".map-panel").is_hidden(), "map: the Map panel closes")
     check("pilots" in page.inner_text(".heat-legend"), "map: heat map legend")
     winter = int(ROW1["outing_date"][5:7]) in (11, 12, 1, 2, 3, 4)
     page.select_option("#m-season", "winter")

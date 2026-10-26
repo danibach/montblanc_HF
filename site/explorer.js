@@ -4,7 +4,7 @@
 
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
-import { CONFIG } from './config.js';
+import { can3D, mapPanel, view3D } from './basemaps.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
@@ -754,6 +754,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       side.replaceChildren(routeSheet({
         route, way, link: `${location.origin}${location.pathname}#/map/route/${route.id}`, onBack: back,
         takeoff: { name: sp.name, alt: sp.alt }, swatch: swatch(key),
+        on3D: can3D() ? () => view3D({ line: route.line, title: `${sp.name} · ${way}`, winter: seasonPick.value === 'winter' }) : null,
         numbers: routeNumbers(outings, (o) => climbOfId.get(o.id)),
         outings: h('ul', { class: 'out-list' }, outings.slice().sort((a, b) => SORTS.recent.by(a, b, climbOfId)).map(item)),
       }));
@@ -775,11 +776,6 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
   const start = () => {
     map = L.map(mapBox, { worldCopyJump: true });
-    L.tileLayer(CONFIG.TILES_URL, {
-      subdomains: CONFIG.TILES_SUBDOMAINS,
-      maxZoom: CONFIG.TILES_MAX_ZOOM,
-      attribution: CONFIG.TILES_ATTRIBUTION,
-    }).addTo(map);
     // no flag, to keep the credits short on a phone
     map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
     // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL): one short line for both
@@ -791,14 +787,15 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     climbs = L.featureGroup().addTo(map);
     markers = L.layerGroup().addTo(map);
     // the official FFVL take-offs ▲ and landings ▼ (from zoom 10 on), with their card on a click (site/ffvl.js)
-    const overlays = { 'Heat map': heat, 'Take-offs': markers };
+    const shown = { takeoffs: markers, heat, ffvl: null };
     if (ffvl.sites.length) {
       // where a take-off of ours is drawn (within 100 m), the ▲ goes beside its marker
       const taken = (lat, lon) => spots.some((sp) => Math.abs(sp.lat - lat) < 0.0009 && Math.abs(sp.lon - lon) < 0.0013);
-      overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
+      shown.ffvl = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
     }
-    // open on a wide map, folded into its button on a narrow one (a phone): open, it hid the markers under it
-    L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);
+    // the « Map » button and its panel (site/basemaps.js): map style, points of interest, layers in an order of
+    // one's own; the style follows the season picked in the filter
+    const backgrounds = mapPanel(L, map, shown, () => seasonPick.value === 'winter');
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });
@@ -821,7 +818,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       if (!holder() && seasonPick.value) { seasonPick.value = ''; applyFilters(); }
       if (holder()) { sheetToOpen = wantedRoute.id; openSpot(holder()); }
     }
-    seasonPick.addEventListener('change', applyFilters);
+    seasonPick.addEventListener('change', () => { applyFilters(); backgrounds.followSeason(); });
     yearPick.addEventListener('change', applyFilters);
     for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);
     searchBox.addEventListener('input', () => (searchBox.value ? showResults() : hideResults()));
