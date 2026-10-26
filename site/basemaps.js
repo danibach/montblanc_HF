@@ -19,7 +19,8 @@ const RELIEF = 'relief <a href="https://mapterhorn.com/attribution">© Mapterhor
 // frosted forests and cold shadows in winter. Roads stay white and quiet; the labels are dark grey.
 export const PALETTES = {
   summer: {
-    land: '#f6f3ee', park: '#d3ebc2', wood: '#bfe2a8', grass: '#dff0cf', ice: '#f4f9fd', sand: '#f0e7d2',
+    land: '#f6f3ee', park: '#d3ebc2', wood: '#bfe2a8', grass: '#dff0cf', ice: '#eef7fc', sand: '#f0e7d2',
+    rock: '#e2ddd5', scree: '#ebe7e0', iceLine: '#b5d5ea', trail: '#c4692f',
     residential: '#ebe6dd', water: '#a9d4f2', waterLine: '#8cc3ec', road: '#ffffff', casing: '#ddd5c7',
     major: '#ffe2a6', majorCasing: '#e8c27c', path: '#b09f86', rail: '#c8c2b8', building: '#e4ded3', boundary: '#b8a8c8',
     label: '#3a3a3c', labelSoft: '#6e6e73', halo: 'rgba(255,255,255,0.92)', waterLabel: '#3b7db6',
@@ -28,6 +29,7 @@ export const PALETTES = {
   },
   winter: {
     land: '#f8fbfd', park: '#eaf1f3', wood: '#cfded9', grass: '#f1f6f9', ice: '#ffffff', sand: '#eef1f4',
+    rock: '#dde4eb', scree: '#e7ecf1', iceLine: '#a6c4dd', trail: '#a0603a',
     residential: '#e6ebf0', water: '#9bc3e2', waterLine: '#86b5da', road: '#ffffff', casing: '#cbd5df',
     major: '#eef3f8', majorCasing: '#b1c0cf', path: '#93a3b4', rail: '#c1cbd5', building: '#dfe5eb', boundary: '#a7b3cf',
     label: '#27374a', labelSoft: '#5b6a7a', halo: 'rgba(255,255,255,0.94)', waterLabel: '#3d70a2',
@@ -64,6 +66,17 @@ function webgl() {
   } catch (_) {
     return false;
   }
+}
+
+let baseStyle = null;
+/** OpenFreeMap's Liberty style, read once. */
+async function libertyStyle() {
+  if (!baseStyle) {
+    const res = await fetch(STYLE_URL);
+    if (!res.ok) throw new Error(`style ${res.status}`);
+    baseStyle = await res.json();
+  }
+  return baseStyle;
 }
 
 let ready = null;
@@ -111,7 +124,13 @@ export function hfStyle(base, p, dem) {
       if (id === 'park') paint(l, 'fill-outline-color', p.park);
       if (id === 'building') paint(l, 'fill-outline-color', p.casing);
     } else if (l.type === 'line') {
-      const colour = /^waterway/.test(id) ? p.waterLine : /^boundary/.test(id) ? p.boundary
+      // the trails: what a pilot follows on foot, so drawn clearly from a valley's zoom on
+      if (/path_pedestrian/.test(id) && !/casing/.test(id)) {
+        l.minzoom = Math.min(l.minzoom ?? 12, 12);
+        paint(l, 'line-dasharray', [2, 1.2]);
+        paint(l, 'line-width', ['interpolate', ['linear'], ['zoom'], 12, 0.8, 14, 1.4, 17, 2.6]);
+      }
+      const colour = /path_pedestrian/.test(id) && !/casing/.test(id) ? p.trail : /^waterway/.test(id) ? p.waterLine : /^boundary/.test(id) ? p.boundary
         : id === 'park_outline' ? p.park : /rail/.test(id) ? p.rail
           : /path_pedestrian/.test(id) && !/casing/.test(id) ? p.path
             : /casing/.test(id) ? (/motorway|trunk/.test(id) ? p.majorCasing : p.casing)
@@ -124,16 +143,24 @@ export function hfStyle(base, p, dem) {
       paint(l, 'text-halo-width', 1.4);
     }
   }
+  const under = (pred) => {
+    const i = style.layers.findIndex(pred);
+    return i < 0 ? style.layers.length : i;
+  };
+  // rock, scree and glaciers, which Liberty does not draw: above the forests the mountain was plain beige
+  style.layers.splice(under((l) => l.id === 'landcover_ice') + 1, 0,
+    { id: 'landcover_rock', type: 'fill', source: 'openmaptiles', 'source-layer': 'landcover',
+      filter: ['==', ['get', 'class'], 'rock'],
+      paint: { 'fill-color': ['match', ['get', 'subclass'], 'scree', p.scree, p.rock], 'fill-opacity': 0.95, 'fill-antialias': false } },
+    { id: 'landcover_ice_edge', type: 'line', source: 'openmaptiles', 'source-layer': 'landcover', minzoom: 10,
+      filter: ['==', ['get', 'class'], 'ice'],
+      paint: { 'line-color': p.iceLine, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 15, 1.2] } });
   style.sources.relief = { type: 'raster-dem', encoding: 'terrarium', tiles: [dem.sharedDemProtocolUrl], tileSize: 512, maxzoom: DEM_MAX_ZOOM };
   style.sources.contours = {
     type: 'vector', maxzoom: 15,
     tiles: [dem.contourProtocolUrl({ thresholds: CONTOURS, elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours' })],
   };
   const font = (style.layers.find((l) => l.layout && l.layout['text-font']) || { layout: { 'text-font': ['Noto Sans Regular'] } }).layout['text-font'];
-  const under = (pred) => {
-    const i = style.layers.findIndex(pred);
-    return i < 0 ? style.layers.length : i;
-  };
   // relief and contour lines above the ground and the water, under the roads and the labels
   style.layers.splice(under((l) => /^aeroway|^tunnel_|^road_/.test(l.id)), 0,
     { id: 'relief', type: 'hillshade', source: 'relief', paint: {
@@ -341,9 +368,7 @@ export function mapPanel(L, map, overlays, winter) {
 
   (async () => {
     const dem = await loadMaplibre();
-    const res = await fetch(STYLE_URL);
-    if (!res.ok) throw new Error(`style ${res.status}`);
-    const base = await res.json();
+    const base = await libertyStyle();
     const make = (palette) => L.maplibreGL({ style: hfStyle(base, palette, dem), attribution: `${OFM} · ${RELIEF}`, interactive: false });
     ours = { summer: make(PALETTES.summer), winter: make(PALETTES.winter) };
     render();
@@ -357,4 +382,119 @@ export function mapPanel(L, map, overlays, winter) {
       render();
     },
   };
+}
+
+/** Whether this browser can draw the 3D view (WebGL). */
+export const can3D = () => webgl();
+
+function bearing(a, b) {
+  const r = Math.PI / 180;
+  const y = Math.sin((b[1] - a[1]) * r) * Math.cos(b[0] * r);
+  const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+
+/**
+ * The way up on the relief in 3D (Sarah, 26 October 2026, after FATMAP and Strava's flyover), in a window over the
+ * page: ``line`` [[lat, lon], …] from the start to the take-off, ``title``, ``winter`` for the winter colouring.
+ * « Fly over » follows the way up from the start to the take-off; the view can be turned and tilted by hand.
+ */
+export async function view3D({ line, title, winter }) {
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  const shade = el('div', 'view3d');
+  const win = el('div', 'v3-box');
+  win.setAttribute('role', 'dialog');
+  win.setAttribute('aria-modal', 'true');
+  win.setAttribute('aria-label', `${title} in 3D`);
+  const fly = el('button', 'primary', 'Fly over');
+  const shut = el('button', 'v3-close', '×');
+  shut.setAttribute('aria-label', 'Close the 3D view');
+  const box = el('div', 'v3-map');
+  const status = el('p', 'hint v3-status', 'Loading the relief…');
+  const head = el('div', 'v3-head');
+  head.append(el('b', null, title), el('span', 'v3-tools'));
+  head.lastChild.append(fly, shut);
+  win.append(head, box, status);
+  shade.append(win);
+  document.body.append(shade);
+
+  let map = null;
+  let frame = 0;
+  const stop = () => { cancelAnimationFrame(frame); frame = 0; fly.textContent = 'Fly over'; };
+  const close = () => {
+    stop();
+    if (map) map.remove();
+    shade.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  shut.addEventListener('click', close);
+  shade.addEventListener('click', (e) => { if (e.target === shade) close(); });
+
+  try {
+    const dem = await loadMaplibre();
+    const style = hfStyle(await libertyStyle(), winter ? PALETTES.winter : PALETTES.summer, dem);
+    // the terrain read straight from Mapterhorn (MapLibre decodes the heights itself)
+    style.sources.terrain = { type: 'raster-dem', encoding: 'terrarium', tiles: [DEM_URL], tileSize: 512, maxzoom: DEM_MAX_ZOOM };
+    style.terrain = { source: 'terrain', exaggeration: 1.3 };
+    style.sources.way = { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.map(([la, lo]) => [lo, la]) } } };
+    const round = { 'line-cap': 'round', 'line-join': 'round' };
+    style.layers.push(
+      { id: 'way-casing', type: 'line', source: 'way', layout: round, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } },
+      { id: 'way', type: 'line', source: 'way', layout: round, paint: { 'line-color': '#f0693d', 'line-width': 4.5 } });
+    const ml = window.maplibregl;
+    const start = line[0];
+    const top = line[line.length - 1];
+    const look = bearing(start, top); // from the start, looking up the way
+    const middle = line[Math.floor(line.length / 2)];
+    map = new ml.Map({ container: box, style, center: [middle[1], middle[0]], zoom: 13, pitch: 62, bearing: look, maxPitch: 80, attributionControl: false });
+    // OpenFreeMap's credit comes with its style; the relief's is added
+    map.addControl(new ml.AttributionControl({ compact: true, customAttribution: RELIEF }));
+    map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'top-right');
+    new ml.Marker({ color: '#f0693d' }).setLngLat([top[1], top[0]]).addTo(map);
+    const bounds = line.reduce((b, [la, lo]) => b.extend([lo, la]), new ml.LngLatBounds([start[1], start[0]], [start[1], start[0]]));
+    // fitBounds does not fit a tilted view: the camera is found flat, then tilted (a little farther out)
+    const overview = (duration) => {
+      const cam = map.cameraForBounds(bounds, { padding: 60, maxZoom: 15 });
+      if (cam) map.easeTo({ center: cam.center, zoom: cam.zoom - 0.4, pitch: 62, bearing: look, duration });
+    };
+    map.on('load', () => { overview(0); status.textContent = 'Drag to move, right-click or two fingers to turn and tilt.'; });
+
+    // the flyover: the camera follows the way up, looking a little ahead
+    const dist = [0];
+    for (let i = 1; i < line.length; i += 1) dist.push(dist[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], (line[i][1] - line[i - 1][1]) * Math.cos(line[i][0] * Math.PI / 180)));
+    const total = dist[dist.length - 1] || 1;
+    const at = (f) => {
+      const d = Math.min(Math.max(f, 0), 1) * total;
+      let i = dist.findIndex((x) => x >= d);
+      if (i <= 0) return line[0];
+      const k = (d - dist[i - 1]) / ((dist[i] - dist[i - 1]) || 1);
+      return [line[i - 1][0] + k * (line[i][0] - line[i - 1][0]), line[i - 1][1] + k * (line[i][1] - line[i - 1][1])];
+    };
+    const km = total * 111;
+    const ms = Math.min(40000, Math.max(12000, km * 3500));
+    fly.addEventListener('click', () => {
+      if (frame) { stop(); return; }
+      fly.textContent = 'Pause';
+      let t0 = null;
+      let heading = map.getBearing();
+      const step = (now) => {
+        if (t0 === null) t0 = now;
+        const f = (now - t0) / ms;
+        if (f >= 1) { stop(); overview(2500); return; }
+        const here = at(f);
+        const ahead = at(f + 0.06);
+        const want = bearing(here, ahead);
+        const turn = ((want - heading + 540) % 360) - 180; // the shorter way round, smoothed
+        heading = (heading + turn * 0.04 + 360) % 360;
+        map.jumpTo({ center: [here[1], here[0]], bearing: heading, pitch: 66, zoom: 14.6 });
+        frame = requestAnimationFrame(step);
+      };
+      frame = requestAnimationFrame(step);
+    });
+  } catch (e) {
+    status.textContent = 'The 3D view needs a recent browser with WebGL, and the map service to answer.';
+    fly.hidden = true;
+  }
 }

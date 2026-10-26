@@ -290,3 +290,12 @@ th[aria-sort] { color: var(--ink); }
 .mp-chip.on { border-color: var(--accent); color: var(--accent); }
 /* on a phone the panel rises from the bottom of the map */
 @media (max-width: 640px) { .map-panel { top: auto; right: 0; bottom: 0; left: 0; width: auto; max-height: 75%; border-radius: 16px 16px 0 0; } }
+/* the way up in 3D (site/basemaps.js, view3D) */
+.view3d { position: fixed; inset: 0; z-index: 3000; background: rgba(5, 12, 16, .7); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.v3-box { display: flex; flex-direction: column; width: min(1100px, 100%); height: min(760px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.v3-head { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .6rem .9rem; }
+.v3-tools { display: flex; align-items: center; gap: .5rem; }
+.v3-close { background: none; border: 0; color: var(--muted); font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 0 .2rem; }
+.v3-map { flex: 1; min-height: 0; }
+.v3-status { margin: 0; padding: .4rem .9rem .6rem; }
+@media (max-width: 640px) { .view3d { padding: 0; } .v3-box { border-radius: 0; height: 100%; } }

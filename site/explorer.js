@@ -4,7 +4,7 @@
 
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
-import { mapPanel } from './basemaps.js';
+import { can3D, mapPanel, view3D } from './basemaps.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
@@ -754,6 +754,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       side.replaceChildren(routeSheet({
         route, way, link: `${location.origin}${location.pathname}#/map/route/${route.id}`, onBack: back,
         takeoff: { name: sp.name, alt: sp.alt }, swatch: swatch(key),
+        on3D: can3D() ? () => view3D({ line: route.line, title: `${sp.name} · ${way}`, winter: seasonPick.value === 'winter' }) : null,
         numbers: routeNumbers(outings, (o) => climbOfId.get(o.id)),
         outings: h('ul', { class: 'out-list' }, outings.slice().sort((a, b) => SORTS.recent.by(a, b, climbOfId)).map(item)),
       }));
