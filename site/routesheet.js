@@ -1,11 +1,12 @@
 // The sheet of one way up to a take-off (Sarah, 25 October 2026, after Komoot): its numbers from the climbs of its
 // outings (distance, D+, time: the median, and how long most pilots take), the altitude profile of its middle line
 // and the line itself as a GPX file, to follow it on a watch or a phone.
-// The profile asks Open-Meteo for the ground altitude under the line (the page already uses it for the uploads); the
-// sheet shows without it when the service cannot be reached.
+// The profile reads the ground altitude under the line from Mapterhorn's terrain (5 m in France, 2 m in Switzerland;
+// site/basemaps.js), else asks Open-Meteo (about 90 m); the sheet shows without it when neither answers.
 
 import { CONFIG } from './config.js';
 import { h, fmtInt, fmtKm, fmtDur } from './util.js';
+import { terrainAltitudes } from './basemaps.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const MAX_COORDINATES = 100; // the service takes at most 100 per request
@@ -153,11 +154,14 @@ export function routeSheet({ route, takeoff, way, numbers, link, onBack, swatch,
     h('div', { class: 'row route-actions' }, gpx, on3D ? h('button', { onclick: on3D }, 'View in 3D') : null, copy),
     h('p', { class: 'hint' }, `${n.climbs > 1 ? `Medians of ${n.climbs} climbs; the line runs down their middle` : 'From one climb'}. Not a marked trail: check the way, the snow and the weather on the ground.`),
     outings);
-  groundAltitudes(route.line).then((a) => {
+  (async () => {
+    const fine = await terrainAltitudes(route.line);
+    return fine ? [fine, 'Mapterhorn'] : [await groundAltitudes(route.line), 'Open-Meteo'];
+  })().then(([a, source]) => {
     alts = a;
     if (a && a.every((v) => v != null)) {
       profileBox.replaceChildren(profile(route.line, a),
-        h('p', { class: 'hint' }, `${fmtInt(a[0])} m → ${fmtInt(a[a.length - 1])} m · ground altitude: Open-Meteo`));
+        h('p', { class: 'hint' }, `${fmtInt(a[0])} m → ${fmtInt(a[a.length - 1])} m · ground altitude: ${source}`));
     } else {
       profileBox.replaceChildren(h('p', { class: 'hint' }, 'No altitude profile: the elevation service did not answer.'));
     }

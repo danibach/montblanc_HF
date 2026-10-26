@@ -2,6 +2,7 @@
 
 import { CONFIG } from './config.js';
 import { h, s, fmtInt } from './util.js';
+import { fullScreenButton, inWinter, simpleBackground } from './basemaps.js';
 
 export const MODE_NAMES = ['On foot', 'Flight', 'Vehicle'];
 export const MODE_COLOURS = ['#5fbf68', '#f0693d', '#8796a3'];
@@ -34,11 +35,9 @@ export function buildMap(trace, markers) {
   // Leaflet needs the element in the page before it can measure it: start() is called after insertion.
   const start = () => {
     const map = L.map(box, { scrollWheelZoom: false });
-    L.tileLayer(CONFIG.TILES_URL, {
-      subdomains: CONFIG.TILES_SUBDOMAINS,
-      maxZoom: CONFIG.TILES_MAX_ZOOM,
-      attribution: CONFIG.TILES_ATTRIBUTION,
-    }).addTo(map);
+    // the site's own map (site/basemaps.js), in winter colours for an outing in winter
+    simpleBackground(L, map, inWinter(trace.t0));
+    fullScreenButton(L, map);
     const all = [];
     for (const r of runs(trace)) {
       const line = [];

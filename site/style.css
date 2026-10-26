@@ -317,3 +317,8 @@ th[aria-sort] { color: var(--ink); }
 .mp-grip:active { cursor: grabbing; }
 .mp-grip:focus-visible { outline: 2px solid var(--accent); }
 .mp-grip-icon { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+/* a map in full screen (site/basemaps.js, fullScreenButton) */
+.map-full-button { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.mp-full-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.leaflet-container.map-full { position: fixed !important; inset: 0; z-index: 2500; width: auto !important; height: auto !important; margin: 0; border-radius: 0; }
+body.map-full-open { overflow: hidden; }
