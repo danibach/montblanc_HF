@@ -1,15 +1,15 @@
-"""The title of an outing: the take-off's name alone, decided by Sarah on 25 October 2026 (« {take-off} from {start} »
-was tried the same day and dropped for now).
+"""The title of an outing: the highest summit reached on foot (Dani and Sarah, 26 October 2026; on 25 October the
+take-off's name alone was used, which gave « Aiguille Carrée » to an outing whose highest point was the Aiguille Verte).
 
-* the main name is the take-off of the register (FFVL, OpenStreetMap or provisional: as pilots call it), else the
-  mapped take-off or the summit reached on foot; a village alone is never the main name;
+* the main name is the summit named at the highest point on foot, else the take-off (the register's name: FFVL,
+  OpenStreetMap or provisional, as pilots call it, or the mapped take-off); a village alone is never the main name;
 * the name is cleaned (``clean_name``): no opening dates (« ouvert du 1/5 au 31/10 »), no season in brackets
   (« (ete) »), no quotes, one language for a bilingual name (« Mont Blanc / Monte Bianco » -> « Mont Blanc »),
   capitals the French way and a few lost accents put back (« cret » -> « Crêt »);
 * the same cleaning is used for the names of the register (FFVL, OpenStreetMap), so the map says what the titles say.
 
-Before this, the titles mixed the take-off, the summit and the village, raw FFVL names included
-(« La clusaz - aiguille des calvaires (ete) »), and ten outings were all « Pointe de Beauregard ».
+Before the 25 October rule, the titles mixed the take-off, the summit and the village, raw FFVL names included
+(« La clusaz - aiguille des calvaires (ete) »).
 """
 
 from __future__ import annotations
@@ -77,8 +77,13 @@ def clean_name(name: Optional[str], places: tuple = ()) -> Optional[str]:
     return s[0].upper() + s[1:]
 
 
-def outing_title(main: Optional[str], start_place: Optional[str], commune: Optional[str] = None) -> Optional[str]:
-    """The take-off's name alone, cleaned (Sarah, 25 October 2026: « juste le nom du déco pour l'instant »); the start
-    and commune are only used to drop a village prefix (« La Clusaz - Crêt du Loup » -> « Crêt du Loup »). None when
-    there is no main name."""
-    return clean_name(main, (commune, start_place)) or None
+def outing_title(summit: Optional[str], takeoff: Optional[str], start_place: Optional[str],
+                 commune: Optional[str] = None) -> Optional[str]:
+    """The highest summit reached on foot, cleaned (Dani and Sarah, 26 October 2026); the take-off's name when the
+    summit has no name. The start and commune are only used to drop a village prefix (« La Clusaz - Crêt du Loup »
+    -> « Crêt du Loup »). None when there is no name at all."""
+    for name in (summit, takeoff):
+        title = clean_name(name, (commune, start_place))
+        if title:
+            return title
+    return None

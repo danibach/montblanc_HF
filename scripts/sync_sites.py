@@ -11,7 +11,7 @@ Run by GitHub Actions (.github/workflows/sites.yml) once a week and when asked. 
    provisional take-off made from it); an outing tied by hand (``manual``) is left alone;
 5. each provisional take-off is moved to the median of its outings' take-off points (it starts as the first outing's
    point), and the outings are tied again; ones no outing uses any more are removed;
-6. every outing gets the title of its take-off, « Pointe de Beauregard » (src/mbhf/titles.py);
+6. every outing gets the title of its highest summit on foot (else its take-off), « Aiguille Verte » (src/mbhf/titles.py);
 7. the routes of every take-off are made again from the climbs (src/mbhf/routes.py) and the outings tied to them.
 ``--dry-run`` reads everything and prints what it would do, without writing.
 New outings are tied when the server checks them (process_pending.py), with the take-offs already in the register.
@@ -159,14 +159,13 @@ def tie_outing(outing: dict, index: SiteIndex, register: Register) -> tuple[str,
 
 
 def title_from_site(site: Optional[dict], outing: dict) -> Optional[str]:
-    """The outing's title from its take-off in the register: « Pointe de Beauregard »."""
-    if not site:
-        return None
-    return outing_title(site.get("name"), outing.get("start_place"), outing.get("start_commune"))
+    """The outing's title: its highest summit on foot, else its take-off in the register: « Aiguille Verte »."""
+    return outing_title(outing.get("summit_name"), (site or {}).get("name"), outing.get("start_place"),
+                        outing.get("start_commune"))
 
 
 def retitle(register: Register, outings: list[dict], assigned: dict, sites_by_id: dict) -> int:
-    """Give every outing the title of its take-off (src/mbhf/titles.py). Returns how many changed."""
+    """Give every outing the title of its highest summit on foot, else of its take-off (src/mbhf/titles.py). Returns how many changed."""
     changed = 0
     for o in outings:
         title = title_from_site(sites_by_id.get(assigned.get(o["id"])), o)
@@ -257,7 +256,7 @@ def sync(api, dry_run: bool = False) -> None:
     register.delete_sites(unused)
     print(f"provisional take-offs no longer used, removed: {len(unused)}")
     sites_by_id = {s["id"]: s for s in official} | provisional_by_id
-    print(f"titles given from the take-off: {retitle(register, outings, assigned, sites_by_id)}")
+    print(f"titles given from the summit or take-off: {retitle(register, outings, assigned, sites_by_id)}")
     try:
         made = sum(rebuild_routes(register, site_id) for site_id in used if site_id is not None)
         print(f"routes: {made} for {len(used)} take-offs")

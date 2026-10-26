@@ -199,7 +199,7 @@ def tie_takeoff(api: Api, outing_id: str, values: dict) -> None:
                                                 f"&lon=gte.{lon - 0.015}&lon=lte.{lon + 0.015}")
         status, site = tie_outing({**values, "id": outing_id}, SiteIndex(near), register)
         print(f"  take-off: {site['name']} ({status})")
-        title = title_from_site(site, values)  # the register's name, cleaned (src/mbhf/titles.py)
+        title = title_from_site(site, values)  # the highest summit on foot, else the register's take-off name (src/mbhf/titles.py)
         if title and title != values.get("title"):
             api.patch(outing_id, {"title": title})
         # its routes made again with this climb (routes table: migration-2026-10-23-routes.sql)
