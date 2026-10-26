@@ -93,6 +93,13 @@ function loadMaplibre() {
       await loadScript(`${VENDOR}maplibre-contour.js`);
       const dem = new window.mlcontour.DemSource({ url: DEM_URL, encoding: 'terrarium', maxzoom: DEM_MAX_ZOOM, worker: false });
       dem.setupMaplibre(window.maplibregl);
+      // the contour tool keeps each contour tile and hands the same buffer to every map; a map's worker takes it
+      // (« ArrayBuffer is already detached » for the next map): each map gets a copy
+      const contours = dem.contourProtocolV4;
+      window.maplibregl.addProtocol(dem.contourProtocolId, async (request, abort) => {
+        const res = await contours(request, abort);
+        return { ...res, data: res.data.slice(0) };
+      });
       return dem;
     })();
   }
