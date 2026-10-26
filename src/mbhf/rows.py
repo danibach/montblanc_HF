@@ -30,13 +30,13 @@ def has_names(places: Optional[dict]) -> bool:
 
 
 def place_title(places: Optional[dict], date: Optional[str], summit_alt: Optional[float]) -> str:
-    """The take-off's name (src/mbhf/titles.py) from the OpenStreetMap names; the server job then gives the
-    name of the take-off of the register (scripts/sync_sites.py)."""
+    """The highest summit reached on foot, else the take-off (src/mbhf/titles.py), from the OpenStreetMap names;
+    the server job then falls back on the register's take-off name (scripts/sync_sites.py)."""
     p = places or {}
     takeoff = p.get("takeoff") or {}
     site = takeoff.get("name") if takeoff.get("kind") == "site" else None  # a mapped paragliding take-off, as pilots call it
-    main = site or (p.get("summit") or {}).get("name")
-    return (outing_title(main, p.get("start_place"), p.get("commune")) or p.get("start_place")
+    return (outing_title((p.get("summit") or {}).get("name"), site, p.get("start_place"), p.get("commune"))
+            or p.get("start_place")
             or fallback_title(date, summit_alt))
 
 

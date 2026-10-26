@@ -89,5 +89,7 @@ def test_mapped_paragliding_site_names_the_takeoff():
     resp = {"elements": RESPONSE["elements"] + [way]}
     p = resolve_places(OUTING, resp)
     assert p["takeoff"] == {"name": "Planfait", "osm_id": 5, "kind": "site"}
-    assert place_title(p, "2021-09-29", 2205) == "Planfait"  # the take-off name alone
+    assert place_title(p, "2021-09-29", 2205) == "Pointe Haute"  # the highest summit on foot names the outing (26 Oct 2026)
+    no_summit = {**p, "summit": None}
+    assert place_title(no_summit, "2021-09-29", 2205) == "Planfait"  # no named summit: the mapped take-off
     assert "free_flying" in overpass_query(OUTING)

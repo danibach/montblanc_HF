@@ -72,7 +72,10 @@ def test_titles():
     assert clean_name("Mont Blanc / Monte Bianco") == "Mont Blanc"
     assert clean_name("Décollage FFVL de Planpraz - Brévent Sud") == "Planpraz – Brévent Sud"
     assert clean_name("Decorum") == "Decorum"
-    assert outing_title("Pointe de Beauregard", "Les Verrier") == "Pointe de Beauregard"
-    assert outing_title("Crozet - les deux potes", "Crozet", "Crozet") == "Les Deux Potes"
-    assert outing_title("Varan", "Varan") == "Varan"
-    assert outing_title(None, "Passy") is None
+    assert outing_title("Pointe de Beauregard", None, "Les Verrier") == "Pointe de Beauregard"
+    assert outing_title(None, "Crozet - les deux potes", "Crozet", "Crozet") == "Les Deux Potes"
+    assert outing_title("Varan", None, "Varan") == "Varan"
+    assert outing_title(None, None, "Passy") is None
+    # the highest summit on foot names the outing, not the take-off (26 October 2026)
+    assert outing_title("Aiguille Verte", "Aiguille Carrée", "Chamonix-Mont-Blanc") == "Aiguille Verte"
+    assert outing_title(None, "Aiguille Carrée", "Chamonix-Mont-Blanc") == "Aiguille Carrée"
