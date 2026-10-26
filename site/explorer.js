@@ -4,7 +4,7 @@
 
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
-import { installBasemaps } from './basemaps.js';
+import { mapPanel } from './basemaps.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
@@ -786,16 +786,15 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     climbs = L.featureGroup().addTo(map);
     markers = L.layerGroup().addTo(map);
     // the official FFVL take-offs ▲ and landings ▼ (from zoom 10 on), with their card on a click (site/ffvl.js)
-    const overlays = { 'Heat map': heat, 'Take-offs': markers };
+    const overlays = { 'Take-offs': markers, 'Heat map': heat };
     if (ffvl.sites.length) {
       // where a take-off of ours is drawn (within 100 m), the ▲ goes beside its marker
       const taken = (lat, lon) => spots.some((sp) => Math.abs(sp.lat - lat) < 0.0009 && Math.abs(sp.lon - lon) < 0.0013);
       overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
     }
-    // open on a wide map, folded into its button on a narrow one (a phone): open, it hid the markers under it
-    const layersBox = L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);
-    // the backgrounds (site/basemaps.js): our topographic map, in winter colours when the season shown is winter
-    const backgrounds = installBasemaps(L, map, layersBox, () => seasonPick.value === 'winter');
+    // the « Map » button and its panel (site/basemaps.js): map style, what is shown, terrain; the style follows the
+    // season picked in the filter
+    const backgrounds = mapPanel(L, map, overlays, () => seasonPick.value === 'winter');
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });

@@ -186,75 +186,175 @@ function rasterLayers(L) {
   };
 }
 
-const KEY = 'hf-map-base'; // the background a visitor chose by hand (this browser only)
-const remembered = () => { try { return localStorage.getItem(KEY); } catch (_) { return null; } };
-const remember = (name) => { try { localStorage.setItem(KEY, name); } catch (_) { /* private window */ } };
+const KEY = 'hf-map-base'; // a background chosen by hand among the « More maps » or Satellite (this browser only)
+const TERRAIN_KEY = 'hf-map-terrain'; // the terrain overlays switched on
+const load = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+const save = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) { /* private window */ } };
+
+const SVG = 'http://www.w3.org/2000/svg';
+/** The « stacked sheets » icon of the Map button, drawn from fixed shapes (no markup from outside). */
+function stackIcon() {
+  const s = document.createElementNS(SVG, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('aria-hidden', 'true');
+  for (const d of ['M12 4 3 9l9 5 9-5-9-5z', 'M3 13.5l9 5 9-5', 'M3 17.5l9 5 9-5']) {
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', d);
+    s.append(path);
+  }
+  return s;
+}
 
 /**
- * Put the backgrounds on ``map`` and in the layers box ``control``. ``winter()`` says whether the season shown is
- * winter. Returns {followSeason()}: call it when the season filter changes; the background follows the season
- * (summer or winter colouring) until the visitor picks one by hand.
+ * The « Map » button and its panel (Sarah, 26 October 2026, after Apple's and Google's maps), in place of Leaflet's
+ * layers box: the map style in pictures (Topo, Winter, Satellite), switches for what is shown on the map and for the
+ * terrain, and the specialist maps folded under « More maps ». On a phone the panel rises from the bottom.
+ * ``overlays``: {label: layer} shown on the map (on at the start). ``winter()``: is the season shown winter?
+ * The style follows the season: picking one in the filter sets Topo or Winter, unless Satellite was chosen.
+ * Returns {followSeason()} to call when the season filter changes.
  */
-export function installBasemaps(L, map, control, winter) {
+export function mapPanel(L, map, overlays, winter) {
   const r = rasterLayers(L);
-  const bases = {};
+  const layers = { satellite: r.satellite, ign: r.ign, swisstopo: r.swisstopo, swissWinter: r.swissWinter, opentopo: r.opentopo };
   let current = null;
-  // the site dims the map tiles for its dark theme; our own maps are drawn soft already and are not dimmed
-  const mark = () => map.getContainer().classList.toggle('hf-base', current === bases['H&F Topo'] || current === bases['H&F Winter']);
-  const show = (name) => {
-    if (!bases[name] || current === bases[name]) return;
-    if (current) map.removeLayer(current);
-    current = bases[name];
-    current.addTo(map);
-    mark();
-  };
-  // Leaflet says « baselayerchange » also when a background is put on the map here: only a click in the layers
-  // box is a choice by hand, kept for the next visits
-  let byHand = false;
-  control.getContainer().addEventListener('click', () => { byHand = true; setTimeout(() => { byHand = false; }, 0); }, true);
-  map.on('baselayerchange', (e) => {
-    current = e.layer;
-    mark();
-    const name = Object.keys(bases).find((k) => bases[k] === e.layer);
-    if (name && byHand) remember(name);
-  });
-  const add = (name, layer) => { bases[name] = layer; control.addBaseLayer(layer, name); };
-  const pick = () => {
-    const chosen = remembered();
-    if (chosen && bases[chosen]) return chosen;
-    if (bases['H&F Topo']) return winter() ? 'H&F Winter' : 'H&F Topo';
-    return 'OpenTopoMap';
-  };
+  let chosen = load(KEY); // satellite, ign… or null: Topo / Winter by the season
+  if (chosen && !layers[chosen]) chosen = null;
+  let seasonal = winter() ? 'winter' : 'summer';
 
-  // the raster backgrounds at once, so the map is never empty
-  add('Satellite', r.satellite);
-  add('IGN (France)', r.ign);
-  add('swisstopo (Switzerland)', r.swisstopo);
-  add('swisstopo winter', r.swissWinter);
-  add('OpenTopoMap', r.opentopo);
-  control.addOverlay(r.slopes, 'Slopes over 30° (France)');
-  control.addOverlay(r.pistes, 'Ski pistes');
-  show('OpenTopoMap');
+  const box = L.DomUtil.create('div', 'map-panel');
+  box.hidden = true;
+  L.DomEvent.disableClickPropagation(box);
+  L.DomEvent.disableScrollPropagation(box);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
 
-  const ours = (async () => {
+  const head = el('div', 'mp-head');
+  const close = el('button', 'mp-close', '×');
+  close.setAttribute('aria-label', 'Close');
+  head.append(el('b', null, 'Map'), close);
+
+  const styles = el('div', 'mp-styles');
+  const tile = (key, label) => {
+    const b = el('button', `mp-style ${key}`);
+    b.type = 'button';
+    b.append(el('i', `mp-thumb ${key}`), el('span', null, label));
+    b.addEventListener('click', () => {
+      if (key === 'satellite') choose('satellite');
+      else { seasonal = key === 'winter' ? 'winter' : 'summer'; choose(null); }
+    });
+    styles.append(b);
+    return b;
+  };
+  const tiles = { summer: tile('summer', 'Topo'), winter: tile('winter', 'Winter'), satellite: tile('satellite', 'Satellite') };
+  const seasonNote = el('p', 'mp-note', 'Topo or Winter follows the season you pick.');
+
+  const toggle = (label, on, set) => {
+    const row = el('label', 'mp-row');
+    const input = el('input');
+    input.type = 'checkbox';
+    input.setAttribute('role', 'switch');
+    input.checked = on;
+    input.addEventListener('change', () => set(input.checked));
+    row.append(el('span', null, label), input);
+    return row;
+  };
+  const shown = el('div', 'mp-group');
+  shown.append(el('p', 'mp-label', 'On the map'));
+  for (const [label, layer] of Object.entries(overlays)) {
+    shown.append(toggle(label, map.hasLayer(layer), (on) => {
+      if (on) map.addLayer(layer); else map.removeLayer(layer);
+      map.fire(on ? 'overlayadd' : 'overlayremove', { layer, name: label }); // the heat map legend follows
+    }));
+  }
+  const terrainOn = new Set((load(TERRAIN_KEY) || '').split(',').filter(Boolean));
+  const terrain = el('div', 'mp-group');
+  terrain.append(el('p', 'mp-label', 'Terrain'));
+  for (const [key, label, layer] of [['slopes', 'Slopes over 30° (France)', r.slopes], ['pistes', 'Ski pistes', r.pistes]]) {
+    if (terrainOn.has(key)) layer.addTo(map);
+    terrain.append(toggle(label, terrainOn.has(key), (on) => {
+      if (on) { layer.addTo(map); terrainOn.add(key); } else { map.removeLayer(layer); terrainOn.delete(key); }
+      save(TERRAIN_KEY, [...terrainOn].join(',') || null);
+    }));
+  }
+
+  const more = el('details', 'mp-more');
+  more.append(el('summary', null, 'More maps'));
+  const moreButtons = {};
+  for (const [key, label] of [['ign', 'IGN (France)'], ['swisstopo', 'swisstopo'], ['swissWinter', 'swisstopo winter'], ['opentopo', 'OpenTopoMap']]) {
+    const b = el('button', 'mp-chip', label);
+    b.type = 'button';
+    b.addEventListener('click', () => choose(key));
+    more.append(b);
+    moreButtons[key] = b;
+  }
+  box.append(head, styles, seasonNote, shown, terrain, more);
+  map.getContainer().append(box);
+
+  // the button, where Leaflet's layers box was
+  const button = L.control({ position: 'topright' });
+  button.onAdd = () => {
+    const b = el('button', 'map-button');
+    b.type = 'button';
+    b.setAttribute('aria-expanded', 'false');
+    b.append(stackIcon(), el('span', null, 'Map'));
+    L.DomEvent.disableClickPropagation(b);
+    b.addEventListener('click', () => open(box.hidden));
+    return b;
+  };
+  button.addTo(map);
+  const open = (yes) => {
+    box.hidden = !yes;
+    button.getContainer().setAttribute('aria-expanded', String(yes));
+  };
+  close.addEventListener('click', () => open(false));
+  map.on('click', () => open(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') open(false); });
+
+  // our own maps once MapLibre and the style are there; OpenTopoMap and swisstopo winter until then (or for good)
+  let ours = null;
+  const background = () => {
+    if (chosen) return layers[chosen];
+    if (ours) return ours[seasonal];
+    return r.opentopo;
+  };
+  const render = () => {
+    const next = background();
+    if (next !== current) {
+      if (current) map.removeLayer(current);
+      current = next;
+      current.addTo(map);
+      if (current.bringToBack) current.bringToBack();
+    }
+    // the site dims the tiles for its dark theme; our own maps are drawn soft already and are not dimmed
+    map.getContainer().classList.toggle('hf-base', Boolean(ours) && !chosen);
+    tiles.summer.classList.toggle('on', !chosen && seasonal === 'summer');
+    tiles.winter.classList.toggle('on', !chosen && seasonal === 'winter');
+    tiles.satellite.classList.toggle('on', chosen === 'satellite');
+    for (const [key, b] of Object.entries(moreButtons)) b.classList.toggle('on', chosen === key);
+    if (chosen && chosen !== 'satellite') more.open = true;
+  };
+  function choose(key) {
+    chosen = key;
+    save(KEY, key);
+    render();
+  }
+  render();
+
+  (async () => {
     const dem = await loadMaplibre();
-    const r2 = await fetch(STYLE_URL);
-    if (!r2.ok) throw new Error(`style ${r2.status}`);
-    const base = await r2.json();
+    const res = await fetch(STYLE_URL);
+    if (!res.ok) throw new Error(`style ${res.status}`);
+    const base = await res.json();
     const make = (palette) => L.maplibreGL({ style: hfStyle(base, palette, dem), attribution: `${OFM} · ${RELIEF}`, interactive: false });
-    // first in the box: remove and add the raster ones again after them
-    const raster = Object.entries(bases);
-    for (const [, layer] of raster) control.removeLayer(layer);
-    add('H&F Topo', make(PALETTES.summer));
-    add('H&F Winter', make(PALETTES.winter));
-    for (const [name, layer] of raster) add(name, layer);
-    show(pick());
-  })().catch(() => { show(pick()); }); // OpenTopoMap and the others stay
+    ours = { summer: make(PALETTES.summer), winter: make(PALETTES.winter) };
+    render();
+  })().catch(() => { /* no WebGL or no OpenFreeMap: OpenTopoMap stays */ });
 
   return {
+    /** The season filter changed: Topo or Winter with it (only Satellite stays as chosen: it has no winter). */
     followSeason() {
-      if (remembered()) return;
-      ours.then(() => show(pick()));
+      seasonal = winter() ? 'winter' : 'summer';
+      if (chosen && chosen !== 'satellite') { chosen = null; save(KEY, null); }
+      render();
     },
   };
 }
