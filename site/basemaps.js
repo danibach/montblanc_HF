@@ -155,7 +155,10 @@ export function hfStyle(base, p, dem) {
     { id: 'landcover_ice_edge', type: 'line', source: 'openmaptiles', 'source-layer': 'landcover', minzoom: 10,
       filter: ['==', ['get', 'class'], 'ice'],
       paint: { 'line-color': p.iceLine, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 15, 1.2] } });
-  style.sources.relief = { type: 'raster-dem', encoding: 'terrarium', tiles: [dem.sharedDemProtocolUrl], tileSize: 512, maxzoom: DEM_MAX_ZOOM };
+  // the relief read straight from Mapterhorn by each map: the contour tool's shared channel hands the same tile
+  // data to every map, and once one map's worker has taken it the next one gets an emptied buffer (« ArrayBuffer is
+  // already detached », seen on an outing's page followed by the marking tool, and when switching to Winter)
+  style.sources.relief = { type: 'raster-dem', encoding: 'terrarium', tiles: [DEM_URL], tileSize: 512, maxzoom: DEM_MAX_ZOOM };
   style.sources.contours = {
     type: 'vector', maxzoom: 15,
     tiles: [dem.contourProtocolUrl({ thresholds: CONTOURS, elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours' })],
