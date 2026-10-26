@@ -84,6 +84,7 @@ td.score { font-weight: 700; }
 
 .map { height: 380px; border: 1px solid var(--line); border-radius: 8px; background: #1b2a31; z-index: 0; }
 .leaflet-tile-pane { filter: brightness(.78) contrast(1.05) saturate(.9); }
+.hf-base .leaflet-tile-pane { filter: none; } /* our own map (site/basemaps.js) is drawn for the site */
 .leaflet-container { font: inherit; }
 .leaflet-bar a, .leaflet-bar a:hover { background: var(--card); color: var(--ink); border-color: var(--line); }
 .leaflet-control-attribution { background: rgba(14, 26, 32, .75) !important; color: var(--muted) !important; }

@@ -4,7 +4,7 @@
 
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
-import { CONFIG } from './config.js';
+import { installBasemaps } from './basemaps.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { card as ffvlCard, ffvlLayer } from './ffvl.js';
 
@@ -775,11 +775,6 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
   const start = () => {
     map = L.map(mapBox, { worldCopyJump: true });
-    L.tileLayer(CONFIG.TILES_URL, {
-      subdomains: CONFIG.TILES_SUBDOMAINS,
-      maxZoom: CONFIG.TILES_MAX_ZOOM,
-      attribution: CONFIG.TILES_ATTRIBUTION,
-    }).addTo(map);
     // no flag, to keep the credits short on a phone
     map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
     // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL): one short line for both
@@ -798,7 +793,9 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
     }
     // open on a wide map, folded into its button on a narrow one (a phone): open, it hid the markers under it
-    L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);
+    const layersBox = L.control.layers(null, overlays, { collapsed: mapBox.clientWidth < 600 }).addTo(map);
+    // the backgrounds (site/basemaps.js): our topographic map, in winter colours when the season shown is winter
+    const backgrounds = installBasemaps(L, map, layersBox, () => seasonPick.value === 'winter');
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });
@@ -821,7 +818,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       if (!holder() && seasonPick.value) { seasonPick.value = ''; applyFilters(); }
       if (holder()) { sheetToOpen = wantedRoute.id; openSpot(holder()); }
     }
-    seasonPick.addEventListener('change', applyFilters);
+    seasonPick.addEventListener('change', () => { applyFilters(); backgrounds.followSeason(); });
     yearPick.addEventListener('change', applyFilters);
     for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);
     searchBox.addEventListener('input', () => (searchBox.value ? showResults() : hideResults()));
