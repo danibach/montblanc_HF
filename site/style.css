@@ -253,7 +253,7 @@ th[aria-sort] { color: var(--ink); }
 
 /* the « Map » button and its panel (site/basemaps.js), in place of Leaflet's layers box */
 .map-button { display: flex; align-items: center; gap: .4rem; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: .4rem .7rem; font: inherit; font-size: .9rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
-.map-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.map-button .mp-button-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
 .map-button[aria-expanded="true"] { border-color: var(--accent); }
 .map-panel { position: absolute; z-index: 1000; top: 56px; right: 10px; width: 272px; max-height: calc(100% - 70px); overflow: auto; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: .8rem .9rem; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); font-size: .9rem; }
 .map-panel[hidden] { display: none; }
@@ -299,3 +299,21 @@ th[aria-sort] { color: var(--ink); }
 .v3-map { flex: 1; min-height: 0; }
 .v3-status { margin: 0; padding: .4rem .9rem .6rem; }
 @media (max-width: 640px) { .view3d { padding: 0; } .v3-box { border-radius: 0; height: 100%; } }
+/* icons and the layers that can be dragged (site/basemaps.js) */
+.mp-text { display: flex; align-items: center; gap: .55rem; min-width: 0; }
+.mp-icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mp-icon.takeoff { color: #f0693d; }
+.mp-icon.ffvl { color: #16a34a; }
+.mp-icon.summit { color: #b08d63; }
+.mp-icon.pass { color: #9a86b8; }
+.mp-icon.airport { color: #4aa3c8; }
+.mp-icon.heat { color: #f0a03d; }
+.mp-icon.slopes { color: #e05a5a; }
+.mp-icon.pistes { color: #6aa8e8; }
+.mp-stack .mp-row { gap: .4rem; border-radius: 8px; user-select: none; -webkit-user-select: none; }
+.mp-stack .mp-row .mp-text { flex: 1; }
+.mp-stack .mp-row.dragging { background: var(--hover); box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+.mp-grip { flex: none; background: none; border: 0; padding: .1rem; margin: 0; color: var(--muted); cursor: grab; touch-action: none; border-radius: 4px; }
+.mp-grip:active { cursor: grabbing; }
+.mp-grip:focus-visible { outline: 2px solid var(--accent); }
+.mp-grip-icon { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }

@@ -25,7 +25,7 @@ export const PALETTES = {
     major: '#ffe2a6', majorCasing: '#e8c27c', path: '#b09f86', rail: '#c8c2b8', building: '#e4ded3', boundary: '#b8a8c8',
     label: '#3a3a3c', labelSoft: '#6e6e73', halo: 'rgba(255,255,255,0.92)', waterLabel: '#3b7db6',
     shadow: '#4b5160', highlight: '#ffffff', accent: '#8c93a3', exaggeration: 0.3,
-    contour: '#c29f78', contourIndex: '#a8835b', contourLabel: '#8f6c47', peak: '#5e4630',
+    contour: '#c29f78', contourIndex: '#a8835b', contourLabel: '#8f6c47', peak: '#5e4630', pass: '#7b6a58',
   },
   winter: {
     land: '#f8fbfd', park: '#eaf1f3', wood: '#cfded9', grass: '#f1f6f9', ice: '#ffffff', sand: '#eef1f4',
@@ -34,7 +34,7 @@ export const PALETTES = {
     major: '#eef3f8', majorCasing: '#b1c0cf', path: '#93a3b4', rail: '#c1cbd5', building: '#dfe5eb', boundary: '#a7b3cf',
     label: '#27374a', labelSoft: '#5b6a7a', halo: 'rgba(255,255,255,0.94)', waterLabel: '#3d70a2',
     shadow: '#7a90aa', highlight: '#ffffff', accent: '#a3b5c9', exaggeration: 0.26,
-    contour: '#8fa9c4', contourIndex: '#6f8cab', contourLabel: '#5d7896', peak: '#2f4a68',
+    contour: '#8fa9c4', contourIndex: '#6f8cab', contourLabel: '#5d7896', peak: '#2f4a68', pass: '#55708e',
   },
 };
 
@@ -180,13 +180,21 @@ export function hfStyle(base, p, dem) {
   // summits with their altitude: the first thing a pilot looks for (Liberty shows none)
   style.layers.splice(under((l) => /^label_/.test(l.id)), 0,
     { id: 'peaks', type: 'symbol', source: 'openmaptiles', 'source-layer': 'mountain_peak', minzoom: 10,
-      filter: ['all', ['has', 'name'], ['has', 'ele']],
+      filter: ['all', ['has', 'name'], ['has', 'ele'], ['!=', ['get', 'class'], 'saddle']],
       layout: {
         'text-field': ['format', ['get', 'name'], { 'font-scale': 1 }, '\n', {}, ['concat', ['number-format', ['get', 'ele'], {}], ' m'], { 'font-scale': 0.85 }],
         'text-font': font, 'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 14, 12], 'text-anchor': 'top',
         'text-offset': [0, 0.3], 'symbol-sort-key': ['-', ['to-number', ['get', 'ele']]], 'text-max-width': 8,
       },
-      paint: { 'text-color': p.peak, 'text-halo-color': p.halo, 'text-halo-width': 1.4 } });
+      paint: { 'text-color': p.peak, 'text-halo-color': p.halo, 'text-halo-width': 1.4 } },
+    // the passes (cols), lighter than the summits
+    { id: 'passes', type: 'symbol', source: 'openmaptiles', 'source-layer': 'mountain_peak', minzoom: 11,
+      filter: ['all', ['has', 'name'], ['==', ['get', 'class'], 'saddle']],
+      layout: {
+        'text-field': ['case', ['has', 'ele'], ['format', ['get', 'name'], {}, '\n', {}, ['concat', ['number-format', ['get', 'ele'], {}], ' m'], { 'font-scale': 0.85 }], ['get', 'name']],
+        'text-font': font, 'text-size': ['interpolate', ['linear'], ['zoom'], 11, 9.5, 14, 11.5], 'text-max-width': 8,
+      },
+      paint: { 'text-color': p.pass, 'text-halo-color': p.halo, 'text-halo-width': 1.4 } });
   return style;
 }
 
@@ -208,39 +216,57 @@ function rasterLayers(L) {
     swisstopo: L.tileLayer(swiss('ch.swisstopo.pixelkarte-farbe'), { maxZoom: 18, attribution: '© swisstopo' }),
     swissWinter: L.tileLayer(swiss('ch.swisstopo.pixelkarte-farbe-winter'), { maxZoom: 18, attribution: '© swisstopo' }),
     opentopo: topo(),
-    slopes: L.tileLayer(ign('GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN', 'image/png'), { bounds: FRANCE, maxZoom: 17, opacity: 0.55, attribution: 'slopes © IGN' }),
-    pistes: L.tileLayer('https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png', { maxZoom: 18, attribution: 'pistes © OpenSnowMap (CC-BY-SA)' }),
+    slopes: L.tileLayer(ign('GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN', 'image/png'), { bounds: FRANCE, maxZoom: 17, opacity: 0.55, pane: 'hf-slopes', attribution: 'slopes © IGN' }),
+    pistes: L.tileLayer('https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png', { maxZoom: 18, pane: 'hf-pistes', attribution: 'pistes © OpenSnowMap (CC-BY-SA)' }),
   };
 }
 
 const KEY = 'hf-map-base'; // a background chosen by hand among the « More maps » or Satellite (this browser only)
 const TERRAIN_KEY = 'hf-map-terrain'; // the terrain overlays switched on
+const POI_KEY = 'hf-map-poi'; // summits, passes, airports: shown or not
+const ORDER_KEY = 'hf-map-order'; // the order of the layers, top first
 const load = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
 const save = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) { /* private window */ } };
 
 const SVG = 'http://www.w3.org/2000/svg';
-/** The « stacked sheets » icon of the Map button, drawn from fixed shapes (no markup from outside). */
-function stackIcon() {
+// line icons of the panel, drawn from fixed shapes (no markup from outside)
+const ICONS = {
+  stack: ['M12 4 3 9l9 5 9-5-9-5z', 'M3 13.5l9 5 9-5', 'M3 17.5l9 5 9-5'],
+  takeoff: ['M12 5l7 13H5z'],
+  ffvl: ['M7 4l5 8H2z', 'M17 20l5-8H12z'],
+  summit: ['M3 19l6-10 3.5 5L15 11l6 8z'],
+  pass: ['M3 8c4 0 5 7 9 7s5-7 9-7', 'M3 19h18'],
+  airport: ['M10.5 4.5v5L3 14v2l7.5-2.5V18L8.5 19.5V21l3.5-1 3.5 1v-1.5L13.5 18v-4.5L21 16v-2l-7.5-4.5v-5a1.5 1.5 0 0 0-3 0z'],
+  heat: ['M12 3c.5 3 4.5 5 4.5 10a4.5 4.5 0 0 1-9 0c0-2.5 1.5-3.5 2-6 1.5 1.2 2.5 3 2.5 5'],
+  slopes: ['M3 20h18', 'M3 20 19 6', 'M14 20a7 7 0 0 0-2-5'],
+  pistes: ['M4 19 20 13', 'M6 9l5 3 2 4', 'M9 6.5a1.5 1.5 0 1 0 0-.1'],
+  grip: ['M9 6h.01', 'M15 6h.01', 'M9 12h.01', 'M15 12h.01', 'M9 18h.01', 'M15 18h.01'],
+};
+function icon(name, cls = 'mp-icon') {
   const s = document.createElementNS(SVG, 'svg');
   s.setAttribute('viewBox', '0 0 24 24');
   s.setAttribute('aria-hidden', 'true');
-  for (const d of ['M12 4 3 9l9 5 9-5-9-5z', 'M3 13.5l9 5 9-5', 'M3 17.5l9 5 9-5']) {
+  s.setAttribute('class', `${cls} ${name}`);
+  for (const d of ICONS[name]) {
     const path = document.createElementNS(SVG, 'path');
     path.setAttribute('d', d);
     s.append(path);
   }
   return s;
 }
+const stackIcon = () => icon('stack', 'mp-button-icon');
 
 /**
  * The « Map » button and its panel (Sarah, 26 October 2026, after Apple's and Google's maps), in place of Leaflet's
- * layers box: the map style in pictures (Topo, Winter, Satellite), switches for what is shown on the map and for the
- * terrain, and the specialist maps folded under « More maps ». On a phone the panel rises from the bottom.
- * ``overlays``: {label: layer} shown on the map (on at the start). ``winter()``: is the season shown winter?
+ * layers box: the map style in pictures (Topo, Winter, Satellite); the points of interest (take-offs, FFVL sites,
+ * summits, passes, airports); the layers (heat map, slopes, ski pistes), which can be put in any order by dragging
+ * them, as in Notion (top over the others); the specialist maps folded under « More maps ». On a phone the panel
+ * rises from the bottom. ``shown``: {takeoffs, heat, ffvl} layers of the page (on at the start; ffvl may be null).
+ * ``winter()``: is the season shown winter?
  * The style follows the season: picking one in the filter sets Topo or Winter, unless Satellite was chosen.
  * Returns {followSeason()} to call when the season filter changes.
  */
-export function mapPanel(L, map, overlays, winter) {
+export function mapPanel(L, map, shown, winter) {
   const r = rasterLayers(L);
   const layers = { satellite: r.satellite, ign: r.ign, swisstopo: r.swisstopo, swissWinter: r.swissWinter, opentopo: r.opentopo };
   let current = null;
@@ -274,34 +300,129 @@ export function mapPanel(L, map, overlays, winter) {
   const tiles = { summer: tile('summer', 'Topo'), winter: tile('winter', 'Winter'), satellite: tile('satellite', 'Satellite') };
   const seasonNote = el('p', 'mp-note', 'Topo or Winter follows the season you pick.');
 
-  const toggle = (label, on, set) => {
+  const toggle = (name, label, on, set) => {
     const row = el('label', 'mp-row');
     const input = el('input');
     input.type = 'checkbox';
     input.setAttribute('role', 'switch');
     input.checked = on;
     input.addEventListener('change', () => set(input.checked));
-    row.append(el('span', null, label), input);
+    const text = el('span', 'mp-text');
+    text.append(icon(name), el('span', null, label));
+    row.append(text, input);
     return row;
   };
-  const shown = el('div', 'mp-group');
-  shown.append(el('p', 'mp-label', 'On the map'));
-  for (const [label, layer] of Object.entries(overlays)) {
-    shown.append(toggle(label, map.hasLayer(layer), (on) => {
-      if (on) map.addLayer(layer); else map.removeLayer(layer);
-      map.fire(on ? 'overlayadd' : 'overlayremove', { layer, name: label }); // the heat map legend follows
+  const addOrRemove = (layer, on) => { if (on) map.addLayer(layer); else map.removeLayer(layer); };
+
+  // points of interest: our take-offs and the FFVL sites (layers of the page), summits, passes and airports (in our
+  // own map's style: shown or hidden in it)
+  let poi = { summits: true, passes: true, airports: false };
+  try { poi = { ...poi, ...JSON.parse(load(POI_KEY) || '{}') }; } catch (_) { /* kept as is */ }
+  const STYLE_LAYERS = { summits: ['peaks'], passes: ['passes'], airports: ['airport'] };
+  let ours = null;
+  const applyPoi = () => {
+    for (const layer of ours ? Object.values(ours) : []) {
+      for (const [key, ids] of Object.entries(STYLE_LAYERS)) {
+        for (const l of layer.options.style.layers) if (ids.includes(l.id)) l.layout = { ...(l.layout || {}), visibility: poi[key] ? 'visible' : 'none' };
+        const gl = layer.getMaplibreMap && layer.getMaplibreMap();
+        if (gl && gl.isStyleLoaded()) for (const id of ids) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', poi[key] ? 'visible' : 'none');
+      }
+    }
+  };
+  const points = el('div', 'mp-group');
+  points.append(el('p', 'mp-label', 'Points of interest'));
+  points.append(toggle('takeoff', 'Take-offs', map.hasLayer(shown.takeoffs), (on) => addOrRemove(shown.takeoffs, on)));
+  if (shown.ffvl) points.append(toggle('ffvl', 'FFVL sites', map.hasLayer(shown.ffvl), (on) => addOrRemove(shown.ffvl, on)));
+  for (const [key, label] of [['summits', 'Summits'], ['passes', 'Passes'], ['airports', 'Airports']]) {
+    points.append(toggle({ summits: 'summit', passes: 'pass', airports: 'airport' }[key], label, poi[key], (on) => {
+      poi[key] = on;
+      save(POI_KEY, JSON.stringify(poi));
+      applyPoi();
     }));
   }
+
+  // the layers, in an order of one's own: each in a pane of its own between the map and the routes
   const terrainOn = new Set((load(TERRAIN_KEY) || '').split(',').filter(Boolean));
-  const terrain = el('div', 'mp-group');
-  terrain.append(el('p', 'mp-label', 'Terrain'));
-  for (const [key, label, layer] of [['slopes', 'Slopes over 30° (France)', r.slopes], ['pistes', 'Ski pistes', r.pistes]]) {
-    if (terrainOn.has(key)) layer.addTo(map);
-    terrain.append(toggle(label, terrainOn.has(key), (on) => {
-      if (on) { layer.addTo(map); terrainOn.add(key); } else { map.removeLayer(layer); terrainOn.delete(key); }
-      save(TERRAIN_KEY, [...terrainOn].join(',') || null);
-    }));
+  const LAYERS = {
+    heat: { label: 'Heat map', layer: shown.heat },
+    slopes: { label: 'Slopes over 30° (France)', layer: r.slopes, terrain: true },
+    pistes: { label: 'Ski pistes', layer: r.pistes, terrain: true },
+  };
+  for (const key of Object.keys(LAYERS)) map.createPane(`hf-${key}`).style.pointerEvents = 'none';
+  // Leaflet.heat draws in the overlay pane: its canvas is moved into the heat map's pane, each time it is added; it
+  // takes it out of the overlay pane when removed, so the canvas goes back there just before
+  if (L.HeatLayer && !L.HeatLayer.prototype._paneSafe) {
+    const off = L.HeatLayer.prototype.onRemove;
+    L.HeatLayer.prototype.onRemove = function onRemove(m) {
+      const overlayPane = m.getPanes().overlayPane;
+      if (this._canvas && this._canvas.parentNode !== overlayPane) overlayPane.append(this._canvas);
+      return off.call(this, m);
+    };
+    L.HeatLayer.prototype._paneSafe = true;
   }
+  const moveHeat = (layer) => { if (layer._canvas && layer instanceof L.HeatLayer) map.getPane('hf-heat').append(layer._canvas); };
+  map.on('layeradd', (e) => moveHeat(e.layer));
+  map.eachLayer(moveHeat);
+  let order = (load(ORDER_KEY) || '').split(',').filter((k) => LAYERS[k]);
+  for (const k of Object.keys(LAYERS)) if (!order.includes(k)) order.push(k);
+  const stackPanes = () => order.forEach((k, i) => { map.getPane(`hf-${k}`).style.zIndex = String(395 - i * 5); });
+  stackPanes();
+  const stacked = el('div', 'mp-group');
+  stacked.append(el('p', 'mp-label', 'Layers · drag to put one over another'));
+  const list = el('div', 'mp-stack');
+  const reorder = () => {
+    order = [...list.children].map((row) => row.dataset.key);
+    save(ORDER_KEY, order.join(','));
+    stackPanes();
+  };
+  for (const key of order) {
+    const { label, layer, terrain } = LAYERS[key];
+    if (terrain && terrainOn.has(key)) layer.addTo(map);
+    const row = toggle(key, label, terrain ? terrainOn.has(key) : map.hasLayer(layer), (on) => {
+      addOrRemove(layer, on);
+      if (terrain) {
+        if (on) terrainOn.add(key); else terrainOn.delete(key);
+        save(TERRAIN_KEY, [...terrainOn].join(',') || null);
+      } else map.fire(on ? 'overlayadd' : 'overlayremove', { layer, name: label }); // the heat map legend follows
+    });
+    row.dataset.key = key;
+    // the grip: dragged with a mouse or a finger, or moved with the arrow keys
+    const grip = el('button', 'mp-grip');
+    grip.type = 'button';
+    grip.setAttribute('aria-label', `Move ${label} up or down`);
+    grip.append(icon('grip', 'mp-grip-icon'));
+    grip.addEventListener('click', (e) => e.preventDefault()); // a click on the grip does not flip the switch
+    grip.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' && row.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
+      else if (e.key === 'ArrowDown' && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
+      else return;
+      e.preventDefault();
+      grip.focus();
+      reorder();
+    });
+    // moving the row in the page would drop a pointer captured by the grip: the page listens instead
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      row.classList.add('dragging');
+      const move = (ev) => {
+        const below = [...list.children].find((o) => o !== row && ev.clientY < o.getBoundingClientRect().top + o.offsetHeight / 2);
+        if (below) { if (row.nextElementSibling !== below) list.insertBefore(row, below); } else if (list.lastElementChild !== row) list.append(row);
+      };
+      const up = () => {
+        row.classList.remove('dragging');
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        reorder();
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
+    row.prepend(grip);
+    list.append(row);
+  }
+  stacked.append(list);
 
   const more = el('details', 'mp-more');
   more.append(el('summary', null, 'More maps'));
@@ -313,7 +434,7 @@ export function mapPanel(L, map, overlays, winter) {
     more.append(b);
     moreButtons[key] = b;
   }
-  box.append(head, styles, seasonNote, shown, terrain, more);
+  box.append(head, styles, seasonNote, points, stacked, more);
   map.getContainer().append(box);
 
   // the button, where Leaflet's layers box was
@@ -336,8 +457,7 @@ export function mapPanel(L, map, overlays, winter) {
   map.on('click', () => open(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') open(false); });
 
-  // our own maps once MapLibre and the style are there; OpenTopoMap and swisstopo winter until then (or for good)
-  let ours = null;
+  // our own maps once MapLibre and the style are there; OpenTopoMap until then (or for good)
   const background = () => {
     if (chosen) return layers[chosen];
     if (ours) return ours[seasonal];
@@ -371,6 +491,8 @@ export function mapPanel(L, map, overlays, winter) {
     const base = await libertyStyle();
     const make = (palette) => L.maplibreGL({ style: hfStyle(base, palette, dem), attribution: `${OFM} · ${RELIEF}`, interactive: false });
     ours = { summer: make(PALETTES.summer), winter: make(PALETTES.winter) };
+    for (const layer of Object.values(ours)) layer.on('add', () => { const gl = layer.getMaplibreMap(); if (gl) gl.once('styledata', applyPoi); });
+    applyPoi();
     render();
   })().catch(() => { /* no WebGL or no OpenFreeMap: OpenTopoMap stays */ });
 

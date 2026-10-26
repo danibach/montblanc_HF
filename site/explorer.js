@@ -787,15 +787,15 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     climbs = L.featureGroup().addTo(map);
     markers = L.layerGroup().addTo(map);
     // the official FFVL take-offs ▲ and landings ▼ (from zoom 10 on), with their card on a click (site/ffvl.js)
-    const overlays = { 'Take-offs': markers, 'Heat map': heat };
+    const shown = { takeoffs: markers, heat, ffvl: null };
     if (ffvl.sites.length) {
       // where a take-off of ours is drawn (within 100 m), the ▲ goes beside its marker
       const taken = (lat, lon) => spots.some((sp) => Math.abs(sp.lat - lat) < 0.0009 && Math.abs(sp.lon - lon) < 0.0013);
-      overlays['FFVL sites ▲▼'] = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
+      shown.ffvl = ffvlLayer(L, map, ffvl.sites, ffvl.info, taken).addTo(map);
     }
-    // the « Map » button and its panel (site/basemaps.js): map style, what is shown, terrain; the style follows the
-    // season picked in the filter
-    const backgrounds = mapPanel(L, map, overlays, () => seasonPick.value === 'winter');
+    // the « Map » button and its panel (site/basemaps.js): map style, points of interest, layers in an order of
+    // one's own; the style follows the season picked in the filter
+    const backgrounds = mapPanel(L, map, shown, () => seasonPick.value === 'winter');
 
     // legend of the heat map, shown with it
     const legend = L.control({ position: 'bottomleft' });
