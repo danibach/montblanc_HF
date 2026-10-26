@@ -1,6 +1,7 @@
 // The analysis program (Python in a worker). One shared worker, started on first use.
 
 import { CONFIG } from './config.js';
+import { t } from './i18n.js';
 
 let worker = null;
 let readyPromise = null;
@@ -23,14 +24,14 @@ export function startEngine() {
     worker = new Worker('worker.js', { type: 'module' });
     worker.onmessage = (ev) => {
       const m = ev.data;
-      if (m.type === 'progress') status(m.text, 'loading');
+      if (m.type === 'progress') status(t(m.key), 'loading');
       else if (m.type === 'ready') {
-        status('Analysis ready', 'ready');
+        status(t('engine.ready'), 'ready');
         resolve(m.version);
       } else if (m.type === 'failed') {
-        status('The analysis could not start.', 'failed');
+        status(t('engine.startFailed'), 'failed');
         readyPromise = null;
-        reject(new Error(m.payload.error));
+        reject(new Error(t('engine.startFailedBrowser')));
       } else if (m.type === 'result') {
         const w = waiting.get(m.id);
         if (w) {
@@ -40,7 +41,7 @@ export function startEngine() {
       }
     };
     worker.onerror = (e) => {
-      status('The analysis could not start.', 'failed');
+      status(t('engine.startFailed'), 'failed');
       readyPromise = null;
       reject(new Error(e.message || 'worker error'));
     };
@@ -48,6 +49,9 @@ export function startEngine() {
   });
   return readyPromise;
 }
+
+/** The error for a failed call: the engine's own message (written in English by the Python code), or the worker's. */
+const failure = (res, fallback) => new Error(res.error || (res.errorKey && t(res.errorKey)) || t(fallback));
 
 function call(message, transfer) {
   const id = nextId++;
@@ -62,7 +66,7 @@ export async function analyseFile(file) {
   await startEngine();
   const bytes = await file.arrayBuffer();
   const res = await call({ type: 'analyse', name: file.name, bytes }, [bytes]);
-  if (!res.ok) throw new Error(res.error || 'This file could not be analysed.');
+  if (!res.ok) throw failure(res, 'engine.fileFailed');
   return res.result;
 }
 
@@ -72,7 +76,7 @@ export async function analyseFiles(files) {
   await startEngine();
   const parts = await Promise.all(files.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })));
   const res = await call({ type: 'analyse_parts', files: parts }, parts.map((p) => p.bytes));
-  if (!res.ok) throw new Error(res.error || 'These files could not be analysed.');
+  if (!res.ok) throw failure(res, 'engine.filesFailed');
   return res.result;
 }
 
@@ -98,12 +102,12 @@ export async function analyseManual(file, ranges) {
   if (Array.isArray(file)) { // one outing in several files: the ranges are in seconds after the first file's start
     const files = await Promise.all(file.map(async (f) => ({ name: f.name, bytes: await f.arrayBuffer() })));
     const res = await call({ type: 'manual_parts', files, ranges }, files.map((f) => f.bytes));
-    if (!res.ok) throw new Error(res.error || 'These files could not be analysed.');
+    if (!res.ok) throw failure(res, 'engine.filesFailed');
     return res.result;
   }
   const bytes = await file.arrayBuffer();
   const res = await call({ type: 'manual', name: file.name, bytes, ranges }, [bytes]);
-  if (!res.ok) throw new Error(res.error || 'This file could not be analysed.');
+  if (!res.ok) throw failure(res, 'engine.fileFailed');
   return res.result;
 }
 

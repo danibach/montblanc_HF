@@ -2,9 +2,11 @@
 
 import { CONFIG } from './config.js';
 import { h, s, fmtInt } from './util.js';
+import { t } from './i18n.js';
 import { fullScreenButton, inWinter, simpleBackground } from './basemaps.js';
 
-export const MODE_NAMES = ['On foot', 'Flight', 'Vehicle'];
+// the names of the three modes of a trace (on foot, flight, vehicle): keys of the texts in site/i18n
+export const MODE_NAMES = ['mode.foot', 'mode.flight', 'mode.vehicle'];
 export const MODE_COLOURS = ['#5fbf68', '#f0693d', '#8796a3'];
 const INK = '#e6edf1';
 const MUTED = '#9fb0b9';
@@ -26,9 +28,9 @@ export function runs(trace) {
 // ---------- map
 
 export function buildMap(trace, markers) {
-  const box = h('div', { class: 'map', role: 'img', 'aria-label': 'Map of the track' });
+  const box = h('div', { class: 'map', role: 'img', 'aria-label': t('charts.mapAria') });
   if (!window.L) {
-    box.append(h('p', { class: 'hint pad' }, 'The map could not be loaded.'));
+    box.append(h('p', { class: 'hint pad' }, t('map.failed')));
     return { element: box, start() {} };
   }
   const L = window.L;
@@ -73,7 +75,7 @@ export function buildProfile(trace) {
   const alts = trace.alt.map((a) => (a == null ? null : a));
   const known = alts.filter((a) => a != null);
   const wrap = h('div', { class: 'profile' });
-  if (known.length < 2) return wrap.appendChild(h('p', { class: 'hint pad' }, 'No altitude to draw.')) && wrap;
+  if (known.length < 2) return wrap.appendChild(h('p', { class: 'hint pad' }, t('charts.noAlt'))) && wrap;
   const T = trace.t[trace.t.length - 1] || 1;
   const step = niceStep(Math.max(...known) - Math.min(...known) || 100, 4);
   const y0 = Math.floor(Math.min(...known) / step) * step;
@@ -81,7 +83,7 @@ export function buildProfile(trace) {
   const X = (t) => ML + (t / T) * (W - ML - MR);
   const Y = (a) => MT + (1 - (a - y0) / (y1 - y0 || 1)) * (H - MT - MB);
 
-  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'profile-svg', role: 'img', 'aria-label': 'Altitude profile' });
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'profile-svg', role: 'img', 'aria-label': t('charts.profileAria') });
   for (let a = y0; a <= y1 + 1e-6; a += step) {
     svg.append(s('line', { x1: ML, x2: W - MR, y1: Y(a), y2: Y(a), stroke: GRID, 'stroke-width': 1 }));
     svg.append(s('text', { x: ML - 6, y: Y(a) + 4, 'text-anchor': 'end', fill: MUTED, 'font-size': 11 }, fmtInt(a)));
@@ -104,20 +106,20 @@ export function buildProfile(trace) {
   }
   svg.append(s('text', { x: 4, y: 12, fill: MUTED, 'font-size': 11 }, 'm'));
 
-  const readout = h('p', { class: 'readout hint', role: 'status' }, 'Move over the profile to read a point.');
+  const readout = h('p', { class: 'readout hint', role: 'status' }, t('charts.readout'));
   const cursor = s('line', { y1: MT, y2: H - MB, stroke: INK, 'stroke-width': 1, 'stroke-dasharray': '3 3', visibility: 'hidden' });
   svg.append(cursor);
   svg.addEventListener('pointermove', (ev) => {
     const r = svg.getBoundingClientRect();
     const x = ((ev.clientX - r.left) / r.width) * W;
-    const t = Math.max(0, Math.min(T, ((x - ML) / (W - ML - MR)) * T));
+    const at = Math.max(0, Math.min(T, ((x - ML) / (W - ML - MR)) * T));
     let best = 0;
-    for (let i = 0; i < trace.t.length; i++) if (Math.abs(trace.t[i] - t) < Math.abs(trace.t[best] - t)) best = i;
+    for (let i = 0; i < trace.t.length; i++) if (Math.abs(trace.t[i] - at) < Math.abs(trace.t[best] - at)) best = i;
     cursor.setAttribute('x1', X(trace.t[best]));
     cursor.setAttribute('x2', X(trace.t[best]));
     cursor.setAttribute('visibility', 'visible');
     const clock = new Date(t0 + trace.t[best] * 1000).toISOString().slice(11, 19);
-    readout.textContent = `${clock} UTC · ${trace.alt[best] == null ? '–' : fmtInt(trace.alt[best])} m · ${MODE_NAMES[trace.m[best]]}`;
+    readout.textContent = `${clock} UTC · ${trace.alt[best] == null ? '–' : fmtInt(trace.alt[best])} m · ${t(MODE_NAMES[trace.m[best]])}`;
   });
   svg.addEventListener('pointerleave', () => cursor.setAttribute('visibility', 'hidden'));
 
@@ -127,7 +129,7 @@ export function buildProfile(trace) {
 
 export function legend() {
   return h('p', { class: 'legend' }, MODE_NAMES.map((n, i) =>
-    h('span', null, h('i', { class: `m${i}` }), n)));
+    h('span', null, h('i', { class: `m${i}` }), t(n))));
 }
 
 // ---------- GPX

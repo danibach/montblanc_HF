@@ -16,6 +16,7 @@ def spots(tmp_path, rows, sites):
     """groupTakeoffs(rows, sites) as JSON (the sets as sorted lists), from a copy of the page's modules."""
     for path in SITE.glob("*.js"):  # explorer.js and the modules it imports (sectors.js, ffvl.js…)
         shutil.copy(path, tmp_path / path.name)
+    shutil.copytree(SITE / "i18n", tmp_path / "i18n")  # the texts of the page (site/i18n.js loads them)
     (tmp_path / "package.json").write_text('{"type": "module"}')
     (tmp_path / "run.mjs").write_text(
         "globalThis.window = {};  // the page reads window (Leaflet) when it loads\n"

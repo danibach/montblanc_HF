@@ -243,6 +243,7 @@ th[aria-sort] { color: var(--ink); }
 /* Help page */
 .account .help-link { margin-left: .4rem; padding-left: .8rem; border-left: 1px solid var(--line); color: var(--muted); text-decoration: none; }
 .account .help-link:hover { color: var(--ink); }
+.lang-pick select { padding: .2rem .4rem; font-size: .9rem; color: var(--muted); }
 .help section { margin-bottom: 1.5rem; }
 .help-toc { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin: .8rem 0 .4rem; }
 .help-terms { margin: 0; }

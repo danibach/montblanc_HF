@@ -7,6 +7,7 @@
 // keeps OpenTopoMap as before.
 
 import { CONFIG } from './config.js';
+import { t } from './i18n.js';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 const DEM_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
@@ -294,8 +295,8 @@ export function mapPanel(L, map, shown, winter) {
 
   const head = el('div', 'mp-head');
   const close = el('button', 'mp-close', '×');
-  close.setAttribute('aria-label', 'Close');
-  head.append(el('b', null, 'Map'), close);
+  close.setAttribute('aria-label', t('common.close'));
+  head.append(el('b', null, t('mp.map')), close);
 
   const styles = el('div', 'mp-styles');
   const tile = (key, label) => {
@@ -309,8 +310,8 @@ export function mapPanel(L, map, shown, winter) {
     styles.append(b);
     return b;
   };
-  const tiles = { summer: tile('summer', 'Topo'), winter: tile('winter', 'Winter'), satellite: tile('satellite', 'Satellite') };
-  const seasonNote = el('p', 'mp-note', 'Topo or Winter follows the season you pick.');
+  const tiles = { summer: tile('summer', t('mp.topo')), winter: tile('winter', t('mp.winter')), satellite: tile('satellite', t('mp.satellite')) };
+  const seasonNote = el('p', 'mp-note', t('mp.seasonNote'));
 
   const toggle = (name, label, on, set) => {
     const row = el('label', 'mp-row');
@@ -342,10 +343,10 @@ export function mapPanel(L, map, shown, winter) {
     }
   };
   const points = el('div', 'mp-group');
-  points.append(el('p', 'mp-label', 'Points of interest'));
-  points.append(toggle('takeoff', 'Take-offs', map.hasLayer(shown.takeoffs), (on) => addOrRemove(shown.takeoffs, on)));
-  if (shown.ffvl) points.append(toggle('ffvl', 'FFVL sites', map.hasLayer(shown.ffvl), (on) => addOrRemove(shown.ffvl, on)));
-  for (const [key, label] of [['summits', 'Summits'], ['passes', 'Passes'], ['airports', 'Airports']]) {
+  points.append(el('p', 'mp-label', t('mp.poi')));
+  points.append(toggle('takeoff', t('map.takeoffs'), map.hasLayer(shown.takeoffs), (on) => addOrRemove(shown.takeoffs, on)));
+  if (shown.ffvl) points.append(toggle('ffvl', t('mp.ffvl'), map.hasLayer(shown.ffvl), (on) => addOrRemove(shown.ffvl, on)));
+  for (const [key, label] of [['summits', t('mp.summits')], ['passes', t('mp.passes')], ['airports', t('mp.airports')]]) {
     points.append(toggle({ summits: 'summit', passes: 'pass', airports: 'airport' }[key], label, poi[key], (on) => {
       poi[key] = on;
       save(POI_KEY, JSON.stringify(poi));
@@ -356,9 +357,9 @@ export function mapPanel(L, map, shown, winter) {
   // the layers, in an order of one's own: each in a pane of its own between the map and the routes
   const terrainOn = new Set((load(TERRAIN_KEY) || '').split(',').filter(Boolean));
   const LAYERS = {
-    heat: { label: 'Heat map', layer: shown.heat },
-    slopes: { label: 'Slopes over 30° (France)', layer: r.slopes, terrain: true },
-    pistes: { label: 'Ski pistes', layer: r.pistes, terrain: true },
+    heat: { label: t('mp.heat'), layer: shown.heat },
+    slopes: { label: t('mp.slopes'), layer: r.slopes, terrain: true },
+    pistes: { label: t('mp.pistes'), layer: r.pistes, terrain: true },
   };
   for (const key of Object.keys(LAYERS)) map.createPane(`hf-${key}`).style.pointerEvents = 'none';
   // Leaflet.heat draws in the overlay pane: its canvas is moved into the heat map's pane, each time it is added; it
@@ -380,7 +381,7 @@ export function mapPanel(L, map, shown, winter) {
   const stackPanes = () => order.forEach((k, i) => { map.getPane(`hf-${k}`).style.zIndex = String(395 - i * 5); });
   stackPanes();
   const stacked = el('div', 'mp-group');
-  stacked.append(el('p', 'mp-label', 'Layers · drag to put one over another'));
+  stacked.append(el('p', 'mp-label', t('mp.layers')));
   const list = el('div', 'mp-stack');
   const reorder = () => {
     order = [...list.children].map((row) => row.dataset.key);
@@ -401,7 +402,7 @@ export function mapPanel(L, map, shown, winter) {
     // the grip: dragged with a mouse or a finger, or moved with the arrow keys
     const grip = el('button', 'mp-grip');
     grip.type = 'button';
-    grip.setAttribute('aria-label', `Move ${label} up or down`);
+    grip.setAttribute('aria-label', t('mp.move', { label }));
     grip.append(icon('grip', 'mp-grip-icon'));
     grip.addEventListener('click', (e) => e.preventDefault()); // a click on the grip does not flip the switch
     grip.addEventListener('keydown', (e) => {
@@ -437,9 +438,9 @@ export function mapPanel(L, map, shown, winter) {
   stacked.append(list);
 
   const more = el('details', 'mp-more');
-  more.append(el('summary', null, 'More maps'));
+  more.append(el('summary', null, t('mp.more')));
   const moreButtons = {};
-  for (const [key, label] of [['ign', 'IGN (France)'], ['swisstopo', 'swisstopo'], ['swissWinter', 'swisstopo winter'], ['opentopo', 'OpenTopoMap']]) {
+  for (const [key, label] of [['ign', t('mp.ign')], ['swisstopo', 'swisstopo'], ['swissWinter', t('mp.swissWinter')], ['opentopo', 'OpenTopoMap']]) {
     const b = el('button', 'mp-chip', label);
     b.type = 'button';
     b.addEventListener('click', () => choose(key));
@@ -455,7 +456,7 @@ export function mapPanel(L, map, shown, winter) {
     const b = el('button', 'map-button');
     b.type = 'button';
     b.setAttribute('aria-expanded', 'false');
-    b.append(stackIcon(), el('span', null, 'Map'));
+    b.append(stackIcon(), el('span', null, t('mp.map')));
     L.DomEvent.disableClickPropagation(b);
     b.addEventListener('click', () => open(box.hidden));
     return b;
@@ -539,12 +540,12 @@ export async function view3D({ line, title, winter }) {
   const win = el('div', 'v3-box');
   win.setAttribute('role', 'dialog');
   win.setAttribute('aria-modal', 'true');
-  win.setAttribute('aria-label', `${title} in 3D`);
-  const fly = el('button', 'primary', 'Fly over');
+  win.setAttribute('aria-label', t('v3.aria', { title }));
+  const fly = el('button', 'primary', t('v3.fly'));
   const shut = el('button', 'v3-close', '×');
-  shut.setAttribute('aria-label', 'Close the 3D view');
+  shut.setAttribute('aria-label', t('v3.close'));
   const box = el('div', 'v3-map');
-  const status = el('p', 'hint v3-status', 'Loading the relief…');
+  const status = el('p', 'hint v3-status', t('v3.loading'));
   const head = el('div', 'v3-head');
   head.append(el('b', null, title), el('span', 'v3-tools'));
   head.lastChild.append(fly, shut);
@@ -554,7 +555,7 @@ export async function view3D({ line, title, winter }) {
 
   let map = null;
   let frame = 0;
-  const stop = () => { cancelAnimationFrame(frame); frame = 0; fly.textContent = 'Fly over'; };
+  const stop = () => { cancelAnimationFrame(frame); frame = 0; fly.textContent = t('v3.fly'); };
   const close = () => {
     stop();
     if (map) map.remove();
@@ -593,7 +594,7 @@ export async function view3D({ line, title, winter }) {
       const cam = map.cameraForBounds(bounds, { padding: 60, maxZoom: 15 });
       if (cam) map.easeTo({ center: cam.center, zoom: cam.zoom - 0.4, pitch: 62, bearing: look, duration });
     };
-    map.on('load', () => { overview(0); status.textContent = 'Drag to move, right-click or two fingers to turn and tilt.'; });
+    map.on('load', () => { overview(0); status.textContent = t('v3.help'); });
 
     // the flyover: the camera follows the way up, looking a little ahead
     const dist = [0];
@@ -610,7 +611,7 @@ export async function view3D({ line, title, winter }) {
     const ms = Math.min(40000, Math.max(12000, km * 3500));
     fly.addEventListener('click', () => {
       if (frame) { stop(); return; }
-      fly.textContent = 'Pause';
+      fly.textContent = t('v3.pause');
       let t0 = null;
       let heading = map.getBearing();
       const step = (now) => {
@@ -628,7 +629,7 @@ export async function view3D({ line, title, winter }) {
       frame = requestAnimationFrame(step);
     });
   } catch (e) {
-    status.textContent = 'The 3D view needs a recent browser with WebGL, and the map service to answer.';
+    status.textContent = t('v3.failed');
     fly.hidden = true;
   }
 }
@@ -702,7 +703,7 @@ export function fullScreenButton(L, map) {
       map.getContainer().classList.toggle('map-full', full);
       document.body.classList.toggle('map-full-open', full);
       b.replaceChildren(icon(full ? 'shrink' : 'expand', 'mp-full-icon'));
-      b.setAttribute('aria-label', full ? 'Leave full screen' : 'Full screen');
+      b.setAttribute('aria-label', full ? t('map.fullOff') : t('map.fullOn'));
       b.title = b.getAttribute('aria-label');
       setTimeout(() => map.invalidateSize(), 50);
     };

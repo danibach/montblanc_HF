@@ -2,6 +2,7 @@
 // Click the take-off on the track, then the landing: that stretch is a flight. Several flights can be marked.
 
 import { h, fmtInt } from './util.js';
+import { t } from './i18n.js';
 import { MODE_COLOURS, runs } from './charts.js';
 import { fullScreenButton, inWinter, simpleBackground } from './basemaps.js';
 
@@ -25,8 +26,8 @@ export function mergeMarks(marks) {
  * `onChange(count)` is called whenever the marked flights change.
  */
 export function buildMarkTool(trace, onChange) {
-  const box = h('div', { class: 'map map-tall', role: 'application', 'aria-label': 'Map of the track: click the take-off, then the landing' });
-  const status = h('p', { class: 'hint', role: 'status' }, 'Click the take-off on the track.');
+  const box = h('div', { class: 'map map-tall', role: 'application', 'aria-label': t('mark.mapAria') });
+  const status = h('p', { class: 'hint', role: 'status' }, t('mark.clickTakeoff'));
   const list = h('ul', { class: 'mark-list' });
   const element = h('div', null, status, box, list);
   let marks = [];
@@ -40,8 +41,8 @@ export function buildMarkTool(trace, onChange) {
     list.replaceChildren(...marks.map((m, k) => {
       const minutes = Math.max(1, Math.round((trace.t[m.b] - trace.t[m.a]) / 60));
       return h('li', null,
-        h('span', null, h('b', null, `Flight ${k + 1}`), ` · ${alt(m.a)} → ${alt(m.b)} · ${minutes} min`),
-        h('button', { type: 'button', class: 'link', onclick: () => { marks.splice(k, 1); redraw(); } }, 'Remove'));
+        h('span', null, h('b', null, t('mark.flightN', { n: k + 1 })), ` · ${alt(m.a)} → ${alt(m.b)} · ${minutes} min`),
+        h('button', { type: 'button', class: 'link', onclick: () => { marks.splice(k, 1); redraw(); } }, t('mark.remove')));
     }));
   };
 
@@ -58,8 +59,8 @@ export function buildMarkTool(trace, onChange) {
       }
     }
     status.textContent = pending != null
-      ? `Take-off at ${alt(pending)}. Now click the landing.`
-      : (marks.length ? 'Click another take-off to mark one more flight, or recalculate.' : 'Click the take-off on the track.');
+      ? t('mark.pending', { alt: alt(pending) })
+      : (marks.length ? t('mark.another') : t('mark.clickTakeoff'));
     renderList();
     onChange(marks.length);
   };
@@ -78,7 +79,7 @@ export function buildMarkTool(trace, onChange) {
 
   const onClick = (ev) => {
     const i = nearest(ev.latlng);
-    if (i < 0) { status.textContent = 'Click closer to the track.'; return; }
+    if (i < 0) { status.textContent = t('mark.closer'); return; }
     if (pending == null) { pending = i; redraw(); return; }
     if (i === pending) { pending = null; redraw(); return; }  // the same point again: cancel
     marks = mergeMarks([...marks, { a: pending, b: i }]);
@@ -87,7 +88,7 @@ export function buildMarkTool(trace, onChange) {
   };
 
   const start = () => {
-    if (!window.L) { box.append(h('p', { class: 'hint pad' }, 'The map could not be loaded.')); return; }
+    if (!window.L) { box.append(h('p', { class: 'hint pad' }, t('map.failed'))); return; }
     const L = window.L;
     map = L.map(box);
     simpleBackground(L, map, inWinter(trace.t0)); // the site's own map (site/basemaps.js)

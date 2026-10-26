@@ -198,8 +198,8 @@ def comma(n):
     return f"{int(round(n)):,}"
 
 
-def new_page(browser, signed_in=False, width=1280, height=900):
-    ctx = browser.new_context(viewport={"width": width, "height": height}, accept_downloads=True)
+def new_page(browser, signed_in=False, width=1280, height=900, locale="en-US"):
+    ctx = browser.new_context(viewport={"width": width, "height": height}, accept_downloads=True, locale=locale)
     if signed_in:
         ctx.add_init_script(session_script())
     page = ctx.new_page()
@@ -447,6 +447,24 @@ with sync_playwright() as p:
     errs = [l for l in logs if l.startswith(("error", "pageerror")) and "404" not in l]
     check(not errs, "no console error (participant)" + ("" if not errs else ": " + " || ".join(errs)[:500]))
     check(not external, "no request to any other site (participant)" + ("" if not external else ": " + ", ".join(external[:4])))
+
+    # ============ languages (site/i18n.js): the browser's language, else English; the selector keeps a choice
+    for locale, lang, nav, listed in [("de-CH", "de", "Alle", "Touren"), ("fr-CH", "fr", "Toutes", "Sorties"),
+                                      ("it-IT", "it", "Tutte", "Uscite"), ("es-ES", "en", "All", "Outings")]:
+        page, external, logs = new_page(b, locale=locale)
+        page.goto(BASE + "#/all")
+        page.wait_for_selector("tbody tr", timeout=30000)
+        check(page.evaluate("document.documentElement.lang") == lang, f"language {locale}: page is in {lang}")
+        check(nav in page.inner_text("#nav") and listed in page.inner_text("h1"), f"language {locale}: menu and title in {lang}")
+        errs = [l for l in logs if l.startswith(("error", "pageerror")) and "404" not in l]
+        check(not errs, f"language {locale}: no console error" + ("" if not errs else ": " + " || ".join(errs)[:300]))
+        if locale == "de-CH":
+            page.select_option("#lang-pick select", "fr")
+            page.wait_for_selector('html[lang="fr"]', state="attached")
+            check("Sorties" in page.inner_text("h1") and "Toutes" in page.inner_text("#nav"), "selector: switching to French redraws the page")
+            page.reload()
+            page.wait_for_selector("tbody tr", timeout=30000)
+            check(page.evaluate("document.documentElement.lang") == "fr", "selector: the choice is kept after a reload")
 
     # ============ phone
     page, external, logs = new_page(b, width=390, height=844)

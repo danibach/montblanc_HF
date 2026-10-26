@@ -7,9 +7,9 @@ let ready = null;
 
 async function boot() {
   const manifest = await (await fetch('manifest.json', { cache: 'no-cache' })).json();
-  post({ type: 'progress', text: 'Loading Python in your browser…' });
+  post({ type: 'progress', key: 'engine.loadingPython' });
   const py = await loadPyodide({ indexURL: new URL('./pyodide/', import.meta.url).href });
-  post({ type: 'progress', text: 'Installing the analysis program…' });
+  post({ type: 'progress', key: 'engine.installing' });
   for (const name of manifest.wheels) {
     const buf = await (await fetch(`py/${name}`)).arrayBuffer();
     py.unpackArchive(new Uint8Array(buf), 'wheel');
@@ -96,7 +96,7 @@ self.onmessage = async (ev) => {
     post({
       type: msg.type === 'init' ? 'failed' : 'result',
       id: msg.id,
-      payload: { ok: false, error: 'The analysis could not start in your browser.', detail: String((err && err.message) || err) },
+      payload: { ok: false, error: null, errorKey: 'engine.startFailedBrowser', detail: String((err && err.message) || err) },
     });
   }
 };
