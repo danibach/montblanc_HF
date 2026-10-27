@@ -8,9 +8,19 @@ Two starts that meet higher up stay two routes: the walk-in differs. ``SHARE`` w
 2026: at the Pointe de Beauregard two winter climbs from La Clusaz by the same way kept 80 % of their points within
 104 m (the zigzags of a ski climb part a little more), while the two ways from La Clusaz stray 550 m and more there.
 
-A route is drawn as its median line (``median_line``): every climb is laid along the most central one, point by
-point, and the middle of them is kept, so ten climbs of one way make one line that none of them strays from
-much. A climb joins a route when it matches any climb of it.
+Two more cases are the same route (Sarah, 27 October 2026, from the live routes: 80 routes for 62 take-offs, several
+of them the same path):
+* a climb that lies along another for ``INSIDE_SHARE`` of its way is that way from a start higher up (Les Moillats
+  on the way from Les Esserts to the Col des Frêtes: 100 %; La Clusaz on the way from Les Verrier to Beauregard);
+* two climbs starting less than ``SAME_START_M`` apart are one route when the shorter lies along the other for
+  ``SAME_START_SHARE`` of its way (the three ways from Vesancy to La Vesancière, 76 to 96 %). Ways that part for
+  longer stay apart (« via Les Corbassières » at Beauregard: 37 to 53 %); where pilots went is still seen on the heat
+  map of the ways up, made from every climb.
+
+A route is drawn as its median line (``median_line``): every climb is laid along the trunk (the climb the most others
+lie along, the most central of them), point by point, and the middle of the climbs that pass there is kept, so ten
+climbs of one way make one line that none of them strays from much, and a way joined from higher up keeps the
+walk-in from lower down. A climb joins a route when it matches any climb of it.
 Nothing here changes the analysis of a track.
 """
 
@@ -25,6 +35,9 @@ from typing import Optional
 START_M = 500.0
 NEAR_M = 150.0
 SHARE = 0.8
+SAME_START_M = 300.0   # starts this close: the same route when the shorter way lies along the other ...
+SAME_START_SHARE = 0.7  # ... for this share of its way
+INSIDE_SHARE = 0.9     # a way that lies along another for this share of it is that way, from another start
 STEP_M = 25.0
 ALIGN_AHEAD = 40       # laying a climb along another: look this many points (1 km) ahead for the nearest one
 LINE_POINTS = 120      # a median line keeps at most this many points
@@ -84,9 +97,19 @@ def far_share(a: Climb, b: Climb) -> float:
     return far / (len(a.pts) + len(b.pts))
 
 
+def on_share(a: Climb, b: Climb) -> float:
+    """Share of the points of ``a`` within NEAR_M of the line of ``b``: how much of ``a`` goes along ``b``."""
+    return sum(1 for p in a.pts if b.grid.near(p)) / len(a.pts)
+
+
 def same_route(a: Climb, b: Climb) -> bool:
     (ax, ay), (bx, by) = a.pts[0], b.pts[0]
-    if math.hypot(ax - bx, ay - by) >= START_M:
+    start = math.hypot(ax - bx, ay - by)
+    shorter, longer = (a, b) if len(a.pts) <= len(b.pts) else (b, a)
+    along = on_share(shorter, longer)
+    if along >= INSIDE_SHARE or (start < SAME_START_M and along >= SAME_START_SHARE):
+        return True
+    if start >= START_M:
         return False
     return far_share(a, b) <= 1 - SHARE
 
@@ -114,6 +137,16 @@ def central(route: list[Climb]) -> Climb:
     return min(route, key=lambda c: sum(far_share(c, o) for o in route if o is not c))
 
 
+def trunk(route: list[Climb]) -> Climb:
+    """The climb the most others lie along (INSIDE_SHARE), the most central of those: a way joined from higher up
+    is drawn from the lowest start."""
+    if len(route) == 1:
+        return route[0]
+    under = {c.id: sum(1 for o in route if o is not c and on_share(o, c) >= INSIDE_SHARE) for c in route}
+    most = max(under.values())
+    return central([c for c in route if under[c.id] == most])
+
+
 def _laid_along(ref: list[tuple[float, float]], pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
     """For each point of ``ref``, the nearest point of ``pts``, going only forward (a climb does not go back down
     its own way), looking at most ALIGN_AHEAD points ahead."""
@@ -126,16 +159,20 @@ def _laid_along(ref: list[tuple[float, float]], pts: list[tuple[float, float]]) 
 
 
 def median_line(route: list[Climb]) -> list[list[float]]:
-    """The line of a route: every climb laid along the most central one, then, point by point, the median of
-    them (east and north apart), lightly smoothed. One climb: its own line."""
-    ref = central(route)
+    """The line of a route: every climb laid along the trunk, then, point by point, the median of the climbs that
+    pass there (within NEAR_M: one that starts higher up does not pull the walk-in towards its start), east and north
+    apart, lightly smoothed. One climb: its own line."""
+    ref = trunk(route)
     if len(route) == 1:
         return ref.line
     lat0 = ref.lat0
     others = [c.pts if c.lat0 == lat0 else resample(c.line, lat0) for c in route if c is not ref]
     laid = [ref.pts] + [_laid_along(ref.pts, pts) for pts in others]
-    mid = [(statistics.median(l[i][0] for l in laid), statistics.median(l[i][1] for l in laid))
-           for i in range(len(ref.pts))]
+    def here(i):
+        p = ref.pts[i]
+        return [l[i] for l in laid if (l[i][0] - p[0]) ** 2 + (l[i][1] - p[1]) ** 2 <= NEAR_M ** 2]
+    mid = [(statistics.median(q[0] for q in pts), statistics.median(q[1] for q in pts))
+           for pts in (here(i) for i in range(len(ref.pts)))]
     smooth = [mid[0]] + [((mid[i - 1][0] + mid[i][0] + mid[i + 1][0]) / 3, (mid[i - 1][1] + mid[i][1] + mid[i + 1][1]) / 3)
                          for i in range(1, len(mid) - 1)] + [mid[-1]]
     step = max(1, math.ceil(len(smooth) / LINE_POINTS))
@@ -199,9 +236,11 @@ def routes_of(climbs: list[Climb], via=None) -> list[dict]:
     (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…"""
     out = []
     for g in group(climbs):
-        place = Counter(c.start_place for c in g if c.start_place).most_common(1)
-        place = place[0][0] if place else None
-        out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
+        places = [p for p, _ in Counter(c.start_place for c in g if c.start_place).most_common()]
+        place = places[0] if places else None
+        # a way with several starts (joined from higher up, or starts close by): « From Les Esserts or Les Moillats »
+        starts = " or ".join(places[:2]) + (f" +{len(places) - 2}" if len(places) > 2 else "")
+        out.append({"name": f"From {starts}" if place else "From an unnamed start", "start_place": place,
                     "line": median_line(g), "outing_ids": [c.id for c in g]})
     by_place: dict = {}
     for r in out:

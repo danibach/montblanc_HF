@@ -52,3 +52,24 @@ def test_a_climb_that_links_two_routes_merges_them():
     a, c = Climb("a", UP), Climb("c", shifted(UP, dlon=0.0034))  # 265 m apart: two routes
     b = Climb("b", shifted(UP, dlon=0.0017))  # in between: within 150 m of both
     assert [sorted(r["outing_ids"]) for r in routes_of([a, c, b])] == [["a", "b", "c"]]
+
+
+def test_a_way_joined_from_higher_up_is_the_same_route():
+    # Les Moillats on the way from Les Esserts: the upper half of the way, from a start 1.3 km higher
+    low, high = Climb("a", UP, "Les Esserts"), Climb("b", UP[14:], "Les Moillats")
+    assert same_route(low, high)
+    route, = routes_of([low, high, Climb("c", shifted(UP, dlon=0.0003), "Les Esserts")])
+    assert route["name"] == "From Les Esserts or Les Moillats" and route["start_place"] == "Les Esserts"
+    # drawn from the lowest start: the walk-in is kept
+    assert abs(route["line"][0][0] - UP[0][0]) < 0.0005
+
+
+def test_same_start_and_most_of_the_way_is_the_same_route():
+    # same start, the last quarter by another way (400 m east): 75 % shared
+    part = [[lat, lon + (0.005 if k >= 23 else 0)] for k, (lat, lon) in enumerate(UP)]
+    assert same_route(Climb("a", UP), Climb("b", part))
+
+
+def test_same_start_but_half_the_way_apart_stays_apart():
+    part = [[lat, lon + (0.005 if k >= 15 else 0)] for k, (lat, lon) in enumerate(UP)]
+    assert not same_route(Climb("a", UP), Climb("b", part))

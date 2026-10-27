@@ -231,8 +231,11 @@ def sync(api, dry_run: bool = False) -> None:
         print(f"FFVL sites for the map not written: {exc}")
     osm = osm_around([(o["takeoff_lat"], o["takeoff_lon"]) for o in outings]) if outings else []
     if osm is None:
-        print("OpenStreetMap unavailable: kept as they are this time")
-        osm = []
+        # the OSM take-offs already in the register are used: without them the outings next to one were tied to a
+        # provisional take-off made beside it (Col des Frêtes, 27 October 2026: two take-offs 28 m apart, the
+        # outings and their routes split between them, depending on whether Overpass had answered)
+        osm = register.select("takeoff_sites", "select=*&source=eq.osm")
+        print(f"OpenStreetMap unavailable: the {len(osm)} OSM take-offs of the register are kept")
     osm = without_doubles(ffvl, osm)
     print(f"OpenStreetMap take-offs (not next to an FFVL one): {len(osm)}")
 
