@@ -59,7 +59,8 @@ def test_a_way_joined_from_higher_up_is_the_same_route():
     low, high = Climb("a", UP, "Les Esserts"), Climb("b", UP[14:], "Les Moillats")
     assert same_route(low, high)
     route, = routes_of([low, high, Climb("c", shifted(UP, dlon=0.0003), "Les Esserts")])
-    assert route["name"] == "From Les Esserts or Les Moillats" and route["start_place"] == "Les Esserts"
+    # named after the start most climbs leave from
+    assert route["name"] == "From Les Esserts" and route["start_place"] == "Les Esserts"
     # drawn from the lowest start: the walk-in is kept
     assert abs(route["line"][0][0] - UP[0][0]) < 0.0005
 

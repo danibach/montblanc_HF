@@ -236,11 +236,10 @@ def routes_of(climbs: list[Climb], via=None) -> list[dict]:
     (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…"""
     out = []
     for g in group(climbs):
-        places = [p for p, _ in Counter(c.start_place for c in g if c.start_place).most_common()]
-        place = places[0] if places else None
-        # a way with several starts (joined from higher up, or starts close by): « From Les Esserts or Les Moillats »
-        starts = " or ".join(places[:2]) + (f" +{len(places) - 2}" if len(places) > 2 else "")
-        out.append({"name": f"From {starts}" if place else "From an unnamed start", "start_place": place,
+        # a way with several starts (joined from higher up, or starts close by) is named after the most frequent
+        place = Counter(c.start_place for c in g if c.start_place).most_common(1)
+        place = place[0][0] if place else None
+        out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
                     "line": median_line(g), "outing_ids": [c.id for c in g]})
     by_place: dict = {}
     for r in out:
