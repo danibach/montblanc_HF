@@ -8,6 +8,7 @@ import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
 import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { t, tr } from './i18n.js';
 import { card as ffvlCard, ffvlLayer, windLabel } from './ffvl.js';
+import { scaleAndRuler } from './ruler.js';
 
 // Take-offs closer than this are the same spot. Only for this page: nothing is stored.
 const SAME_SPOT_M = 150;
@@ -796,6 +797,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
   const start = () => {
     map = L.map(mapBox, { worldCopyJump: true });
     fullScreenButton(L, map); // the map fills the screen (a phone's map is small)
+    scaleAndRuler(L, map); // the scale bar, and a ruler to measure a way with its D+ (site/ruler.js)
     // no flag, to keep the credits short on a phone
     map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
     // the take-off register's sources, as their licences ask (Licence Ouverte 2.0, ODbL): one short line for both

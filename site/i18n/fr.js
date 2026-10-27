@@ -440,6 +440,10 @@ export default {
 
   'map.fullOff': 'Quitter le plein écran',
   'map.fullOn': 'Plein écran',
+  'ruler.on': 'Mesurer une distance',
+  'ruler.off': 'Arrêter la mesure',
+  'ruler.hint': 'Cliquez sur la carte pour ajouter des points ; double-clic pour finir.',
+  'ruler.result': '{km} · D+ {up} m · D− {down} m',
 
   'mark.mapAria': 'Carte de la trace : cliquez sur le décollage, puis sur l’atterrissage',
   'mark.clickTakeoff': 'Cliquez sur le décollage sur la trace.',

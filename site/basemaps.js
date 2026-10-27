@@ -254,6 +254,7 @@ const ICONS = {
   grip: ['M9 6h.01', 'M15 6h.01', 'M9 12h.01', 'M15 12h.01', 'M9 18h.01', 'M15 18h.01'],
   expand: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
   shrink: ['M9 4v5H4', 'M15 4v5h5', 'M9 20v-5H4', 'M15 20v-5h5'],
+  ruler: ['M3 16.5 16.5 3 21 7.5 7.5 21z', 'M7 13l2 2', 'M10 10l2 2', 'M13 7l2 2'],
 };
 export function icon(name, cls = 'mp-icon') {
   const s = document.createElementNS(SVG, 'svg');

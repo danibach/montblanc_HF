@@ -440,6 +440,10 @@ export default {
 
   'map.fullOff': 'Vollbild verlassen',
   'map.fullOn': 'Vollbild',
+  'ruler.on': 'Entfernung messen',
+  'ruler.off': 'Messung beenden',
+  'ruler.hint': 'Klicken Sie auf die Karte, um Punkte hinzuzufügen; Doppelklick zum Beenden.',
+  'ruler.result': '{km} · D+ {up} m · D− {down} m',
 
   'mark.mapAria': 'Karte des Tracks: Klicke auf den Startplatz, dann auf den Landeplatz',
   'mark.clickTakeoff': 'Klicke auf den Startplatz im Track.',
