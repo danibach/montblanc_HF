@@ -577,8 +577,8 @@ export async function view3D({ line, title, winter }) {
     style.sources.way = { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.map(([la, lo]) => [lo, la]) } } };
     const round = { 'line-cap': 'round', 'line-join': 'round' };
     style.layers.push(
-      { id: 'way-casing', type: 'line', source: 'way', layout: round, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } },
-      { id: 'way', type: 'line', source: 'way', layout: round, paint: { 'line-color': '#f0693d', 'line-width': 4.5 } });
+      { id: 'way-casing', type: 'line', source: 'way', layout: round, paint: { 'line-color': '#ffffff', 'line-width': 4.5, 'line-opacity': 0.9 } },
+      { id: 'way', type: 'line', source: 'way', layout: round, paint: { 'line-color': '#f0693d', 'line-width': 2.5 } });
     const ml = window.maplibregl;
     const start = line[0];
     const top = line[line.length - 1];

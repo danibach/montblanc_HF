@@ -32,12 +32,13 @@ const HEAT_SPOTS = { radius: 20, blur: 15, maxZoom: 8, max: 4, minOpacity: 0.45,
 // Heat of the ways up: each pilot counts once per take-off, spread along their climbs; 2 pilots on the same
 // path make it hot.
 const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35, gradient: GRADIENT };
-const CLIMB = { color: '#1f4fff', weight: 3, opacity: 0.9 };
-const CLIMB_HOT = { color: '#e0161b', weight: 5, opacity: 1 };
-const CLIMB_BACK = { color: '#1f4fff', weight: 2, opacity: 0.25 };
+const CLIMB = { color: '#1f4fff', weight: 1.5, opacity: 0.9 };
+const CLIMB_HOT = { color: '#e0161b', weight: 2.5, opacity: 1 };
+const CLIMB_BACK = { color: '#1f4fff', weight: 1, opacity: 0.25 };
 // the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per start
-const ROUTE_W = 4;
-const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 3, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
+const ROUTE_W = 2; // fine lines (Sarah, 27 October 2026); a wider invisible line catches the pointer
+const HIT_W = 14;
+const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 2, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
 const PALETTE = ['#fc4c02', '#2b6cb0', '#2f855a', '#805ad5', '#b7791f', '#c53030'];
 // ``label``: the key of the text in site/i18n (looked up when drawn)
 const SEASONS = {
@@ -647,19 +648,21 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       const { color, main } = look.get(key);
       const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round', dashArray: main ? null : '1 8' };
       const casing = L.polyline(route.line, { ...ROUTE_CASING, interactive: false }).addTo(climbs);
-      const line = L.polyline(route.line, style).addTo(climbs);
+      const line = L.polyline(route.line, { ...style, interactive: false }).addTo(climbs);
+      // the line is fine: an invisible wider one above it takes the pointer
+      const hit = L.polyline(route.line, { color: '#000', opacity: 0, weight: HIT_W }).addTo(climbs);
       const place = placeOf.get(key);
       const several = (starts.get(place) || []).length > 1;
-      line.bindTooltip(h('span', null, `${several ? `${fromPlace(place)} · ` : ''}${routeName(route.name)} · ${plural(outings.length, 'unit.outing')}`), { sticky: true });
+      hit.bindTooltip(h('span', null, `${several ? `${fromPlace(place)} · ` : ''}${routeName(route.name)} · ${plural(outings.length, 'unit.outing')}`), { sticky: true });
       // a route lights up under the pointer; a click keeps it lit (and opens it in the list), a second click lets it go
       // one label at a time, whatever the browser says of the lines the pointer left
-      line.on('mouseover', () => {
-        for (const drawn of routeLines.values()) if (drawn.line !== line) drawn.line.closeTooltip();
+      hit.on('mouseover', () => {
+        for (const drawn of routeLines.values()) if (drawn.hit !== hit) drawn.hit.closeTooltip();
         paintRoutes([key]);
       });
-      line.on('mouseout', () => paintRoutes([]));
-      line.on('click', () => selectRoute(key));
-      routeLines.set(key, { line, casing, style });
+      hit.on('mouseout', () => paintRoutes([]));
+      hit.on('click', () => selectRoute(key));
+      routeLines.set(key, { line, casing, hit, style });
       bounds.extend(line.getBounds());
     }
     let selectedRoute = null;
@@ -668,12 +671,12 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       const lit = new Set([...keys, ...(selectedRoute ? [selectedRoute] : [])]);
       for (const [key, drawn] of routeLines) {
         const on = lit.has(key);
-        if (!keys.includes(key)) drawn.line.closeTooltip(); // only the hovered line has its label
-        drawn.casing.setStyle({ ...ROUTE_CASING, weight: ROUTE_CASING.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.3 : ROUTE_CASING.opacity });
-        drawn.line.setStyle({ ...drawn.style, weight: drawn.style.weight + (on ? 2 : 0), opacity: lit.size && !on ? 0.35 : drawn.style.opacity });
+        if (!keys.includes(key)) drawn.hit.closeTooltip(); // only the hovered line has its label
+        drawn.casing.setStyle({ ...ROUTE_CASING, weight: ROUTE_CASING.weight + (on ? 1 : 0), opacity: lit.size && !on ? 0.3 : ROUTE_CASING.opacity });
+        drawn.line.setStyle({ ...drawn.style, weight: drawn.style.weight + (on ? 1 : 0), opacity: lit.size && !on ? 0.35 : drawn.style.opacity });
         // only a kept route comes to the front: moving the hovered line in the page lost its mouseout, so its
         // label stayed on the map
-        if (key === selectedRoute) { drawn.casing.bringToFront(); drawn.line.bringToFront(); }
+        if (key === selectedRoute) { drawn.casing.bringToFront(); drawn.line.bringToFront(); drawn.hit.bringToFront(); }
       }
     };
     function selectRoute(key) {

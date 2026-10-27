@@ -7,10 +7,10 @@ import { fullScreenButton, inWinter, simpleBackground } from './basemaps.js';
 
 // the names of the three modes of a trace (on foot, flight, vehicle): keys of the texts in site/i18n
 export const MODE_NAMES = ['mode.foot', 'mode.flight', 'mode.vehicle'];
-export const MODE_COLOURS = ['#5fbf68', '#f0693d', '#8796a3'];
-const INK = '#e6edf1';
-const MUTED = '#9fb0b9';
-const GRID = '#2b3b44';
+export const MODE_COLOURS = ['#1f7a4d', '#ff5a1f', '#8796a3'];
+const INK = '#1d2228';
+const MUTED = '#6b737b';
+const GRID = '#e3e6e9';
 
 /** Runs of consecutive fixes with the same mode: [{m, from, to}] (indexes into the trace arrays). */
 export function runs(trace) {
@@ -45,13 +45,13 @@ export function buildMap(trace, markers) {
       const line = [];
       // overlap by one fix so the parts touch
       for (let i = r.from; i <= Math.min(r.to + 1, trace.m.length - 1); i++) line.push([trace.lat[i], trace.lon[i]]);
-      L.polyline(line, { color: MODE_COLOURS[r.m], weight: 4, opacity: 0.9 }).addTo(map);
+      L.polyline(line, { color: MODE_COLOURS[r.m], weight: 2, opacity: 0.95 }).addTo(map);
       all.push(...line);
     }
     for (const mk of markers) {
       if (mk.lat == null) continue;
       const dot = L.circleMarker([mk.lat, mk.lon], {
-        radius: 7, color: '#fff', weight: 2, fillColor: mk.colour, fillOpacity: 1,
+        radius: 5, color: '#fff', weight: 1.5, fillColor: mk.colour, fillOpacity: 1,
       }).addTo(map);
       dot.bindTooltip(`${mk.label}${mk.alt != null ? ` · ${fmtInt(mk.alt)} m` : ''}`);
     }
@@ -101,7 +101,7 @@ export function buildProfile(trace) {
       if (alts[i] != null) pts.push(`${X(trace.t[i]).toFixed(1)},${Y(alts[i]).toFixed(1)}`);
     }
     if (pts.length > 1) {
-      svg.append(s('polyline', { points: pts.join(' '), fill: 'none', stroke: MODE_COLOURS[r.m], 'stroke-width': 2.4, 'stroke-linejoin': 'round' }));
+      svg.append(s('polyline', { points: pts.join(' '), fill: 'none', stroke: MODE_COLOURS[r.m], 'stroke-width': 1.4, 'stroke-linejoin': 'round' }));
     }
   }
   svg.append(s('text', { x: 4, y: 12, fill: MUTED, 'font-size': 11 }, 'm'));

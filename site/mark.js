@@ -52,7 +52,7 @@ export function buildMarkTool(trace, onChange) {
       for (const m of marks) {
         const line = [];
         for (let i = m.a; i <= m.b; i++) line.push([trace.lat[i], trace.lon[i]]);
-        window.L.polyline(line, { color: MARK_COLOUR, weight: 9, opacity: 0.85 }).addTo(layer);
+        window.L.polyline(line, { color: MARK_COLOUR, weight: 5, opacity: 0.85 }).addTo(layer);
       }
       if (pending != null) {
         window.L.circleMarker([trace.lat[pending], trace.lon[pending]], { radius: 8, color: '#fff', weight: 2, fillColor: MARK_COLOUR, fillOpacity: 1 }).addTo(layer);
@@ -97,7 +97,7 @@ export function buildMarkTool(trace, onChange) {
     for (const r of runs(trace)) {
       const line = [];
       for (let i = r.from; i <= Math.min(r.to + 1, trace.m.length - 1); i++) line.push([trace.lat[i], trace.lon[i]]);
-      L.polyline(line, { color: MODE_COLOURS[r.m], weight: 4, opacity: 0.9, interactive: false }).addTo(map);
+      L.polyline(line, { color: MODE_COLOURS[r.m], weight: 2, opacity: 0.95, interactive: false }).addTo(map);
       all.push(...line);
     }
     layer = L.layerGroup().addTo(map);
