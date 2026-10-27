@@ -441,6 +441,10 @@ export default {
 
   'map.fullOff': 'Leave full screen',
   'map.fullOn': 'Full screen',
+  'ruler.on': 'Measure a distance',
+  'ruler.off': 'Stop measuring',
+  'ruler.hint': 'Click on the map to add points; double-click to finish.',
+  'ruler.result': '{km} · D+ {up} m · D− {down} m',
 
   'mark.mapAria': 'Map of the track: click the take-off, then the landing',
   'mark.clickTakeoff': 'Click the take-off on the track.',

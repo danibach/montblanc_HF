@@ -440,6 +440,10 @@ export default {
 
   'map.fullOff': 'Esci dallo schermo intero',
   'map.fullOn': 'Schermo intero',
+  'ruler.on': 'Misura una distanza',
+  'ruler.off': 'Termina la misura',
+  'ruler.hint': 'Clicca sulla mappa per aggiungere punti; doppio clic per finire.',
+  'ruler.result': '{km} · D+ {up} m · D− {down} m',
 
   'mark.mapAria': 'Mappa della traccia: clicca sul decollo, poi sull’atterraggio',
   'mark.clickTakeoff': 'Clicca sul decollo nella traccia.',
