@@ -231,8 +231,11 @@ def sync(api, dry_run: bool = False) -> None:
         print(f"FFVL sites for the map not written: {exc}")
     osm = osm_around([(o["takeoff_lat"], o["takeoff_lon"]) for o in outings]) if outings else []
     if osm is None:
-        print("OpenStreetMap unavailable: kept as they are this time")
-        osm = []
+        # the OSM take-offs already in the register are used: without them the outings next to one were tied to a
+        # provisional take-off made beside it (Col des Frêtes, 27 October 2026: two take-offs 28 m apart, the
+        # outings and their routes split between them, depending on whether Overpass had answered)
+        osm = register.select("takeoff_sites", "select=*&source=eq.osm")
+        print(f"OpenStreetMap unavailable: the {len(osm)} OSM take-offs of the register are kept")
     osm = without_doubles(ffvl, osm)
     print(f"OpenStreetMap take-offs (not next to an FFVL one): {len(osm)}")
 
@@ -266,8 +269,10 @@ def sync(api, dry_run: bool = False) -> None:
 
 def rebuild_routes(register: Register, site_id: int) -> int:
     """Make the routes of one take-off again from the climbs of its public outings (src/mbhf/routes.py), and tie
-    the outings to them. Returns how many routes."""
-    from mbhf.routes import Climb, pick_via, routes_of, via_query
+    the outings to them. Returns how many routes. The itineraries start from the public network and its parkings
+    (OpenStreetMap): when it cannot be read, the take-off keeps the itineraries it has, so that none ever starts at
+    the first fix of a climb, which may be a house."""
+    from mbhf.routes import Access, Climb, access_query, pick_via, routes_of, via_query
 
     rows = register.select("outings", f"select=id,climb,start_place&takeoff_site_id=eq.{site_id}"
                                       "&status=eq.published&verified=is.true&hidden=is.false")
@@ -283,7 +288,22 @@ def rebuild_routes(register: Register, site_id: int) -> int:
                 time.sleep(2)
         return None
 
-    routes = routes_of(climbs, via)
+    access = None
+    if climbs:
+        pts = [p for c in climbs for p in c.line]
+        box = (min(p[0] for p in pts) - 0.01, min(p[1] for p in pts) - 0.015, max(p[0] for p in pts) + 0.01, max(p[1] for p in pts) + 0.015)
+        query = urllib.parse.urlencode({"data": access_query(*box)}).encode()
+        for url in OVERPASS_URLS:
+            try:
+                access = Access(get_json(url, query, timeout=120).get("elements", []), climbs[0].lat0)
+                break
+            except Exception:
+                time.sleep(2)
+        if access is None:
+            print(f"take-off {site_id}: OpenStreetMap unavailable, its itineraries are kept as they were")
+            return 0
+
+    routes = routes_of(climbs, via, access)
     if register.dry:
         return len(routes)
     # the take-off's routes are made again: the old ones go (their outings lose their route_id until just below)

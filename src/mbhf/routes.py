@@ -1,16 +1,21 @@
 """Routes: the climbs to one take-off that follow the same way up, gathered into one route.
 
-Rule (decided on 23 October 2026 from the live climbs, see Notion « Décisions »): two climbs follow the same route
-when their starts are less than ``START_M`` apart and the two lines stay within ``NEAR_M`` of each other along
-``SHARE`` of the way (each line resampled every ``STEP_M``; each point compared with the nearest point of the other
-line, both ways). On the live climbs, the same path stays within 15 to 110 m; different paths stray 400 m or more.
-Two starts that meet higher up stay two routes: the walk-in differs. ``SHARE`` went from 90 % to 80 % on 25 October
-2026: at the Pointe de Beauregard two winter climbs from La Clusaz by the same way kept 80 % of their points within
-104 m (the zigzags of a ski climb part a little more), while the two ways from La Clusaz stray 550 m and more there.
+The rules of 23 and 25 October 2026 (starts under 500 m apart, 80 % of the way within 150 m; the same path stays
+within 15 to 110 m on the live climbs, different paths stray 400 m or more) are replaced by this one:
 
-A route is drawn as its median line (``median_line``): every climb is laid along the most central one, point by
-point, and the middle of them is kept, so ten climbs of one way make one line that none of them strays from
-much. A climb joins a route when it matches any climb of it.
+Since 29 October 2026 (Sarah, from a prototype on the live climbs; see Notion « Points ouverts et idées »), a trace
+and an itinerary are two things. The trace of an outing is kept whole (its numbers, the heat map of the ways up, even
+when it leaves from home). The itinerary is the line the map proposes, and it never starts at a private place:
+* each climb counts from where it joins the public network for good (``Access.junction``: the paths, tracks and
+  streets of OpenStreetMap; private ways and driveways left out), never from its first fix;
+* climbs that join one another (one goes along the other for ``INSIDE_SHARE`` of the rest of its way, that rest
+  being ``JOINED_MIN`` of its way at least) are one itinerary; the other ways pilots took stay on the heat map;
+* the itinerary starts at the most used start (starts within ``STARTS_M`` are one), the lowest on a tie (the one
+  with the longest way up), and at a parking when one is within ``PARKING_M`` of it;
+* its line is the median of its climbs laid along the climb of that start with the longest way up.
+Without the public network (OpenStreetMap did not answer), the climbs count from their first fix: the sync then
+keeps the take-off's itineraries as they were rather than make them so.
+
 Nothing here changes the analysis of a track.
 """
 
@@ -22,9 +27,17 @@ import statistics
 from collections import Counter
 from typing import Optional
 
-START_M = 500.0
 NEAR_M = 150.0
-SHARE = 0.8
+INSIDE_SHARE = 0.9     # a climb that goes along another for this share of the rest of its way joins it ...
+JOINED_MIN = 0.5       # ... when that rest is at least this share of its way: every climb meets the others at the
+                       # take-off, two ways that only meet near the top stay two (Tête Pelouse: 13 to 16 % shared)
+STARTS_M = 150.0       # starts this close are one start
+PARKING_M = 100.0      # a parking this close to the start: the itinerary starts there
+ON_NETWORK_M = 35.0    # a fix this close to a public way is on the public network ...
+NETWORK_SHARE = 0.85   # ... and a climb has joined it when this share of the rest of its fixes is
+# the start names pilots use, where the map's differ (Sarah, 29 October 2026: Les Esserts is the landing field of
+# Perroix); each one only within 2 km of the given point
+PLACE_NAMES = {("Les Esserts", 45.852, 6.212): "Perroix"}
 STEP_M = 25.0
 ALIGN_AHEAD = 40       # laying a climb along another: look this many points (1 km) ahead for the nearest one
 LINE_POINTS = 120      # a median line keeps at most this many points
@@ -78,17 +91,20 @@ class Climb:
         self.grid = _Grid(self.pts)
 
 
-def far_share(a: Climb, b: Climb) -> float:
-    """Share of the points of both lines farther than NEAR_M from the other line."""
-    far = sum(1 for p in a.pts if not b.grid.near(p)) + sum(1 for p in b.pts if not a.grid.near(p))
-    return far / (len(a.pts) + len(b.pts))
+def joins(a: Climb, b: Climb) -> bool:
+    """Whether ``a`` joins ``b``: from some fix on, INSIDE_SHARE of the rest of ``a`` is within NEAR_M of ``b``, and
+    that rest is JOINED_MIN of ``a`` at least."""
+    near = [b.grid.near(p) for p in a.pts]
+    rest = 0
+    for i in range(len(near) - 1, -1, -1):
+        rest += near[i]
+        if near[i] and rest / (len(near) - i) >= INSIDE_SHARE and (len(near) - i) >= max(2, JOINED_MIN * len(near)):
+            return True
+    return False
 
 
 def same_route(a: Climb, b: Climb) -> bool:
-    (ax, ay), (bx, by) = a.pts[0], b.pts[0]
-    if math.hypot(ax - bx, ay - by) >= START_M:
-        return False
-    return far_share(a, b) <= 1 - SHARE
+    return joins(a, b) or joins(b, a)
 
 
 def group(climbs: list[Climb]) -> list[list[Climb]]:
@@ -107,11 +123,34 @@ def group(climbs: list[Climb]) -> list[list[Climb]]:
     return sorted(groups, key=len, reverse=True)
 
 
-def central(route: list[Climb]) -> Climb:
-    """The climb closest to all the others of its route (the first one when they are two)."""
-    if len(route) <= 2:
-        return route[0]
-    return min(route, key=lambda c: sum(far_share(c, o) for o in route if o is not c))
+def _place(c: Climb) -> Optional[str]:
+    """The start's name as pilots say it (PLACE_NAMES)."""
+    if not c.start_place:
+        return None
+    lat, lon = c.line[0]
+    for (name, plat, plon), said in PLACE_NAMES.items():
+        if name == c.start_place and math.hypot((lon - plon) * 111320.0 * math.cos(math.radians(plat)), (lat - plat) * 110540.0) <= 2000:
+            return said
+    return c.start_place
+
+
+def starts(route: list[Climb]) -> list[list[Climb]]:
+    """The climbs of a route by start (starts within STARTS_M are one), the most used first; on a tie, the one with
+    the longest way up (the lowest)."""
+    out: list[list[Climb]] = []
+    for c in sorted(route, key=lambda c: -len(c.pts)):
+        for s in out:
+            if math.hypot(c.pts[0][0] - s[0].pts[0][0], c.pts[0][1] - s[0].pts[0][1]) <= STARTS_M:
+                s.append(c)
+                break
+        else:
+            out.append([c])
+    return sorted(out, key=lambda s: (-len(s), -max(len(c.pts) for c in s)))
+
+
+def lead(route: list[Climb]) -> Climb:
+    """The climb that draws the route: the one with the longest way up from the most used start."""
+    return max(starts(route)[0], key=lambda c: len(c.pts))
 
 
 def _laid_along(ref: list[tuple[float, float]], pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -126,16 +165,20 @@ def _laid_along(ref: list[tuple[float, float]], pts: list[tuple[float, float]]) 
 
 
 def median_line(route: list[Climb]) -> list[list[float]]:
-    """The line of a route: every climb laid along the most central one, then, point by point, the median of
-    them (east and north apart), lightly smoothed. One climb: its own line."""
-    ref = central(route)
+    """The line of a route: every climb laid along the lead climb, then, point by point, the median of the climbs that
+    pass there (within NEAR_M: one that starts higher up does not pull the walk-in towards its start), east and north
+    apart, lightly smoothed. One climb: its own line."""
+    ref = lead(route)
     if len(route) == 1:
         return ref.line
     lat0 = ref.lat0
     others = [c.pts if c.lat0 == lat0 else resample(c.line, lat0) for c in route if c is not ref]
     laid = [ref.pts] + [_laid_along(ref.pts, pts) for pts in others]
-    mid = [(statistics.median(l[i][0] for l in laid), statistics.median(l[i][1] for l in laid))
-           for i in range(len(ref.pts))]
+    def here(i):
+        p = ref.pts[i]
+        return [l[i] for l in laid if (l[i][0] - p[0]) ** 2 + (l[i][1] - p[1]) ** 2 <= NEAR_M ** 2]
+    mid = [(statistics.median(q[0] for q in pts), statistics.median(q[1] for q in pts))
+           for pts in (here(i) for i in range(len(ref.pts)))]
     smooth = [mid[0]] + [((mid[i - 1][0] + mid[i][0] + mid[i + 1][0]) / 3, (mid[i - 1][1] + mid[i][1] + mid[i + 1][1]) / 3)
                          for i in range(1, len(mid) - 1)] + [mid[-1]]
     step = max(1, math.ceil(len(smooth) / LINE_POINTS))
@@ -193,16 +236,99 @@ def stray_point(line: list, others: list[list]) -> list:
     return line[max(range(len(pts)), key=lambda i: gap(pts[i]))]
 
 
-def routes_of(climbs: list[Climb], via=None) -> list[dict]:
+_PUBLIC_HIGHWAYS = ("path", "footway", "track", "steps", "bridleway", "pedestrian", "living_street", "residential",
+                    "unclassified", "service", "tertiary", "secondary")
+
+
+def access_query(south: float, west: float, north: float, east: float) -> str:
+    """Overpass QL: the public ways and the parkings of a box."""
+    box = f"{south:.5f},{west:.5f},{north:.5f},{east:.5f}"
+    return (f'[out:json][timeout:90];(way["highway"~"^({"|".join(_PUBLIC_HIGHWAYS)})$"]({box});'
+            f'nwr["amenity"="parking"]({box}););out geom tags;')
+
+
+class Access:
+    """The public network and the parkings around a take-off, from an Overpass answer (``access_query``)."""
+
+    def __init__(self, elements: list, lat0: float):
+        self.lat0 = lat0
+        self.cells: dict[tuple[int, int], list] = {}
+        self.parkings: list[tuple[float, float]] = []
+        for el in elements or []:
+            tags = el.get("tags") or {}
+            if tags.get("amenity") == "parking":
+                if tags.get("access") in ("private", "customers", "no"):
+                    continue
+                c = el if "lat" in el else el.get("center") or {}
+                if "lat" in c:
+                    self.parkings += _xy([[c["lat"], c["lon"]]], lat0)
+                elif el.get("geometry"):
+                    g = _xy([[p["lat"], p["lon"]] for p in el["geometry"]], lat0)
+                    self.parkings.append((sum(p[0] for p in g) / len(g), sum(p[1] for p in g) / len(g)))
+            elif tags.get("highway") in _PUBLIC_HIGHWAYS and el.get("geometry"):
+                if tags.get("access") in ("private", "no") or tags.get("foot") == "no" or \
+                        tags.get("service") in ("driveway", "parking_aisle"):
+                    continue
+                g = _xy([[p["lat"], p["lon"]] for p in el["geometry"]], lat0)
+                for s in zip(g, g[1:]):
+                    for cell in {(int(p[0] // ON_NETWORK_M), int(p[1] // ON_NETWORK_M)) for p in s}:
+                        self.cells.setdefault(cell, []).append(s)
+
+    def on_network(self, p: tuple[float, float]) -> bool:
+        ci, cj = int(p[0] // ON_NETWORK_M), int(p[1] // ON_NETWORK_M)
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                for a, b in self.cells.get((ci + di, cj + dj), ()):
+                    vx, vy = b[0] - a[0], b[1] - a[1]
+                    ln = vx * vx + vy * vy
+                    k = 0 if ln == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / ln))
+                    if math.hypot(p[0] - a[0] - k * vx, p[1] - a[1] - k * vy) <= ON_NETWORK_M:
+                        return True
+        return False
+
+    def junction(self, line: list) -> int:
+        """The index of ``line`` from which the climb is on the public network for good (NETWORK_SHARE of the rest);
+        0 when it never is (a climb off the paths keeps its own start)."""
+        on = [self.on_network(p) for p in _xy(line, self.lat0)]
+        rest = 0
+        best = 0
+        for i in range(len(on) - 1, -1, -1):
+            rest += on[i]
+            if on[i] and rest / (len(on) - i) >= NETWORK_SHARE:
+                best = i
+        return best if len(line) - best >= 2 else 0
+
+    def parking_near(self, point: list) -> Optional[list]:
+        """The parking within PARKING_M of ``point`` ([lat, lon]), the nearest, or None."""
+        p = _xy([point], self.lat0)[0]
+        near = [q for q in self.parkings if math.hypot(q[0] - p[0], q[1] - p[1]) <= PARKING_M]
+        if not near:
+            return None
+        return _latlon([min(near, key=lambda q: math.hypot(q[0] - p[0], q[1] - p[1]))], self.lat0)[0]
+
+
+def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None) -> list[dict]:
     """``[{name, start_place, line, outing_ids}]`` for one take-off. A start with one way: « From La Clusaz ». A start
     with several: each way named after a place it goes by and the others do not, « via Les Corbassières »
-    (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…"""
+    (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…
+    With ``access``, each climb counts from where it joins the public network and an itinerary starts at a parking
+    within PARKING_M of its start."""
+    if access is not None:
+        public = []
+        for c in climbs:
+            j = access.junction(c.line)
+            public.append(Climb(c.id, c.line[j:], c.start_place, c.lat0) if j else c)
+        climbs = public
     out = []
     for g in group(climbs):
-        place = Counter(c.start_place for c in g if c.start_place).most_common(1)
-        place = place[0][0] if place else None
+        names = [_place(c) for c in starts(g)[0] if _place(c)]
+        place = Counter(names).most_common(1)[0][0] if names else None
+        line = median_line(g)
+        parking = access.parking_near(line[0]) if access is not None else None
+        if parking:
+            line = [parking] + line
         out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
-                    "line": median_line(g), "outing_ids": [c.id for c in g]})
+                    "line": line, "outing_ids": [c.id for c in g]})
     by_place: dict = {}
     for r in out:
         by_place.setdefault(r["start_place"], []).append(r)
