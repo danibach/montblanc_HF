@@ -327,7 +327,7 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/3b-map.png")
 
     page.goto(BASE + f"#/user/{UID}")
-    page.wait_for_selector(".stat.big", timeout=15000)
+    page.wait_for_selector(".stats", timeout=15000)
     check(page.inner_text("h1") == "Alice" and comma(ROW1["dplus_m"]) in page.inner_text(".stats") and "score" not in page.inner_text(".stats").lower(), "user page: name and totals, no score")
     check("Waiting" not in page.inner_text("main"), "user page of someone else: no private uploads")
     stats_text = page.inner_text(".stats")
@@ -395,7 +395,7 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/5b-mark.png", full_page=True)
     page.click("#mark-recalc")
     page.wait_for_selector("#mark-result .notice", timeout=60000)
-    check("points" in page.inner_text("#mark-result .notice-ok") if page.locator("#mark-result .notice-ok").count() else False,
+    check("climbed on foot" in page.inner_text("#mark-result .notice-ok") if page.locator("#mark-result .notice-ok").count() else False,
           "recalculated with the hand-marked flight: " + page.inner_text("#mark-result").replace("\n", " ")[:120])
     page.click("#mark-publish")
     page.wait_for_selector("#mark-result .notice-ok:has-text('Published')", timeout=30000)
@@ -439,7 +439,7 @@ with sync_playwright() as p:
     check("Delete my account" in page.inner_text("main"), "own page offers account deletion")
     check(page.locator("#nav a[aria-current]").count() == 1 and page.inner_text("#nav a[aria-current]") == "My H&Fs", "own pilot page: My H&Fs lit in the menu")
     page.goto(BASE)
-    page.wait_for_selector(".stat.big", timeout=15000)
+    page.wait_for_selector(".stats", timeout=15000)
     check(page.inner_text("h1") == "Alice" and "Total distance on flight" in page.inner_text(".stats") and page.locator("#f-year").count() == 1, "My H&Fs is the pilot page: name, totals, filters")
     check(page.locator("#nav a[aria-current]").count() == 1 and page.inner_text("#nav a[aria-current]") == "My H&Fs", "My H&Fs lit in the menu")
     page.screenshot(path=f"{SHOTS}/6-me.png", full_page=True)
