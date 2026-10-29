@@ -3,7 +3,7 @@
 //   #/all              All: the outings of everyone (filter by year and country)
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
-//   #/ranking          ranking of participants (by year or all time)
+//   #/ranking          the pilots and their totals (by year or all time); no ranking: H&F Tracks is a library of outings
 //   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
 //   #/mark             mark the flights of a refused track by hand, on a map (opened from the Upload page)
@@ -111,9 +111,8 @@ function outingDetail(o) {
   ]) : null;
   const detail = h('div', null,
     h('div', { class: 'stats' },
-      stat(fmtInt(o.score), t('stat.score'), true),
-      stat(`${fmtInt(o.dplus_m)} m`, t('stat.dplus')),
-      stat(`${fmtInt(o.dminus_m)} m`, t('stat.dminus')),
+      stat(`${fmtInt(o.dplus_m)} m`, t('stat.dplus'), true),
+      stat(`${fmtInt(o.dminus_m)} m`, t('stat.dminus'), true),
       stat(fmtKm(o.walk_km), t('stat.walk')),
       stat(fmtKm(o.flight_free_km), t('stat.freeFai')),
       stat(fmtDur(o.duration_s), t('stat.duration'))),
@@ -139,7 +138,6 @@ function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
     h('td', { class: 'num' }, fmtInt(r.dminus_m)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
     h('td', { class: 'num' }, fmtDist(r.flight_free_km)),
-    h('td', { class: 'num score' }, fmtInt(r.score)),
     showStatus ? h('td', null, statusBadge(r)) : null));
 }
 
@@ -164,7 +162,6 @@ function listHeaders({ showPilot = true, showStatus = false } = {}) {
     { label: t('col.dminus'), key: 'dminus', num: true },
     { label: t('col.hike'), key: 'hike', num: true },
     { label: t('col.fly'), key: 'fly', num: true },
-    { label: t('col.score'), key: 'score', num: true },
     showStatus ? { label: t('col.status') } : null,
   ].filter(Boolean);
 }
@@ -259,19 +256,17 @@ async function pageRanking(token) {
   const bar = await filterBar(q, (v) => goFilters('ranking', v), { yearLabel: t('filter.allTime') });
   const rows = await api.getRanking({ year: q.year, country: q.country });
   if (token !== routeToken) return;
-  // The rank is the place in the full ranking, so it stays the same when the search narrows the list.
-  const entries = rows.map((r, i) => ({ r, rank: i + 1, name: pilotName(r) }));
-  const rowOf = ({ r, rank, name }) => h('tr', null,
-    h('td', { class: 'num' }, rank),
+  // No ranking (Sarah, 29 October 2026: a library of outings, not a challenge): the pilots by name.
+  const entries = rows.map((r) => ({ r, name: pilotName(r) })).sort((a, b) => a.name.localeCompare(b.name));
+  const rowOf = ({ r, name }) => h('tr', null,
     h('td', null, link(`#/user/${r.user_id}`, name)),
     h('td', { class: 'num' }, fmtInt(r.outings)),
     h('td', { class: 'num' }, fmtInt(r.dplus)),
     h('td', { class: 'num' }, fmtInt(r.dminus)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
-    h('td', { class: 'num' }, fmtDist(r.flight_km)),
-    h('td', { class: 'num score' }, fmtInt(r.score)));
+    h('td', { class: 'num' }, fmtDist(r.flight_km)));
   const tableNode = rows.length
-    ? table([{ label: '#', num: true }, { label: t('col.pilot') }, { label: t('col.outings'), num: true }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }, { label: t('col.hike'), num: true }, { label: t('col.fly'), num: true }, { label: t('col.score'), num: true }], entries.map(rowOf))
+    ? table([{ label: t('col.pilot') }, { label: t('col.outings'), num: true }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }, { label: t('col.hike'), num: true }, { label: t('col.fly'), num: true }], entries.map(rowOf))
     : null;
 
   // Search a pilot by name: case and accents ignored, every word must be found in the name.
@@ -384,7 +379,6 @@ async function pageUser(token, id, opts = {}) {
     h('h1', null, pilotName(profile)),
     h('div', { class: 'stats' },
       stat(fmtInt(published.length), t('col.outings')),
-      stat(fmtInt(sum('score')), t('stat.totalScore'), true),
       stat(`${fmtInt(sum('dplus_m'))} m`, t('stat.dplus')),
       stat(`${fmtInt(sum('dminus_m'))} m`, t('stat.dminus')),
       stat(fmtKm(sum('walk_km')), t('stat.walk')),
@@ -552,10 +546,9 @@ async function analyse(file, out) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** « 2,300 points — 1,200 m climbed on foot and 1,100 m flown down. » */
+/** « 1,200 m climbed on foot and 1,100 m flown down. » */
 function scoreLine(o) {
-  return h('p', null, h('b', null, t('upload.points', { n: Math.round(o.score) })),
-    t('upload.verdictRest', { up: fmtInt(o.dplus_m), down: fmtInt(o.dminus_m) }));
+  return h('p', null, h('b', null, t('upload.verdictRest', { up: fmtInt(o.dplus_m), down: fmtInt(o.dminus_m) })));
 }
 
 /** Why the outing does not count and what to do: written by the engine (src/mbhf/advice.py), as on the server. */
@@ -584,7 +577,7 @@ async function analyseBatch(fileList, out) {
   } catch (_) { /* not essential: each file is then an outing of its own */ }
   const items = units.map((parts) => ({
     file: parts.length === 1 ? parts[0] : parts, parts, state: 'waiting', pv: null,
-    cells: { name: h('td', { class: 'wrap file-cell' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, t('batch.waiting')), score: h('td', { class: 'num' }), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
+    cells: { name: h('td', { class: 'wrap file-cell' }), title: h('td', { class: 'hide-narrow' }), result: h('td', { class: 'wrap' }, t('batch.waiting')), dplus: h('td', { class: 'num' }), dminus: h('td', { class: 'num' }), notes: h('div', { class: 'hint note-line' }) },
   }));
   for (const it of items) it.cells.name.append(h('div', null, it.parts.map((f) => f.name).join(' + ')), it.cells.notes);
   const set = (it, state, text, kind) => {
@@ -597,8 +590,8 @@ async function analyseBatch(fileList, out) {
   const publish = h('button', { class: 'primary', id: 'publish-all', disabled: true }, t('batch.publish'));
   const status = h('span', { class: 'hint', role: 'status' });
   const grid = table(
-    [{ label: t('batch.colFile') }, { label: t('col.outing'), cls: 'hide-narrow' }, { label: t('batch.colResult') }, { label: t('col.score'), num: true }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }],
-    items.map((it) => h('tr', null, it.cells.name, it.cells.title, it.cells.result, it.cells.score, it.cells.dplus, it.cells.dminus)));
+    [{ label: t('batch.colFile') }, { label: t('col.outing'), cls: 'hide-narrow' }, { label: t('batch.colResult') }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }],
+    items.map((it) => h('tr', null, it.cells.name, it.cells.title, it.cells.result, it.cells.dplus, it.cells.dminus)));
   out.replaceChildren(
     summary,
     h('label', { class: 'row', for: 'send-as-you-go' }, auto, ' ' + t('batch.auto')),
@@ -637,7 +630,7 @@ async function analyseBatch(fileList, out) {
       return it.hash;
     }));
     const sent = await api.alreadySent(hashes);
-    for (const it of items) if (sent.has(it.hash)) { set(it, 'duplicate', t('batch.duplicate'), 'warn-text'); it.cells.score.textContent = '–'; }
+    for (const it of items) if (sent.has(it.hash)) { set(it, 'duplicate', t('batch.duplicate'), 'warn-text'); }
   } catch (_) { /* not essential */ }
   const todo = items.filter((it) => it.state === 'waiting');
 
@@ -660,11 +653,9 @@ async function analyseBatch(fileList, out) {
         await sleep(1100);
         it.pv = previewRow(res, places);
         it.cells.title.textContent = it.pv.title;
-        it.cells.score.textContent = fmtInt(o.score);
         set(it, 'ready', t('batch.ready'), 'ok-text');
         if (auto.checked) await send(it);
       } else {
-        it.cells.score.textContent = '–';
         noteNoFlight(it.file, res);
         set(it, 'refused', t('batch.notCounted', { reason: refusalText(o) }), 'warn-text');
       }

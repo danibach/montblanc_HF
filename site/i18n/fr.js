@@ -8,7 +8,7 @@ export default {
   'account.help': 'Aide',
 
   'footer.public': 'Les traces publiées sont publiques : carte, profil et statistiques. Le fichier d’origine reste privé.',
-  'footer.sources': 'Les noms de lieux viennent d’OpenStreetMap et les altitudes du sol d’Open-Meteo (l’aperçu leur envoie quelques points du vol). Les scores sont automatiques : D+ à pied plus D− en vol, en mètres.',
+  'footer.sources': 'Les noms de lieux viennent d’OpenStreetMap et les altitudes du sol d’Open-Meteo (l’aperçu leur envoie quelques points du vol).',
   'footer.remove': 'Pour retirer une trace ou un compte : {mail} (ou utilisez les boutons de suppression).',
 
   'common.loading': 'Chargement…',
@@ -19,7 +19,6 @@ export default {
   'detail.takeoff': 'Décollage',
   'detail.landing': 'Atterrissage',
 
-  'stat.score': 'Score',
   'stat.dplus': 'D+ à pied',
   'stat.dminus': 'D− en vol',
   'stat.walk': 'Distance à pied',
@@ -43,7 +42,6 @@ export default {
   'col.dminus': 'D− (m)',
   'col.hike': 'Marche (km)',
   'col.fly': 'Vol (km)',
-  'col.score': 'Score',
   'col.status': 'Statut',
 
   'filter.allYears': 'Toutes les années',
@@ -72,7 +70,7 @@ export default {
 
   'page.ranking': 'Pilotes',
 
-  'rank.sub': 'Somme des scores de toutes les sorties. Score = D+ à pied + D− en vol (mètres).',
+  'rank.sub': 'Les pilotes et leurs sorties : D+ à pied, D− en vol et distances, pour une année ou depuis toujours.',
 
   'page.map': 'Carte des décollages',
 
@@ -97,7 +95,6 @@ export default {
 
   'list.noneUser': 'Aucune sortie publiée pour ces filtres.',
 
-  'stat.totalScore': 'Score total',
   'stat.totalFlight': 'Distance totale en vol',
 
   'name.choose': 'Choisissez le nom affiché à côté de vos sorties',
@@ -133,8 +130,7 @@ export default {
   'upload.original': 'Envoyez l’enregistrement tel que votre appareil ou votre application l’a sauvegardé. Ne le modifiez pas, ne le fusionnez pas et ne corrigez pas son altitude avec un outil de traces : les altitudes de vol doivent être celles mesurées, non ajustées au terrain. Ces traces sont refusées, sauf si vous marquez ensuite le vol à la main.',
   'upload.analysing': 'Analyse en cours…',
   'upload.tooBig': 'Ce fichier dépasse {mb} Mo. Exportez uniquement cette activité, pas toute une année.',
-  'upload.points': { one: '{n} point', other: '{n} points' },
-  'upload.verdictRest': ' — {up} m montés à pied et {down} m descendus en vol.',
+  'upload.verdictRest': '{up} m montés à pied et {down} m descendus en vol.',
   'upload.publish': 'Publier cette sortie',
   'upload.published': 'Publiée. Le serveur vérifie maintenant le résultat : le badge « Validation en attente » disparaît en quelques minutes une fois le résultat confirmé.',
   'upload.seeOuting': 'Voir votre sortie',
@@ -218,11 +214,10 @@ export default {
   'engine.installing': 'Installation du programme d’analyse…',
 
   'help.title': 'Aide',
-  'help.sub': 'Comment envoyer une trace, ce que signifient les colonnes et comment le score est calculé.',
+  'help.sub': 'Comment envoyer une trace, ce que signifient les colonnes et les règles d’une sortie.',
   'help.toc': 'Sur cette page',
   'help.tocUpload': 'Envoi',
   'help.tocColumns': 'Les colonnes',
-  'help.tocScore': 'Le score',
   'help.tocRules': 'Ce qui compte',
   'help.tocPages': 'Les pages',
   'help.up.h': 'Envoi',
@@ -230,7 +225,7 @@ export default {
   'help.up.files': 'Fichiers',
   'help.up.files.d': 'IGC, GPX, KML, TCX ou FIT, jusqu’à {mb} Mo chacun, avec horodatage et altitude. Une simple ligne KML n’a pas d’horodatage et est refusée.',
   'help.up.one': 'Un fichier',
-  'help.up.one.d': 'Choisissez-le, regardez l’aperçu (score, D+, D−, carte, profil, noms de lieux), puis appuyez sur Publier. Rien n’est public avant.',
+  'help.up.one.d': 'Choisissez-le, regardez l’aperçu (D+, D−, carte, profil, noms de lieux), puis appuyez sur Publier. Rien n’est public avant.',
   'help.up.several': 'Plusieurs fichiers à la fois',
   'help.up.several.d': 'Chacun est analysé à son tour. Par défaut, chaque sortie est publiée dès qu’elle est prête, donc rien n’est perdu si vous fermez la page ; décochez la case pour relire la liste d’abord et publier en une fois. Gardez la page ouverte jusqu’à la fin de la liste.',
   'help.up.multi': 'Une sortie en plusieurs fichiers',
@@ -251,27 +246,19 @@ export default {
   'help.col.dplus.d': 'Hauteur montée à pied, en mètres : la somme des montées, sur une altitude lissée sur environ une minute. Une baisse de moins de 15 m ne termine pas une montée, ce qui écarte le bruit du GPS. La montée après le dernier vol compte aussi (retour à la voiture, montée au bivouac) ; une montée abandonnée avant un trajet en véhicule, non.',
   'help.col.dminus.d': 'Hauteur perdue en vol, en mètres : pour chaque vol, l’altitude au décollage moins l’altitude à l’atterrissage. Les thermiques sont ignorés : seule la différence nette compte, donc monter dans un thermique n’ajoute rien.',
   'help.col.hike.d': 'Distance parcourue à pied, en kilomètres, sur toute la trace. Les trajets en véhicule (voiture, remontée, vélo) ne sont pas comptés.',
-  'help.col.fly.d': 'La distance libre FAI, en kilomètres : le plus long parcours volé d’un point de départ à une arrivée en passant par trois points de virage au plus, additionné sur tous les vols de la sortie. C’est la « Distance libre FAI » de la page d’une sortie. Elle ne fait pas partie du score.',
-  'help.col.score.d': 'D+ à pied plus D− en vol, en mètres (voir plus bas).',
+  'help.col.fly.d': 'La distance libre FAI, en kilomètres : le plus long parcours volé d’un point de départ à une arrivée en passant par trois points de virage au plus, additionné sur tous les vols de la sortie. C’est la « Distance libre FAI » de la page d’une sortie.',
   'help.col.outings.d': 'Dans Pilotes : le nombre de sorties publiées du pilote. Les totaux suivent les filtres d’année et de pays.',
-  'help.score.h': 'Le score',
-  'help.score.formula': 'Score = D+ à pied + D− en vol',
-  'help.score.intro': 'Le score mesure la hauteur verticale qu’une sortie couvre, par son propre effort et par son vol, avec une formule que chacun peut refaire. La distance n’entre pas dans le score : le but n’est pas de voler le plus loin.',
-  'help.score.ex': 'Une sortie avec {a} m de D+ et {b} m de D− vaut {c}.',
-  'help.score.one': 'Plusieurs marches et vols dans une même trace forment une seule aventure : le D+ et le D− s’additionnent.',
-  'help.score.total': 'Le total d’un pilote (page Pilotes) est la somme des scores de toutes ses sorties publiées, pour une année ou depuis toujours. Toutes les sorties comptent, pas seulement les meilleures.',
-  'help.score.same': 'Le score est calculé par le même code dans votre navigateur et sur le serveur, donc l’aperçu et le résultat final concordent.',
   'help.rules.h': 'Ce qui compte comme une sortie',
   'help.rules.climb': 'Au moins un vol et au moins 200 m de montée à pied, tous deux dans la trace enregistrée, dans n’importe quel ordre (par exemple un vol suivi d’une marche jusqu’au décollage suivant compte). Les montées par moyen motorisé, comme une remontée mécanique ou un véhicule, ne comptent pas.',
   'help.rules.flight': 'Un vol doit perdre au moins 30 m de hauteur et planer avec une finesse d’au moins 4 (une aile de speed-riding 4 à 5, un parapente 7 à 9). Le décollage n’a pas à être au sommet.',
   'help.rules.ground': 'Une descente plus lente qu’environ 18 km/h, ou qui suit le sol (ski, course, vélo), n’est pas un vol. Les traces sont comparées à l’altitude du sol (Open-Meteo).',
   'help.rules.zero': 'Les altitudes enregistrées à 0 m sont ignorées, avec un avertissement : un récepteur sans altitude compterait sinon des milliers de mètres de montée.',
   'help.rules.gap': 'Une interruption d’enregistrement de plus de 10 minutes est jugée marchée ou roulée, d’après ce qui a été enregistré autour, le temps écoulé et ce qu’un marcheur peut faire. Si elle a probablement été marchée, elle compte ; si c’était probablement un trajet, rien n’est compté sur cette portion. Un cas douteux est tranché quand même et signalé « à vérifier ».',
-  'help.rules.rides': 'Les trajets en véhicule sont repérés et laissés de côté dans le score.',
+  'help.rules.rides': 'Les trajets en véhicule sont repérés et laissés de côté dans le D+ et les distances.',
   'help.pages.h': 'Les pages',
   'help.pages.home': 'Votre page : vos totaux et vos sorties, avec des filtres par année et par pays.',
   'help.pages.all': 'Les sorties de tout le monde, avec les mêmes filtres et tris.',
-  'help.pages.ranking': 'Le classement par score total, avec les sorties, le D+, le D− et les distances à pied et en vol de chaque pilote ; recherche d’un pilote par son nom.',
+  'help.pages.ranking': 'Tous les pilotes, par nom, avec leurs sorties, le D+, le D− et les distances à pied et en vol ; recherche d’un pilote par son nom.',
   'help.pages.map': 'Les décollages et les chemins de montée à pied. De loin, une carte de chaleur des décollages ; de près, des montées. Cliquez sur un décollage pour voir les itinéraires qui y mènent et leurs sorties ; survolez ou cliquez une ligne d’itinéraire pour la mettre en évidence.',
   'help.pages.upload': 'Envoyer une ou plusieurs traces (voir plus haut).',
   'help.credits': 'Les noms de lieux viennent d’OpenStreetMap, et le registre des décollages des données ouvertes de la FFVL (Licence Ouverte 2.0) et d’OpenStreetMap (ODbL).',
