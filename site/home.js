@@ -208,9 +208,11 @@ export function buildHome({ latest, mapRows, sites, routes, flown, ffvl = [], lo
         if (!pieces.length) continue;
         const map = L.map(box, { ...STILL, attributionControl: false });
         simpleBackground(L, map);
+        // the climb in full green on a white casing; the flight softer: a plain light orange line (Sarah, 30 October 2026)
         for (const p of pieces) {
-          L.polyline(p.line, { color: '#fff', weight: 5, opacity: 0.85, interactive: false }).addTo(map);
-          L.polyline(p.line, { color: MODE_COLOUR[p.mode], weight: 2.5, dashArray: p.mode === 1 ? '6 5' : null, interactive: false }).addTo(map);
+          const flight = p.mode === 1;
+          if (!flight) L.polyline(p.line, { color: '#fff', weight: 5, opacity: 0.85, interactive: false }).addTo(map);
+          L.polyline(p.line, { color: MODE_COLOUR[p.mode], weight: flight ? 2 : 2.5, opacity: flight ? 0.6 : 1, interactive: false }).addTo(map);
         }
         map.fitBounds(L.latLngBounds(pieces.flatMap((p) => p.line)), { padding: [14, 14] });
       }

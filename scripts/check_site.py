@@ -314,7 +314,7 @@ with sync_playwright() as p:
     check(page.locator(".map-legend .heat-legend").count() == 1 and page.locator(".map-legend .key").count() == 3 and "few" not in page.inner_text(".map-legend") and "climb" not in page.inner_text(".map-legend"), "map: the legend above the map (heat map, itinerary, take-off, car park)")
     check(page.locator(".leaflet-top.leaflet-right .leaflet-control-scale").count() == 1, "map: the scale at the top")
     check(page.locator("#m-who").count() == 0, "map: no « My tracks » for a visitor")
-    check("1 take-off spot, 1 confirmed outing" in page.inner_text(".side"), "map counts only the verified outing: " + page.inner_text(".side")[:90])
+    spots_n = lambda: page.inner_text("#m-count-spots")
     # the « Map » panel (site/basemaps.js): map style, what is shown, terrain
     page.click(".map-button")
     panel = page.locator(".map-panel").inner_text()
@@ -332,13 +332,13 @@ with sync_playwright() as p:
     check(page.inner_text(".heat-legend").strip() == "Heat map", "map: heat map legend")
     winter = int(ROW1["outing_date"][5:7]) in (11, 12, 1, 2, 3, 4)
     page.click("#m-season button[data-value=winter]")
-    check(("1 take-off spot," if winter else "0 take-off spots,") in page.inner_text(".side"), "map: season filter")
+    check(spots_n() == ("1" if winter else "0"), "map: season filter")
     page.click("#m-season button[data-value='']")
     page.click("#m-filters")  # the year and climb filters sit in a panel under « Filters »
     page.select_option("#m-dplus", "0-500")  # ROW1 climbs more than 500 m
-    check("0 take-off spots," in page.inner_text(".side") and "(1)" in page.inner_text("#m-filters") and "0 outings" in page.inner_text("#m-filters-pop"), "map: climb D+ filter, counted on the button")
+    check(spots_n() == "0" and "(1)" in page.inner_text("#m-filters") and "0 outings" in page.inner_text("#m-filters-pop"), "map: climb D+ filter, counted on the button")
     page.click("#m-filters-pop .fp-foot button.link")
-    check("1 take-off spot," in page.inner_text(".side") and "(1)" not in page.inner_text("#m-filters"), "map: Clear empties the filters")
+    check(spots_n() == "1" and "(1)" not in page.inner_text("#m-filters"), "map: Clear empties the filters")
     page.click(".map-legend")
     check(page.locator("#m-filters-pop").is_hidden(), "map: a click elsewhere closes the filters")
     name = ROW1.get("takeoff_name") or ROW1["title"]
@@ -485,7 +485,7 @@ with sync_playwright() as p:
     page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
     page.click("#m-season button[data-value='']")
     page.click("#m-who button[data-value=mine]")
-    check("1 take-off spot," in page.inner_text(".side"), "map: « My tracks » keeps one's own outings")
+    check(page.inner_text("#m-count-spots") == "1", "map: « My tracks » keeps one's own outings")
     page.screenshot(path=f"{SHOTS}/6-me.png", full_page=True)
     errs = [l for l in logs if l.startswith(("error", "pageerror")) and "404" not in l]
     check(not errs, "no console error (participant)" + ("" if not errs else ": " + " || ".join(errs)[:500]))

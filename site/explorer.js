@@ -430,12 +430,52 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     request += 1;
     if (climbs) { climbs.eachLayer((l) => l.closeTooltip()); climbs.clearLayers(); }
     element.querySelector('.explorer').classList.remove('has-spot');
-    side.replaceChildren(
-      h('h2', null, t('map.takeoffs')),
-      h('p', { class: 'hint' }, t('map.counts', { spots: plural(spots.length, 'unit.takeoffSpot'), outings: plural(shown.length, 'unit.confirmedOuting') })),
-      h('p', { class: 'hint' }, t('map.help1')),
-      h('p', { class: 'hint' }, t('map.help2', { zoom: String(ROUTES_ZOOM) })));
+    renderOverview();
     if (markers) draw();
+  }
+
+  // the panel when no take-off is open (Sarah, 30 October 2026): three numbers, then the flying sectors in view, the
+  // busiest first, each unfolding on its take-offs. It follows the map as it moves; the sectors left open stay open.
+  const openSectors = new Set();
+  let firstOverview = true;
+  function renderOverview() {
+    const siteIds = new Set(spots.flatMap((sp) => [...sp.siteIds]));
+    const tile = (id, n, key) => h('div', { class: 'ov-tile' }, h('b', { id }, fmtInt(n)), h('span', null, t(key, { n })));
+    let view = null;
+    try { view = map && map.getBounds(); } catch (_) { /* no view yet: every take-off counts */ }
+    const inView = spots.filter((sp) => !view || view.contains([sp.lat, sp.lon]));
+    const bySector = new Map();
+    for (const sp of inView) {
+      const name = sectorOf(sp.lat, sp.lon) || '';
+      bySector.set(name, [...(bySector.get(name) || []), sp]);
+    }
+    const outingsOf = (list) => list.reduce((n, sp) => n + sp.outings.length, 0);
+    const sectors = [...bySector.entries()].sort((a, b) => (!a[0]) - (!b[0]) || outingsOf(b[1]) - outingsOf(a[1]));
+    if (firstOverview && sectors.length) { openSectors.add(sectors[0][0]); firstOverview = false; }
+    const sectorBox = ([name, list]) => {
+      const box = h('details', { class: 'ov-sector', open: openSectors.has(name) },
+        h('summary', null,
+          h('span', { class: 'ov-name' }, h('b', null, name || t('sector.otherTakeoffs')),
+            h('span', { class: 'hint' }, `${plural(list.length, 'unit.takeoff')} · ${plural(outingsOf(list), 'unit.outing')}`)),
+          h('button', { type: 'button', class: 'link ov-frame', title: t('map.frameSector'), 'aria-label': t('map.frameSector'), onclick: (ev) => {
+            ev.preventDefault();
+            map.fitBounds(L.latLngBounds(list.map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 13 });
+          } }, '⌖')),
+        list.slice().sort((a, b) => b.outings.length - a.outings.length).map((sp) =>
+          h('button', { type: 'button', class: 'ov-spot', onclick: () => openSpot(sp) },
+            h('span', { class: 'ov-count' }, fmtInt(sp.outings.length)),
+            h('span', null, h('b', null, sp.name), sp.alt != null ? h('span', { class: 'hint' }, ` · ${fmtInt(sp.alt)} m`) : null))));
+      box.addEventListener('toggle', () => { if (box.open) openSectors.add(name); else openSectors.delete(name); });
+      return box;
+    };
+    side.replaceChildren(
+      h('div', { class: 'ov-tiles' },
+        tile('m-count-spots', spots.length, 'map.tileTakeoffs'),
+        tile('m-count-routes', routes.filter((r) => siteIds.has(r.site_id)).length, 'map.tileRoutes'),
+        tile('m-count-outings', shown.length, 'map.tileOutings')),
+      h('p', { class: 'hint' }, t('map.overviewHint')),
+      h('h2', { class: 'ov-title' }, t('map.sectorsInView')),
+      ...(sectors.length ? sectors.map(sectorBox) : [h('p', { class: 'hint' }, t('map.noneInView'))]));
   }
 
   function icon(n, cls) {
@@ -941,6 +981,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     map.on('overlayadd overlayremove', (e) => { if (e.layer === heat) legendBox.hidden = e.type === 'overlayremove'; });
 
     map.on('zoomend', () => { pickHeat(); draw(); });
+    map.on('moveend', () => { if (!current) renderOverview(); }); // the sectors in view follow the map
     map.on('resize', pickHeat);
     applyFilters();
     if (spots.length) map.fitBounds(L.latLngBounds(spots.map((sp) => [sp.lat, sp.lon])), { padding: [40, 40], maxZoom: 11 });

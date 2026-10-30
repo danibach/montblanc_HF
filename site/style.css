@@ -453,3 +453,24 @@ body.map-full-open { overflow: hidden; }
 .spot-more > summary::before { content: '+'; font-weight: 600; }
 .spot-more[open] > summary::before { content: '−'; }
 .spot-more[open] > summary { margin-bottom: .5rem; }
+/* the map's panel when no take-off is open: three numbers, then the flying sectors in view and their take-offs */
+.ov-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin-bottom: .6rem; }
+.ov-tile { background: var(--card-2); border-radius: 10px; padding: .45rem .6rem; display: flex; flex-direction: column; }
+.ov-tile b { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.ov-tile span { color: var(--muted); font-size: .78rem; }
+.side .ov-title { font-size: .95rem; margin: .9rem 0 .2rem; }
+.ov-sector { border-top: 1px solid var(--card-2); }
+.ov-sector > summary { display: flex; align-items: center; gap: .5rem; padding: .55rem 0; cursor: pointer; list-style: none; }
+.ov-sector > summary::-webkit-details-marker { display: none; }
+.ov-sector > summary::before { content: '›'; color: var(--muted); font-size: 1.1rem; transition: transform .15s; }
+.ov-sector[open] > summary::before { transform: rotate(90deg); }
+.ov-name { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ov-name b { font-weight: 600; }
+.ov-name .hint { font-size: .8rem; }
+.ov-frame { font-size: 1.1rem; text-decoration: none; color: var(--muted); padding: 0 .2rem; }
+.ov-frame:hover { color: var(--ink); }
+.ov-spot { display: flex; align-items: center; gap: .6rem; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: .35rem .3rem .35rem 1.2rem; font-size: .9rem; }
+.ov-spot:hover { background: var(--hover); }
+.ov-spot b { font-weight: 500; }
+.ov-count { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--orange); color: #fff; display: grid; place-items: center; font-size: .72rem; font-weight: 600; }
+.ov-sector[open] { padding-bottom: .4rem; }
