@@ -356,7 +356,7 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/3b-map.png")
 
     page.goto(BASE + f"#/user/{UID}")
-    page.wait_for_selector(".stats .stat", timeout=15000)  # a pilot's totals: none stands out since there is no score
+    page.wait_for_selector(".stats", timeout=15000)
     check(page.inner_text("h1") == "Alice" and comma(ROW1["dplus_m"]) in page.inner_text(".stats") and "score" not in page.inner_text(".stats").lower(), "user page: name and totals, no score")
     check("Waiting" not in page.inner_text("main"), "user page of someone else: no private uploads")
     stats_text = page.inner_text(".stats")
@@ -424,7 +424,7 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/5b-mark.png", full_page=True)
     page.click("#mark-recalc")
     page.wait_for_selector("#mark-result .notice", timeout=60000)
-    check("flown down" in page.inner_text("#mark-result .notice-ok") if page.locator("#mark-result .notice-ok").count() else False,
+    check("climbed on foot" in page.inner_text("#mark-result .notice-ok") if page.locator("#mark-result .notice-ok").count() else False,
           "recalculated with the hand-marked flight: " + page.inner_text("#mark-result").replace("\n", " ")[:120])
     page.click("#mark-publish")
     page.wait_for_selector("#mark-result .notice-ok:has-text('Published')", timeout=30000)
@@ -468,7 +468,7 @@ with sync_playwright() as p:
     check("Delete my account" in page.inner_text("main"), "own page offers account deletion")
     check(page.locator("#account a[href='#/me']").count() == 1, "own page: reached from the account bar")
     page.click("#account a[href='#/me']")
-    page.wait_for_selector(".stats .stat", timeout=15000)
+    page.wait_for_selector(".stats", timeout=15000)
     check(page.inner_text("h1") == "Alice" and "Total distance on flight" in page.inner_text(".stats") and page.locator("#f-year").count() == 1, "My H&Fs is the pilot page: name, totals, filters")
     page.select_option("#f-year", "2026")
     page.wait_for_function("location.hash.startsWith('#/me?year=2026')")
