@@ -354,9 +354,12 @@ body.map-full-open { overflow: hidden; }
 .tag { font-size: .7rem; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: #a0745a; }
 /* home: the dawn over the ridges, the question and the search */
 .warm-hero { position: relative; border-radius: 18px; overflow: hidden; }
-.warm-sky { display: block; width: 100%; height: 420px; }
-.warm-text { position: absolute; left: clamp(18px, 4vw, 44px); right: 18px; top: clamp(24px, 5vw, 48px); max-width: 30rem; }
-.hero-sectors { margin-top: 1rem; }
+.warm-sky { display: block; width: 100%; height: 370px; }
+.warm-text { position: absolute; left: clamp(18px, 4vw, 44px); right: clamp(18px, 4vw, 44px); top: clamp(24px, 5vw, 48px); }
+.warm-text > h1, .warm-text > .claim, .warm-text > .warm-search { max-width: 30rem; }
+.hero-sectors { margin-top: 1.4rem; }
+.hero-sectors .chips { gap: .6rem .7rem; }
+.hero-sectors .chip { padding: .35rem .9rem; background: rgba(255, 255, 255, .92); }
 .hero-sectors > .hint { display: block; font-size: .8rem; color: var(--ink-2); margin-bottom: .35rem; }
 .warm-text h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -.02em; line-height: 1.08; margin: 0; }
 .claim { color: var(--ink-2); margin: .7rem 0 0; }
