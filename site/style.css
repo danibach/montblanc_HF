@@ -45,7 +45,7 @@ header.site { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.
 .acc-head { display: flex; align-items: center; gap: .65rem; padding: .55rem .6rem; border-radius: 10px; color: var(--ink) !important; text-decoration: none; }
 .acc-head:hover { background: var(--card-2); }
 .acc-head .ini { margin: 0; width: 34px; height: 34px; font-size: .8rem; background: var(--orange-bg); color: var(--orange-dark); vertical-align: 0; flex: none; }
-.acc-head span { display: flex; flex-direction: column; line-height: 1.25; }
+.acc-head > span:not(.ini) { display: flex; flex-direction: column; line-height: 1.25; }
 .acc-head small { color: var(--muted); font-size: .8rem; }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .55rem .6rem; margin-top: .3rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
 .menu-langs { display: inline-flex; background: var(--card-2); border-radius: 999px; padding: 2px; }
