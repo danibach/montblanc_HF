@@ -433,6 +433,7 @@ export default {
   'legend.heat': 'Carte de chaleur',
   'legend.takeoff': 'Déco (H&F Tracks)',
   'legend.ffvl': 'Déco FFVL',
+  'legend.ffvlLanding': 'Atterro FFVL',
   'legend.parking': 'Parking',
   'spot.more': 'Plus d’infos sur le déco',
   'home.title': 'Où allons-nous voler ?',

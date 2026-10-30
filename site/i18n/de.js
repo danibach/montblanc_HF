@@ -433,6 +433,7 @@ export default {
   'legend.heat': 'Wärmekarte',
   'legend.takeoff': 'Startplatz (H&F Tracks)',
   'legend.ffvl': 'FFVL-Startplatz',
+  'legend.ffvlLanding': 'FFVL-Landeplatz',
   'legend.parking': 'Parkplatz',
   'spot.more': 'Mehr zu diesem Startplatz',
   'home.title': 'Wo fliegen wir heute?',

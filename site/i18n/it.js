@@ -433,6 +433,7 @@ export default {
   'legend.heat': 'Mappa di calore',
   'legend.takeoff': 'Decollo (H&F Tracks)',
   'legend.ffvl': 'Decollo FFVL',
+  'legend.ffvlLanding': 'Atterraggio FFVL',
   'legend.parking': 'Parcheggio',
   'spot.more': 'Altre informazioni sul decollo',
   'home.title': 'Dove voliamo?',

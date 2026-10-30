@@ -434,6 +434,7 @@ export default {
   'legend.heat': 'Heat map',
   'legend.takeoff': 'Take-off (H&F Tracks)',
   'legend.ffvl': 'FFVL take-off',
+  'legend.ffvlLanding': 'FFVL landing',
   'legend.parking': 'Car park',
   'spot.more': 'More about this take-off',
   'home.title': 'Where shall we fly?',

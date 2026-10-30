@@ -931,12 +931,13 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
     // the legend above the map: the heat map (shown with it), the itineraries, the climbs, the take-offs
     // (Sarah, 30 October 2026: one word for the heat, no « few / many », no pilot's climb: they are only drawn on demand)
-    const tri = (cls) => s('svg', { class: `k-tri ${cls}`, viewBox: '0 0 12 11', 'aria-hidden': 'true' }, s('path', { d: 'M6 1 L11 10 L1 10Z' }));
+    const tri = (cls, down) => s('svg', { class: `k-tri ${cls}`, viewBox: '0 0 12 11', 'aria-hidden': 'true' }, s('path', { d: down ? 'M1 1 L11 1 L6 10Z' : 'M6 1 L11 10 L1 10Z' }));
     const legendBox = h('div', { class: 'heat-legend' }, h('i', { class: 'heat-bar' }), t('legend.heat'));
     legendRow.replaceChildren(legendBox,
       h('span', { class: 'key' }, h('i', { class: 'k-route' }), t('legend.route')),
       h('span', { class: 'key' }, h('b', { class: 'k-spot' }), t('legend.takeoff')),
       ffvl.sites.length ? h('span', { class: 'key' }, tri('ffvl'), t('legend.ffvl')) : null,
+      ffvl.sites.length ? h('span', { class: 'key' }, tri('ffvl', true), t('legend.ffvlLanding')) : null,
       h('span', { class: 'key' }, h('b', { class: 'k-parking' }, 'P'), t('legend.parking')));
     map.on('overlayadd overlayremove', (e) => { if (e.layer === heat) legendBox.hidden = e.type === 'overlayremove'; });
 
