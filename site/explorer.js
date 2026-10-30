@@ -6,7 +6,7 @@ import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
 import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
 import { h, s, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle, placeName } from './util.js';
-import { t, tr } from './i18n.js';
+import { fmtDay, t, tr } from './i18n.js';
 import { card as ffvlCard, ffvlLayer, windLabel } from './ffvl.js';
 import { scaleAndRuler } from './ruler.js';
 
@@ -348,6 +348,7 @@ function inBand(value, band) {
 const fold = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const squash = (text) => fold(text).replace(/[\s'’-]+/g, '');
 const hasText = (text, query) => fold(text).includes(fold(query)) || squash(text).includes(squash(query));
+const sameText = (a, b) => squash(a) === squash(b);
 
 function season(o) {
   const month = Number(String(o.outing_date || '').slice(5, 7));
@@ -733,15 +734,19 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
     function item(o) {
       const climb = climbOfId.get(o.id);
+      // the take-off's name is the panel's title: an outing that went there and nowhere else is named by its date and
+      // pilot; one that went elsewhere too keeps its own title (Sarah, 30 October 2026)
+      const title = outingTitle(o);
+      const own = title && !sameText(title, sp.name);
       const li = h('li', { 'data-id': o.id, tabindex: '0', class: o.id === selected ? 'on' : null },
-        h('b', null, outingTitle(o)),
-        h('span', { class: 'hint' }, `${o.pilot || t('pilot.anonymous')} · ${fmtDate(o.outing_date)}`),
+        own ? h('b', null, title) : null,
+        h(own ? 'span' : 'b', { class: own ? 'hint' : null }, `${fmtDay(o.outing_date) || fmtDate(o.outing_date)} · ${o.pilot || t('pilot.anonymous')}`),
         h('span', { class: 'nums' },
           h('span', { title: climb && climb.dplus_m != null ? t('item.dplusClimb') : t('stat.dplus') }, `↗ ${fmtInt(climbDplus(o, climb))} m`),
           h('span', { title: t('item.distance') }, climb ? fmtKm(climb.km) : fmtKm(o.walk_km)),
-          h('span', { title: t('item.time') }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : '')),
-        climb ? null : h('span', { class: 'hint' }, t('item.noClimb')),
-        h('a', { href: `#/outing/${o.id}` }, t('item.open')));
+          h('span', { title: t('item.time') }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : ''),
+          h('a', { class: 'open', href: `#/outing/${o.id}`, 'aria-label': t('item.open') }, t('item.openShort'))),
+        climb ? null : h('span', { class: 'hint' }, t('item.noClimb')));
       li.addEventListener('mouseenter', () => restyle(o.id));
       li.addEventListener('mouseleave', () => restyle(null));
       li.addEventListener('focus', () => restyle(o.id));

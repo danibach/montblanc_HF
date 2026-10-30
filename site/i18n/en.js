@@ -282,6 +282,7 @@ export default {
   'item.time': 'Time of the climb',
   'item.noClimb': 'No climb track to draw.',
   'item.open': 'Open the outing →',
+  'item.openShort': 'Open →',
 
   'route.from': 'From {place}',
   'route.via': 'via {place}',
@@ -299,7 +300,7 @@ export default {
   'sort.aria': 'Sort the outings',
   'sort.label': 'Sort',
 
-  'status.byRoute': { one: '{n} way up to this take-off. Each line runs down the middle of its outings\' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.', other: '{n} ways up to this take-off, each in its own colour. Each line runs down the middle of its outings\' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.' },
+  'status.byRoute': { one: '{n} itinerary · click it to see it on the map.', other: '{n} itineraries · click one to see it on the map.' },
   'status.crowded': { one: '{n} climb: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.', other: '{n} climbs: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.' },
   'status.hover': 'Hover an outing to light its climb; click it to keep it lit.',
 
