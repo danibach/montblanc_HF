@@ -271,7 +271,7 @@ with sync_playwright() as p:
     check(latest.count() == 1, "home: the latest outing, only the verified one (%d)" % latest.count())
     check("object" not in latest.first.inner_text().lower(), "home: a latest outing's card shows only its pilot, title and numbers")
     page.click("#nav-more summary")
-    check(page.locator("#nav-more a[href='#/all']").is_visible() and page.locator("#nav-more a[href='#/ranking']").is_visible(), "menu: Explore opens on All outings and Pilots")
+    check(page.locator("#nav-more a[href='#/all']").is_visible() and page.locator("#nav-more a[href='#/ranking']").count() == 0, "menu: Explore opens on All outings; no Pilots for now")
     page.click("#nav-more summary")
     word = (ROW1.get("takeoff_name") or ROW1["title"])[:4]
     page.fill(".warm-search input", word)

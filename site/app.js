@@ -4,7 +4,8 @@
 //   #/all              All: the outings of everyone (filter by year and country)
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
-//   #/ranking          the pilots and their totals (by year or all time); no ranking: H&F Tracks is a library of outings
+//   #/ranking          the pilots and their totals (by year or all time); no ranking: H&F Tracks is a library of outings.
+//                      Out of the menu for now (Sarah, 30 October 2026): the community comes later
 //   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
 //   #/mark             mark the flights of a refused track by hand, on a map (opened from the Upload page)

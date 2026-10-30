@@ -193,7 +193,6 @@ export default {
   'lang.label': 'Sprache',
 
   'nav.label': 'Hauptmenü',
-  'nav.ranking': 'Piloten',
   'nav.map': 'Karte',
 
   'api.requestFailed': 'Anfrage fehlgeschlagen',

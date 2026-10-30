@@ -194,7 +194,6 @@ export default {
   'lang.label': 'Language',
 
   'nav.label': 'Main',
-  'nav.ranking': 'Pilots',
   'nav.map': 'Map',
 
   'api.requestFailed': 'Request failed',

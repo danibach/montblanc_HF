@@ -193,7 +193,6 @@ export default {
   'lang.label': 'Langue',
 
   'nav.label': 'Principal',
-  'nav.ranking': 'Pilotes',
   'nav.map': 'Carte',
 
   'api.requestFailed': 'La requête a échoué',
