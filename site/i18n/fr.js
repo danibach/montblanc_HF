@@ -282,6 +282,8 @@ export default {
   'item.noClimb': 'Aucune trace de montée à dessiner.',
   'item.open': 'Ouvrir la sortie →',
   'item.openShort': 'Ouvrir →',
+  'item.named': 'Sortie : {title}',
+  'spot.kind': 'Décollage',
 
   'route.from': 'Depuis {place}',
   'route.via': 'via {place}',

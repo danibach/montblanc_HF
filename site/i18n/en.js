@@ -283,6 +283,8 @@ export default {
   'item.noClimb': 'No climb track to draw.',
   'item.open': 'Open the outing →',
   'item.openShort': 'Open →',
+  'item.named': 'Outing: {title}',
+  'spot.kind': 'Take-off',
 
   'route.from': 'From {place}',
   'route.via': 'via {place}',

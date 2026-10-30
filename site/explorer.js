@@ -668,6 +668,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     side.replaceChildren(
       h('div', { class: 'side-head' },
         h('div', null,
+          // the panel is a take-off's; an outing below is named after its summit (Sarah, 30 October 2026)
+          h('span', { class: 'side-kind' }, t('spot.kind')),
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, [sectorOf(sp.lat, sp.lon), sp.alt != null ? t('search.takeoffAt', { alt: fmtInt(sp.alt) }) : null].filter(Boolean).join(' · ')),
           h('p', { class: 'hint' }, [plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot'), windsOf(sp)].filter(Boolean).join(' · '))),
@@ -739,7 +741,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       const title = outingTitle(o);
       const own = title && !sameText(title, sp.name);
       const li = h('li', { 'data-id': o.id, tabindex: '0', class: o.id === selected ? 'on' : null },
-        own ? h('b', null, title) : null,
+        own ? h('b', null, t('item.named', { title })) : null,
         h(own ? 'span' : 'b', { class: own ? 'hint' : null }, `${fmtDay(o.outing_date) || fmtDate(o.outing_date)} · ${o.pilot || t('pilot.anonymous')}`),
         h('span', { class: 'nums' },
           h('span', { title: climb && climb.dplus_m != null ? t('item.dplusClimb') : t('stat.dplus') }, `↗ ${fmtInt(climbDplus(o, climb))} m`),

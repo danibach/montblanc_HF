@@ -282,6 +282,8 @@ export default {
   'item.noClimb': 'Kein Aufstiegstrack zum Zeichnen.',
   'item.open': 'Tour öffnen →',
   'item.openShort': 'Öffnen →',
+  'item.named': 'Tour: {title}',
+  'spot.kind': 'Startplatz',
 
   'route.from': 'Ab {place}',
   'route.via': 'via {place}',

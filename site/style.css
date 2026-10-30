@@ -124,6 +124,7 @@ body.wide main { max-width: none; }
 .out-list .nums { display: flex; gap: .9rem; font-variant-numeric: tabular-nums; font-weight: 600; }
 .out-list a { font-size: .85rem; align-self: start; }
 .out-list .nums .open { margin-left: auto; font-weight: 400; }
+.side-kind { display: block; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 /* map page: search field with its results, and the climb filters folded under the main filters */
 .field.search { position: relative; flex: 1 1 16rem; max-width: 26rem; }
 .field.search input { width: 100%; }
