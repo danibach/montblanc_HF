@@ -1,76 +1,67 @@
-// The Help page: how to upload, what the columns of the lists mean, the rules of an outing.
-// The texts are in site/i18n/<language>.js (help.*): keep them in step with the rules in src/mbhf (the engine) and
-// with the Upload page.
+// The Help page, as questions and answers (Sarah, 30 October 2026): a list of topics beside them, and a search
+// through all the questions. The texts are in site/i18n/<language>.js (help.<topic>.<n>.q and .a): keep them in step
+// with the rules in src/mbhf (the engine), with the Upload page and with what the map shows.
 
 import { CONFIG } from './config.js';
 import { t } from './i18n.js';
 import { h } from './util.js';
 
-const dl = (items) => h('dl', { class: 'help-terms' },
-  items.map(([term, text]) => [h('dt', null, term), h('dd', null, text)]));
+// the topics, and the number of questions of each
+const TOPICS = [['start', 4], ['upload', 6], ['refused', 5], ['numbers', 5], ['map', 6], ['privacy', 4]];
 
-// The address is the router's (#/…), so a link to a place in the page cannot be a plain "#anchor": scroll instead.
-const jump = (id, text) => h('a', { href: `#/help`, onclick: (ev) => {
-  ev.preventDefault();
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-} }, text);
+const fold = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function buildHelp() {
-  const limits = { day: 20, first: 1000 };   // uploads per day, and per day in the first two weeks of an account
-  return h('div', { class: 'help' },
+  // what the answers may quote: the size of a file, and the uploads per day (in the first two weeks of an account)
+  const values = { mb: CONFIG.MAX_FILE_MB, day: 20, first: 1000 };
+  const topics = TOPICS.map(([id, n]) => {
+    const items = Array.from({ length: n }, (_, i) => h('details', null,
+      h('summary', null, t(`help.${id}.${i + 1}.q`)),
+      h('p', null, t(`help.${id}.${i + 1}.a`, values))));
+    return { id, items, section: h('section', { id: `help-${id}` }, h('h2', null, t(`help.${id}.h`)), items) };
+  });
+  const buttons = topics.map(({ id }) => h('button', { type: 'button', 'data-topic': id, 'aria-pressed': 'false', onclick: () => {
+    search.value = '';
+    show(id);
+  } }, t(`help.${id}.h`)));
+  const none = h('p', { class: 'hint', hidden: true }, t('help.none'));
+
+  // one topic, or every question the search finds (opened)
+  const show = (id) => {
+    for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.topic === id));
+    for (const tp of topics) {
+      tp.section.hidden = tp.id !== id;
+      for (const d of tp.items) d.hidden = false;
+    }
+    none.hidden = true;
+  };
+  const search = h('input', { type: 'search', id: 'help-search', placeholder: t('help.search'), 'aria-label': t('help.search'), autocomplete: 'off' });
+  search.addEventListener('input', () => {
+    const words = fold(search.value).split(/\s+/).filter(Boolean);
+    if (!words.length) { show(topics[0].id); return; }
+    for (const b of buttons) b.setAttribute('aria-pressed', 'false');
+    let any = false;
+    for (const tp of topics) {
+      let hit = false;
+      for (const d of tp.items) {
+        const ok = words.every((w) => fold(d.textContent).includes(w));
+        d.hidden = !ok;
+        d.open = ok;
+        hit = hit || ok;
+      }
+      tp.section.hidden = !hit;
+      any = any || hit;
+    }
+    none.hidden = any;
+  });
+
+  const page = h('div', null,
     h('h1', null, t('help.title')),
     h('p', { class: 'sub' }, t('help.sub')),
-    h('nav', { class: 'help-toc', 'aria-label': t('help.toc') },
-      jump('help-upload', t('help.tocUpload')), jump('help-columns', t('help.tocColumns')),
-      jump('help-rules', t('help.tocRules')),
-      jump('help-pages', t('help.tocPages'))),
-
-    h('section', { id: 'help-upload' },
-      h('h2', null, t('help.up.h')),
-      h('p', null, t('help.up.intro')),
-      dl([
-        [t('help.up.files'), t('help.up.files.d', { mb: CONFIG.MAX_FILE_MB })],
-        [t('help.up.one'), t('help.up.one.d')],
-        [t('help.up.several'), t('help.up.several.d')],
-        [t('help.up.multi'), t('help.up.multi.d')],
-        [t('help.up.original'), t('help.up.original.d')],
-        [t('help.up.limit'), t('help.up.limit.d', limits)],
-        [t('help.up.dup'), t('help.up.dup.d')],
-        [t('status.pending'), t('help.up.pending.d')],
-        [t('help.up.refused'), t('help.up.refused.d')],
-        [t('help.up.privacy'), t('help.up.privacy.d')],
-      ])),
-
-    h('section', { id: 'help-columns' },
-      h('h2', null, t('help.col.h')),
-      h('p', null, t('help.col.intro')),
-      dl([
-        [t('col.dplus'), t('help.col.dplus.d')],
-        [t('col.dminus'), t('help.col.dminus.d')],
-        [t('col.hike'), t('help.col.hike.d')],
-        [t('col.fly'), t('help.col.fly.d')],
-        [t('col.outings'), t('help.col.outings.d')],
-      ])),
-
-    h('section', { id: 'help-rules' },
-      h('h2', null, t('help.rules.h')),
-      h('ul', null,
-        h('li', null, t('help.rules.climb')),
-        h('li', null, t('help.rules.flight')),
-        h('li', null, t('help.rules.ground')),
-        h('li', null, t('help.rules.zero')),
-        h('li', null, t('help.rules.gap')),
-        h('li', null, t('help.rules.rides')))),
-
-    h('section', { id: 'help-pages' },
-      h('h2', null, t('help.pages.h')),
-      dl([
-        [t('nav.home'), t('help.pages.home')],
-        [t('nav.all'), t('help.pages.all')],
-        [t('nav.ranking'), t('help.pages.ranking')],
-        [t('nav.map'), t('help.pages.map')],
-        [t('nav.upload'), t('help.pages.upload')],
-      ]),
-      h('p', { class: 'hint' }, t('help.credits'))));
+    h('div', { class: 'help' },
+      h('nav', { class: 'help-nav', 'aria-label': t('help.toc') }, buttons),
+      h('div', { class: 'help-body' }, search, none, topics.map((tp) => tp.section),
+        h('p', { class: 'hint' }, t('help.credits')))));
+  show(topics[0].id);
+  return page;
 }

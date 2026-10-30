@@ -1,5 +1,6 @@
 // The site: a small single-page app. Routes are in the address after "#".
-//   #/                 My H&Fs: the signed-in person's own outings (filter by year and country)
+//   #/                 Home: the question and a search, the map, the latest outings, chained take-offs, sectors
+//   #/me               My H&Fs: the signed-in person's own outings (filter by year and country)
 //   #/all              All: the outings of everyone (filter by year and country)
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
@@ -16,6 +17,7 @@ import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './char
 import { buildExplorer } from './explorer.js';
 import { buildMarkTool } from './mark.js';
 import { buildHelp } from './help.js';
+import { buildHome } from './home.js';
 import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
 import { LANGS, getLang, initI18n, onLang, setLang, t, tr } from './i18n.js';
 
@@ -30,13 +32,12 @@ function renderAccount() {
   if (api.state.user) {
     const name = api.state.profile && api.state.profile.display_name;
     box.append(
-      h('a', { href: `#/user/${api.state.user.id}` }, name || t('account.yourPage')),
+      h('a', { href: '#/me' }, name || t('account.yourPage')),
       h('button', { class: 'link', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut')),
     );
   } else {
     box.append(h('a', { href: '#/login' }, t('account.signIn')));
   }
-  box.append(h('a', { href: '#/help', class: 'help-link' }, t('account.help')));
 }
 
 /** The language selector, in the header. The names are written in their own language, so each can be found. */
@@ -66,10 +67,14 @@ function renderFooter() {
 }
 
 function setNav(name) {
-  for (const a of document.querySelectorAll('#nav a')) {
+  for (const a of document.querySelectorAll('#nav a, #cta')) {
     if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
+  // « Explore » is lit when one of its entries is, and closes once an entry is picked
+  const more = $('#nav-more');
+  more.classList.toggle('on', !!more.querySelector('a[aria-current]'));
+  more.open = false;
 }
 
 function show(...nodes) {
@@ -242,12 +247,22 @@ async function pageAll(token) {
   if (section) show(h('h1', null, t('page.all')), section);
 }
 
-// My H&Fs is the pilot page of the signed-in person, at the address "#/".
+// My H&Fs is the pilot page of the signed-in person, at the address "#/me".
 async function pageMine(token) {
   const me = api.state.user;
-  // Signed out: there is no page of one's own, so the visitor lands on everyone's outings.
-  if (!me) return location.replace(`${location.pathname}#/all`);
-  await pageUser(token, me.id, { path: '' });
+  // Signed out: there is no page of one's own, so the visitor is asked to sign in.
+  if (!me) return location.replace(`${location.pathname}#/login`);
+  await pageUser(token, me.id, { path: 'me' });
+}
+
+// Home: the same for everyone, signed in or not.
+async function pageHome(token) {
+  setNav('home');
+  const [{ rows: latest }, mapRows, sites, routes, flown] = await Promise.all([
+    api.listOutings({ limit: 6 }), api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFlownOutings()]);
+  if (token !== routeToken) return;
+  // the outings the server has checked: one waiting for it may still be refused
+  show(buildHome({ latest: latest.filter((o) => o.verified !== false), mapRows, sites, routes, flown }));
 }
 
 async function pageRanking(token) {
@@ -304,11 +319,8 @@ async function pageMap(token) {
   setNav('map');
   const [rows, sites, routes, ffvl] = await Promise.all([api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFfvlSites()]);
   if (token !== routeToken) return;
-  const mapView = buildExplorer(rows, api.getTraces, sites, routes, { sites: ffvl, info: api.getFfvlInfo });
-  show(
-    h('h1', null, t('page.map')),
-    h('p', { class: 'sub' }, t('map.sub')),
-    mapView.element);
+  const mapView = buildExplorer(rows, api.getTraces, sites, routes, { sites: ffvl, info: api.getFfvlInfo }, api.state.user ? api.state.user.id : null);
+  show(mapView.element);
   requestAnimationFrame(() => mapView.start());
 }
 
@@ -357,10 +369,9 @@ function reportForm(outingId) {
   return h('details', null, h('summary', { class: 'hint' }, t('report.summary')), form);
 }
 
-// A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "" for My H&Fs.
+// A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "me" for My H&Fs.
 async function pageUser(token, id, opts = {}) {
-  // The entry "My H&Fs" is lit on one's own page, and only there.
-  setNav(api.state.user && api.state.user.id === id ? 'home' : null);
+  setNav(null);   // one's own page is reached from the account bar, not the menu
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
   if (!profile) return show(notice('error', h('p', null, t('user.missing'))));
@@ -726,7 +737,7 @@ function confirmGroups(groups, out) {
 // ---------------------------------------------------------------- mark flights by hand
 
 function pageHelp() {
-  setNav(null);
+  setNav('help');
   show(buildHelp());
 }
 
@@ -881,7 +892,8 @@ async function route() {
   window.scrollTo(0, 0);
   document.body.classList.toggle('wide', path[0] === 'map');
   try {
-    if (path[0] === '') { loading(); await pageMine(token); }
+    if (path[0] === '') { loading(); await pageHome(token); }
+    else if (path[0] === 'me') { loading(); await pageMine(token); }
     else if (path[0] === 'all') { loading(); await pageAll(token); }
     else if (path[0] === 'ranking') { loading(); await pageRanking(token); }
     else if (path[0] === 'map') { loading(); await pageMap(token); }
@@ -907,7 +919,7 @@ async function route() {
     renderAccount();
     const here = (location.hash.replace(/^#\/?/, '').split('/')[0]);
     const id = api.state.user ? api.state.user.id : null;
-    if (here === 'login' || here === 'upload' || (here === 'user' && api.state.user) || (here === '' && id !== homeUser)) route();
+    if (here === 'login' || here === 'upload' || (here === 'user' && api.state.user) || (here === 'me' && id !== homeUser)) route();
     homeUser = id;
   });
   await api.refreshSession();

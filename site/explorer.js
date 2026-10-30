@@ -5,7 +5,7 @@
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
 import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
-import { h, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
+import { h, s, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
 import { t, tr } from './i18n.js';
 import { card as ffvlCard, ffvlLayer, windLabel } from './ffvl.js';
 import { scaleAndRuler } from './ruler.js';
@@ -42,9 +42,29 @@ const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 2, opacity: 0.9, lineCap
 const PALETTE = ['#fc4c02', '#2b6cb0', '#2f855a', '#805ad5', '#b7791f', '#c53030'];
 // ``label``: the key of the text in site/i18n (looked up when drawn)
 const SEASONS = {
-  summer: { label: 'season.summer', months: [5, 6, 7, 8, 9, 10] },
-  winter: { label: 'season.winter', months: [11, 12, 1, 2, 3, 4] },
+  summer: { label: 'season.summer', short: 'season.summerShort', months: [5, 6, 7, 8, 9, 10] },
+  winter: { label: 'season.winter', short: 'season.winterShort', months: [11, 12, 1, 2, 3, 4] },
 };
+
+/** Buttons side by side, one of them pressed (« All seasons | Summer | Winter »). Like a select: ``value`` reads and
+ *  sets the pressed one (without an event); a click sends « change ». ``options``: [[value, text], …]. */
+function segmented(id, label, options) {
+  const box = h('div', { class: 'seg-big', id, role: 'group', 'aria-label': label });
+  let value = options[0][0];
+  const buttons = options.map(([v, text]) => h('button', { type: 'button', 'data-value': v, 'aria-pressed': String(v === value), onclick: () => {
+    if (value === v) return;
+    box.value = v;
+    box.dispatchEvent(new Event('change'));
+  } }, text));
+  box.append(...buttons);
+  Object.defineProperty(box, 'value', {
+    get: () => value,
+    set: (v) => { value = v; for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.value === v)); },
+  });
+  return box;
+}
+
+const filterIcon = () => s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('path', { d: 'M4 6h16M7 12h10M10 18h4' }));
 
 // « 3 outings », « 1 pilot »: the plural forms of the language (key of site/i18n/*.js)
 const plural = (n, key) => t(key, { n });
@@ -307,15 +327,17 @@ function season(o) {
 
 /**
  * The page's filters, map and side panel. ``rows`` are the outings of getMapOutings(); ``loadTraces(ids)`` reads
- * full tracks; ``sites`` are the take-offs of the register (getMapSites()). Returns {element, start}: start() is
- * called once the element is in the page.
+ * full tracks; ``sites`` are the take-offs of the register (getMapSites()); ``me`` is the signed-in pilot's id (for
+ * « My tracks »), or null. Returns {element, start}: start() is called once the element is in the page.
  */
-export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = { sites: [], info: null }) {
+export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = { sites: [], info: null }, me = null) {
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': t('map.aria') });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
-  const seasonPick = h('select', { id: 'm-season' }, h('option', { value: '' }, t('season.all')),
-    Object.entries(SEASONS).map(([k, s]) => h('option', { value: k }, t(s.label))));
+  const seasonPick = segmented('m-season', t('map.season'), [['', t('season.all')],
+    ...Object.entries(SEASONS).map(([k, s]) => [k, t(s.short)])]);
+  // everyone's outings, or one's own (signed in only)
+  const whoPick = me ? segmented('m-who', t('map.who'), [['', t('map.allTracks')], ['mine', t('map.myTracks')]]) : null;
   const yearPick = h('select', { id: 'm-year' }, h('option', { value: '' }, t('filter.allYears')), years.map((y) => h('option', { value: y }, y)));
   // The map opens on the current season: summer and winter climbs do not take the same ways. All seasons when the
   // current one has no outing yet.
@@ -323,19 +345,37 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
   if (rows.some((o) => season(o) === now)) seasonPick.value = now;
   const climbPicks = Object.fromEntries(Object.entries(CLIMB_FILTERS).map(([k, f]) => [k,
     h('select', { id: `m-${k}`, 'aria-label': t(f.label) }, f.bands.map(([v, text]) => h('option', { value: v }, t(text))))]));
-  const climbBox = h('details', { class: 'climb-filters' },
-    h('summary', null, t('climb.filters')),
-    h('div', { class: 'filters' }, Object.entries(CLIMB_FILTERS).map(([k, f]) =>
-      h('div', { class: 'field' }, h('label', { for: `m-${k}` }, t(f.label)), climbPicks[k]))));
-  // search a take-off, or a start place (a village, a car park): the results open under the field
+  // the year and the climb filters, in a panel under the « Filters » button
+  const filtersButton = h('button', { type: 'button', class: 'filters-btn', id: 'm-filters', 'aria-expanded': 'false', 'aria-controls': 'm-filters-pop' });
+  const shownButton = h('button', { type: 'button', class: 'primary' });
+  const filtersPop = h('div', { class: 'filters-pop', id: 'm-filters-pop', hidden: true },
+    h('div', { class: 'filters' },
+      h('div', { class: 'field' }, h('label', { for: 'm-year' }, t('filter.year')), yearPick),
+      Object.entries(CLIMB_FILTERS).map(([k, f]) =>
+        h('div', { class: 'field' }, h('label', { for: `m-${k}` }, t(f.label)), climbPicks[k]))),
+    h('div', { class: 'fp-foot' },
+      h('button', { type: 'button', class: 'link', onclick: () => {
+        yearPick.value = '';
+        for (const p of Object.values(climbPicks)) p.value = '';
+        applyFilters();
+      } }, t('map.clearFilters')),
+      shownButton));
+  const openFilters = (open) => { filtersPop.hidden = !open; filtersButton.setAttribute('aria-expanded', String(open)); };
+  filtersButton.addEventListener('click', () => openFilters(filtersPop.hidden));
+  shownButton.addEventListener('click', () => openFilters(false));
+  // search a take-off, a flying sector, or a start place (a village, a car park): the results open under the field
   const searchBox = h('input', { type: 'search', id: 'm-search', placeholder: t('map.searchPlaceholder'), autocomplete: 'off',
     'aria-controls': 'm-results', 'aria-expanded': 'false' });
   const results = h('ul', { class: 'search-results', id: 'm-results', role: 'listbox', hidden: true });
-  const bar = h('div', { class: 'filters' },
+  const filtersWrap = h('div', { class: 'filters-wrap' }, filtersButton, filtersPop);
+  const bar = h('div', { class: 'map-toolbar' },
     h('div', { class: 'field search' }, h('label', { for: 'm-search' }, t('map.search')), searchBox, results),
-    h('div', { class: 'field' }, h('label', { for: 'm-season' }, t('map.season')), seasonPick),
-    h('div', { class: 'field' }, h('label', { for: 'm-year' }, t('filter.year')), yearPick));
-  const element = h('div', null, bar, climbBox, h('div', { class: 'explorer' }, mapBox, side));
+    seasonPick, filtersWrap, whoPick);
+  // the legend, above the map (Sarah, 30 October 2026): the heat map, the itineraries, the climbs, the take-offs
+  const legendRow = h('div', { class: 'map-legend' });
+  const element = h('div', null, bar, legendRow, h('div', { class: 'explorer' }, mapBox, side));
+  // from the home page: a search (#/map?q=…) or a sector (#/map?sector=…)
+  const askedQuery = new URLSearchParams(location.hash.split('?')[1] || '');
   const L = window.L;
   if (!L || !L.heatLayer) {
     mapBox.append(h('p', { class: 'hint pad' }, t('map.failed')));
@@ -431,13 +471,16 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
   function applyFilters() {
     const s = seasonPick.value;
     const y = yearPick.value;
+    const mineOnly = whoPick && whoPick.value === 'mine';
     shown = rows.filter((o) => (!s || season(o) === s) && (!y || String(o.outing_date || '').startsWith(y))
+      && (!mineOnly || o.user_id === me)
       && Object.entries(CLIMB_FILTERS).every(([k, f]) => inBand(f.value(o), climbPicks[k].value)));
     spots = groupTakeoffs(shown, sites);
     setPoints(heatSpots, spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
     setPoints(heatRoutes, routePoints(spots));
-    const active = Object.values(climbPicks).filter((p) => p.value).length;
-    climbBox.querySelector('summary').textContent = active ? `${t('climb.filters')} (${active})` : t('climb.filters');
+    const active = Object.values(climbPicks).filter((p) => p.value).length + (y ? 1 : 0);
+    filtersButton.replaceChildren(filterIcon(), active ? `${t('map.filters')} (${active})` : t('map.filters'));
+    shownButton.textContent = t('map.showOutings', { n: shown.length });
     if (searchBox.value) showResults(); // the results follow the filters
     overview();
   }
@@ -453,6 +496,17 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       const hit = [sp.name, ...sp.outings.map((o) => o.title)].find((t) => hasText(t, q));
       if (hit) found.push({ kind: 'spot', text: sp.name, spot: sp, rank: rank(hit), n: sp.outings.length });
     }
+    // the flying sectors (« Aravis », « Lac d'Annecy »: site/sectors.js) that hold take-offs on the map
+    const sectors = new Map();
+    for (const sp of spots) {
+      const name = sectorOf(sp.lat, sp.lon);
+      if (!name || !hasText(name, q)) continue;
+      const m = sectors.get(name) || { kind: 'sector', text: name, spots: new Set(), n: 0, rank: rank(name) - 0.5 };
+      m.spots.add(sp);
+      m.n += sp.outings.length;
+      sectors.set(name, m);
+    }
+    found.push(...sectors.values());
     const places = new Map();
     for (const sp of spots) {
       for (const o of sp.outings) {
@@ -486,7 +540,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
         h('span', { class: 'hint' }, m.kind === 'spot'
           // the altitude tells apart two take-offs of the same name
           ? ` · ${m.spot.alt != null ? t('search.takeoffAt', { alt: fmtInt(m.spot.alt) }) : t('search.takeoff')} · ${plural(m.n, 'unit.outing')}`
-          : ` · ${t('search.start')} · ${plural(m.spots.size, 'unit.takeoff')}, ${plural(m.n, 'unit.outing')}`));
+          : ` · ${t(m.kind === 'sector' ? 'search.sector' : 'search.start')} · ${plural(m.spots.size, 'unit.takeoff')}, ${plural(m.n, 'unit.outing')}`));
       li.addEventListener('mousedown', (ev) => { ev.preventDefault(); choose(m); }); // before the field loses focus
       li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') choose(m); });
       return li;
@@ -822,12 +876,13 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     // one's own; the style follows the season picked in the filter
     const backgrounds = mapPanel(L, map, shown, () => seasonPick.value === 'winter');
 
-    // legend of the heat map, shown with it
-    const legend = L.control({ position: 'bottomleft' });
+    // the legend above the map: the heat map (shown with it), the itineraries, the climbs, the take-offs
     legendText = h('span');
     const legendBox = h('div', { class: 'heat-legend' }, legendText, h('i', { class: 'heat-bar' }), h('span', { class: 'heat-ends' }, h('span', null, t('heat.few')), h('span', null, t('heat.many'))));
-    legend.onAdd = () => legendBox;
-    legend.addTo(map);
+    legendRow.replaceChildren(legendBox,
+      h('span', { class: 'key' }, h('i', { style: null, class: 'k-route' }), t('legend.route')),
+      h('span', { class: 'key' }, h('i', { class: 'k-climb' }), t('legend.climb')),
+      h('span', { class: 'key' }, h('b'), t('legend.takeoff')));
     map.on('overlayadd overlayremove', (e) => { if (e.layer === heat) legendBox.hidden = e.type === 'overlayremove'; });
 
     map.on('zoomend', () => { pickHeat(); draw(); });
@@ -843,7 +898,16 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       if (!holder() && seasonPick.value) { seasonPick.value = ''; applyFilters(); }
       if (holder()) { sheetToOpen = wantedRoute.id; openSpot(holder()); }
     }
+    // from the home page: a sector is framed; a search shows its results
+    const sector = askedQuery.get('sector');
+    const inSector = sector ? spots.filter((sp) => sectorOf(sp.lat, sp.lon) === sector) : [];
+    if (inSector.length) map.fitBounds(L.latLngBounds(inSector.map((sp) => [sp.lat, sp.lon])), { padding: [60, 60], maxZoom: 13 });
+    if (askedQuery.get('q')) { searchBox.value = askedQuery.get('q'); searchBox.focus(); showResults(); }
+    if (sector || askedQuery.get('q')) setHash('#/map');
     seasonPick.addEventListener('change', () => { applyFilters(); backgrounds.followSeason(); });
+    if (whoPick) whoPick.addEventListener('change', applyFilters);
+    // the filters' panel closes on a click elsewhere
+    document.addEventListener('click', (ev) => { if (!filtersPop.hidden && !filtersWrap.contains(ev.target)) openFilters(false); });
     yearPick.addEventListener('change', applyFilters);
     for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);
     searchBox.addEventListener('input', () => (searchBox.value ? showResults() : hideResults()));

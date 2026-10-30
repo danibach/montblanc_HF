@@ -190,6 +190,16 @@ export async function getTraces(ids) {
   return out;
 }
 
+/** The newest verified outings with their flights, for the chained take-offs of the home page. */
+export async function getFlownOutings(limit = 300) {
+  const { data, error } = await sb.from('outings')
+    .select('id,title,summit_alt,outing_date,dplus_m,dminus_m,user_id,flights,profiles(display_name)')
+    .eq('status', 'published').eq('verified', true).eq('hidden', false)
+    .order('outing_date', { ascending: false }).limit(limit);
+  if (error) return []; // the home page shows no chain rather than no page
+  return data || [];
+}
+
 export async function getRanking({ year, country }) {
   const { data, error } = await sb.rpc('ranking', { p_year: year || null, p_country: country || null, p_limit: 200 });
   if (error) throw new Error(error.message);

@@ -75,7 +75,9 @@ def test_the_badge_is_named_the_same_in_its_texts(catalogues):
         for key in ("upload.published", "batch.sumChecked", "mark.published"):
             assert name in catalogues[code][key], (code, key)
         # and so is the list of tracks without a flight, quoted in the help
-        assert re.sub(r"\s*\(.*", "", catalogues[code]["upload.noFlightTitle"]).strip() in catalogues[code]["help.up.refused.d"], code
+        assert re.sub(r"\s*\(.*", "", catalogues[code]["upload.noFlightTitle"]).strip() in catalogues[code]["help.refused.2.a"], code
+        # and the badge in the help's answer about it, and the button to mark a flight
+        assert name in catalogues[code]["help.upload.5.a"] and catalogues[code]["upload.markButton"] in catalogues[code]["help.refused.2.a"], code
 
 
 def used_keys():
