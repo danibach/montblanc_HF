@@ -262,8 +262,6 @@ export default {
   'map.groupTip': '{where} · {takeoffs} · {outings} — zum Hineinzoomen klicken',
   'map.groupAria': '{where}, {takeoffs}',
 
-  'heat.routes': 'Aufstiegswege zu Fuß · Piloten',
-  'heat.takeoffs': 'Startplätze · Piloten',
 
   'search.takeoffAt': 'Startplatz auf {alt} m',
   'search.takeoff': 'Startplatz',
@@ -304,8 +302,6 @@ export default {
   'status.crowded': { one: '{n} Aufstieg: Die Heatmap zeigt die Aufstiegswege. Fahre über eine Tour, um ihren Aufstieg zu sehen; klicke sie an, um ihn zu behalten.', other: '{n} Aufstiege: Die Heatmap zeigt die Aufstiegswege. Fahre über eine Tour, um ihren Aufstieg zu sehen; klicke sie an, um ihn zu behalten.' },
   'status.hover': 'Fahre über eine Tour, um ihren Aufstieg hervorzuheben; klicke sie an, um ihn hervorgehoben zu lassen.',
 
-  'heat.few': 'wenige',
-  'heat.many': 'viele',
 
   'ffvl.status.active': 'Aktiv',
   'ffvl.status.ask': 'Erlaubnis jedes Mal nötig',
@@ -434,8 +430,11 @@ export default {
   'map.clearFilters': 'Zurücksetzen',
   'map.showOutings': { one: '{n} Tour zeigen', other: '{n} Touren zeigen' },
   'legend.route': 'Route',
-  'legend.climb': 'Aufstieg eines Piloten',
-  'legend.takeoff': 'Startplatz',
+  'legend.heat': 'Wärmekarte',
+  'legend.takeoff': 'Startplatz (H&F Tracks)',
+  'legend.ffvl': 'FFVL-Startplatz',
+  'legend.parking': 'Parkplatz',
+  'spot.more': 'Mehr zu diesem Startplatz',
   'home.title': 'Wo fliegen wir heute?',
   'home.claim1': 'Aufsteigen, starten, landen. Den Track teilen.',
   'home.claim2': 'Wege entdecken, die Lüfte erkunden.',

@@ -263,8 +263,6 @@ export default {
   'map.groupTip': '{where} · {takeoffs} · {outings} — click to zoom in',
   'map.groupAria': '{where}, {takeoffs}',
 
-  'heat.routes': 'Ways up on foot · pilots',
-  'heat.takeoffs': 'Take-offs · pilots',
 
   'search.takeoffAt': 'take-off at {alt} m',
   'search.takeoff': 'take-off',
@@ -305,8 +303,6 @@ export default {
   'status.crowded': { one: '{n} climb: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.', other: '{n} climbs: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.' },
   'status.hover': 'Hover an outing to light its climb; click it to keep it lit.',
 
-  'heat.few': 'few',
-  'heat.many': 'many',
 
   'ffvl.status.active': 'Active',
   'ffvl.status.ask': 'Permission needed each time',
@@ -435,8 +431,11 @@ export default {
   'map.clearFilters': 'Clear',
   'map.showOutings': { one: 'Show {n} outing', other: 'Show {n} outings' },
   'legend.route': 'Itinerary',
-  'legend.climb': 'A pilot’s climb',
-  'legend.takeoff': 'Take-off',
+  'legend.heat': 'Heat map',
+  'legend.takeoff': 'Take-off (H&F Tracks)',
+  'legend.ffvl': 'FFVL take-off',
+  'legend.parking': 'Car park',
+  'spot.more': 'More about this take-off',
   'home.title': 'Where shall we fly?',
   'home.claim1': 'Climb, take off, land. Share your track.',
   'home.claim2': 'Discover trails, explore the skies.',

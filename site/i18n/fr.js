@@ -262,8 +262,6 @@ export default {
   'map.groupTip': '{where} · {takeoffs} · {outings} — cliquez pour zoomer',
   'map.groupAria': '{where}, {takeoffs}',
 
-  'heat.routes': 'Chemins de montée à pied · pilotes',
-  'heat.takeoffs': 'Décollages · pilotes',
 
   'search.takeoffAt': 'décollage à {alt} m',
   'search.takeoff': 'décollage',
@@ -304,8 +302,6 @@ export default {
   'status.crowded': { one: '{n} montée : la carte de chaleur montre les chemins de montée. Survolez une sortie pour voir sa montée ; cliquez pour la garder.', other: '{n} montées : la carte de chaleur montre les chemins de montée. Survolez une sortie pour voir sa montée ; cliquez pour la garder.' },
   'status.hover': 'Survolez une sortie pour mettre sa montée en évidence ; cliquez pour la garder.',
 
-  'heat.few': 'peu',
-  'heat.many': 'beaucoup',
 
   'ffvl.status.active': 'Actif',
   'ffvl.status.ask': 'Autorisation requise à chaque fois',
@@ -434,8 +430,11 @@ export default {
   'map.clearFilters': 'Effacer',
   'map.showOutings': { one: 'Voir {n} sortie', other: 'Voir {n} sorties' },
   'legend.route': 'Itinéraire',
-  'legend.climb': 'Montée d’un pilote',
-  'legend.takeoff': 'Déco',
+  'legend.heat': 'Carte de chaleur',
+  'legend.takeoff': 'Déco (H&F Tracks)',
+  'legend.ffvl': 'Déco FFVL',
+  'legend.parking': 'Parking',
+  'spot.more': 'Plus d’infos sur le déco',
   'home.title': 'Où allons-nous voler ?',
   'home.claim1': 'Monter, décoller, atterrir. Partager sa trace.',
   'home.claim2': 'Découvrir des sentiers, explorer les airs.',

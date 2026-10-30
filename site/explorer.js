@@ -34,7 +34,6 @@ const HEAT_SPOTS = { radius: 20, blur: 15, maxZoom: 8, max: 4, minOpacity: 0.45,
 const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35, gradient: GRADIENT };
 const CLIMB = { color: '#1f4fff', weight: 1.5, opacity: 0.9 };
 const CLIMB_HOT = { color: '#e0161b', weight: 2.5, opacity: 1 };
-const CLIMB_BACK = { color: '#1f4fff', weight: 1, opacity: 0.25 };
 // the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per start
 const ROUTE_W = 2; // fine lines (Sarah, 27 October 2026); a wider invisible line catches the pointer
 const HIT_W = 14;
@@ -62,6 +61,29 @@ function segmented(id, label, options) {
     set: (v) => { value = v; for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.value === v)); },
   });
   return box;
+}
+
+const PARKING_M = 30; // an itinerary's first point this close to a car park of OpenStreetMap starts at it
+const parkingCache = new Map();
+/** For each point ([lat, lon]), whether OpenStreetMap has a car park within PARKING_M; all false when it cannot say. */
+async function parkingsNear(points) {
+  const key = (p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`;
+  const ask = points.filter((p) => !parkingCache.has(key(p)));
+  if (ask.length) {
+    try {
+      const q = `[out:json][timeout:15];(${ask.map((p) => `nwr["amenity"="parking"](around:${PARKING_M},${p[0]},${p[1]});`).join('')});out center;`;
+      const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: q }) });
+      const found = ((await res.json()).elements || []).map((e) => (e.center ? [e.center.lat, e.center.lon] : [e.lat, e.lon])).filter((c) => c[0] != null);
+      const r = Math.PI / 180;
+      const m = (a, b) => 12742000 * Math.asin(Math.sqrt(Math.sin(((b[0] - a[0]) * r) / 2) ** 2
+        + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(((b[1] - a[1]) * r) / 2) ** 2));
+      // a car park's centre can be farther than its edge: the way's start is at its centre (src/mbhf/routes.py)
+      for (const p of ask) parkingCache.set(key(p), found.some((c) => m(p, c) < PARKING_M * 2));
+    } catch (_) {
+      return points.map(() => false); // no answer: no P, asked again next time
+    }
+  }
+  return points.map((p) => parkingCache.get(key(p)) || false);
 }
 
 const filterIcon = () => s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('path', { d: 'M4 6h16M7 12h10M10 18h4' }));
@@ -196,15 +218,20 @@ const SOURCES = {
   provisional: 'src.provisional',
 };
 
-/** Where the take-off comes from, its good winds, the FFVL's hike & fly notes, and the ties left to confirm. */
+/** The good winds of a take-off, in a few words (« Good winds: NW, W »), or null. The FFVL writes the winds as French
+ *  letters (O for ouest): shown with the letters of the language. */
+function windsOf(sp) {
+  const site = sp.site;
+  return site && site.wind_ok ? t('site.goodWinds', { winds: site.wind_ok.split(/[;,\s]+/).filter(Boolean).map(windLabel).join(', ') }) : null;
+}
+
+/** Where the take-off comes from, the FFVL's hike & fly notes, and the ties left to confirm. */
 function siteFacts(sp) {
   const site = sp.site;
   if (!site) return null;
   const toConfirm = sp.outings.filter((o) => o.takeoff_site_status === 'to_confirm').length;
   return h('div', { class: 'site-facts' },
     h('span', { class: `badge ${site.source}` }, t(SOURCES[site.source] || 'detail.takeoff')),
-    // the FFVL writes the winds as French letters (O for ouest): shown with the letters of the language
-    site.wind_ok ? h('span', { class: 'hint' }, ` · ${t('site.goodWinds', { winds: site.wind_ok.split(/[;,\s]+/).filter(Boolean).map(windLabel).join(', ') })}`) : null,
     toConfirm ? h('p', { class: 'hint' }, t('site.toConfirm', { n: toConfirm })) : null,
     site.hike_and_fly ? h('details', null, h('summary', null, t('site.hikeFly')), h('p', { class: 'hint' }, site.hike_and_fly)) : null);
 }
@@ -389,7 +416,6 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
   let heat; // holds the heat layer that suits the zoom
   let heatSpots;
   let heatRoutes;
-  let legendText;
   let current = null; // the spot shown in the panel
   // a sheet's address (#/map/route/12) is written without a page change: the map stays as it is. The one the page
   // was opened with is read before anything rewrites it.
@@ -465,7 +491,6 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       heat.clearLayers();
       heat.addLayer(want);
     }
-    legendText.textContent = routes ? t('heat.routes') : t('heat.takeoffs');
   }
 
   function applyFilters() {
@@ -565,6 +590,24 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     return box;
   }
 
+  // a P where an itinerary starts at a car park: the server starts it there when one is within 100 m
+  // (src/mbhf/routes.py) but does not say so, so the car parks at the starts are asked from OpenStreetMap
+  async function markParkings(rts, mine) {
+    const at = await parkingsNear(rts.map((r) => r.line[0]));
+    if (mine !== request) return;
+    rts.forEach((r, i) => {
+      if (!at[i]) return;
+      L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
+    });
+  }
+
+  // the take-off's register entry and FFVL card, folded under the itineraries (Sarah, 30 October 2026: the panel
+  // shows first what one comes for)
+  function moreAbout(sp) {
+    const facts = [siteFacts(sp), ffvlFacts(sp)].filter(Boolean);
+    return facts.length ? h('details', { class: 'spot-more' }, h('summary', null, t('spot.more')), facts) : null;
+  }
+
   async function openSpot(sp) {
     current = sp;
     const mine = ++request;
@@ -581,10 +624,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       h('div', { class: 'side-head' },
         h('div', null,
           h('h2', null, sp.name),
-          h('p', { class: 'hint' }, [sectorOf(sp.lat, sp.lon), plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot'), sp.alt != null ? t('search.takeoffAt', { alt: fmtInt(sp.alt) }) : null].filter(Boolean).join(' · '))),
+          h('p', { class: 'hint' }, [sectorOf(sp.lat, sp.lon), sp.alt != null ? t('search.takeoffAt', { alt: fmtInt(sp.alt) }) : null].filter(Boolean).join(' · ')),
+          h('p', { class: 'hint' }, [plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot'), windsOf(sp)].filter(Boolean).join(' · '))),
         h('button', { class: 'link close', 'aria-label': t('map.back'), onclick: overview }, '×')),
       // replaceChildren would write a null as the text « null »
-      ...[siteFacts(sp), ffvlFacts(sp), status, list].filter(Boolean));
+      ...[status, list, moreAbout(sp)].filter(Boolean));
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
@@ -611,22 +655,18 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     const crowded = climbOfId.size > MANY_CLIMBS;
     const siteRoutes = new Map(routes.filter((r) => sp.siteIds.has(r.site_id)).map((r) => [r.id, r]));
     const byRoute = sp.outings.some((o) => siteRoutes.has(o.route_id));
-    const onDemand = crowded || byRoute;
+    // only the itineraries are drawn (Sarah, 30 October 2026): the ways each pilot took are in the heat map, and an
+    // outing's own climb appears while it is hovered or kept lit
     const lines = new Map();
     const bounds = L.latLngBounds([[sp.lat, sp.lon]]);
     let selected = null;
     const restyle = (hot) => {
       for (const [id, line] of lines) {
         const lit = id === hot || id === selected;
-        if (onDemand) {
-          // through the group: a line only taken off the map would stay in it and never come back
-          if (lit) climbs.addLayer(line.setStyle(CLIMB_HOT));
-          else climbs.removeLayer(line);
-          if (lit) line.bringToFront();
-        } else {
-          line.setStyle(lit ? CLIMB_HOT : selected ? CLIMB_BACK : CLIMB);
-          if (lit) line.bringToFront();
-        }
+        // through the group: a line only taken off the map would stay in it and never come back
+        if (lit) climbs.addLayer(line.setStyle(CLIMB_HOT));
+        else climbs.removeLayer(line);
+        if (lit) line.bringToFront();
       }
       for (const li of list.querySelectorAll('li[data-id]')) li.classList.toggle('on', li.dataset.id === selected);
     };
@@ -636,7 +676,6 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       const climb = climbOfId.get(o.id);
       if (!climb) continue;
       const line = L.polyline(climb.line, CLIMB);
-      if (!onDemand) line.addTo(climbs);
       line.on('mouseover', () => restyle(o.id));
       line.on('mouseout', () => restyle(null));
       line.on('click', () => {
@@ -715,7 +754,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
         paintRoutes([key]);
       });
       hit.on('mouseout', () => paintRoutes([]));
-      hit.on('click', () => selectRoute(key));
+      // a click opens the itinerary: its sheet, and the climbs of its outings around it
+      hit.on('click', () => showSheet(key));
       routeLines.set(key, { line, casing, hit, style });
       bounds.extend(line.getBounds());
     }
@@ -808,8 +848,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
         return folder;
       }));
     }
-    // the sheet of one way, in place of the take-off's panel (back to it with its button)
+    // the sheet of one way, in place of the take-off's panel (back to it with its button); another itinerary clicked
+    // on the map first closes the sheet that is open
+    let closeSheet = null;
     function showSheet(key) {
+      if (closeSheet) closeSheet();
       const route = siteRoutes.get(Number(key.slice(6)));
       const outings = groups.get(key) || [];
       const place = placeOf.get(key);
@@ -821,13 +864,22 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       setHash(`#/map/route/${route.id}`);
       selectedRoute = key;
       paintRoutes([]);
+      // the climbs of the itinerary's outings, thin, in its colour (one lights up in red when hovered in the sheet)
+      const colour = look.get(key).color;
+      const traces = L.layerGroup(outings.map((o) => climbOfId.get(o.id)).filter(Boolean)
+        .map((c) => L.polyline(c.line, { color: colour, weight: 1.2, opacity: 0.45, interactive: false }))).addTo(climbs);
+      const drawn = routeLines.get(key);
+      if (drawn) { drawn.casing.bringToFront(); drawn.line.bringToFront(); drawn.hit.bringToFront(); }
       const back = () => {
+        closeSheet = null;
         setHash('#/map');
         selectedRoute = null;
+        climbs.removeLayer(traces);
         paintRoutes([]);
         side.replaceChildren(...panel);
         side.scrollTop = scroll;
       };
+      closeSheet = back;
       side.replaceChildren(routeSheet({
         route, way, link: `${location.origin}${location.pathname}#/map/route/${route.id}`, onBack: back,
         takeoff: { name: sp.name, alt: sp.alt }, swatch: swatch(key),
@@ -841,6 +893,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, t('sort.label')), sortPick));
     renderList();
+    markParkings(ordered.map(([key]) => siteRoutes.get(Number(key.slice(6)))).filter((r) => r && r.line && r.line.length > 1), mine);
     status.textContent = byRoute
       ? t('status.byRoute', { n: routeLines.size })
       : crowded
@@ -877,12 +930,14 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     const backgrounds = mapPanel(L, map, shown, () => seasonPick.value === 'winter');
 
     // the legend above the map: the heat map (shown with it), the itineraries, the climbs, the take-offs
-    legendText = h('span');
-    const legendBox = h('div', { class: 'heat-legend' }, legendText, h('i', { class: 'heat-bar' }), h('span', { class: 'heat-ends' }, h('span', null, t('heat.few')), h('span', null, t('heat.many'))));
+    // (Sarah, 30 October 2026: one word for the heat, no « few / many », no pilot's climb: they are only drawn on demand)
+    const tri = (cls) => s('svg', { class: `k-tri ${cls}`, viewBox: '0 0 12 11', 'aria-hidden': 'true' }, s('path', { d: 'M6 1 L11 10 L1 10Z' }));
+    const legendBox = h('div', { class: 'heat-legend' }, h('i', { class: 'heat-bar' }), t('legend.heat'));
     legendRow.replaceChildren(legendBox,
-      h('span', { class: 'key' }, h('i', { style: null, class: 'k-route' }), t('legend.route')),
-      h('span', { class: 'key' }, h('i', { class: 'k-climb' }), t('legend.climb')),
-      h('span', { class: 'key' }, h('b'), t('legend.takeoff')));
+      h('span', { class: 'key' }, h('i', { class: 'k-route' }), t('legend.route')),
+      h('span', { class: 'key' }, h('b', { class: 'k-spot' }), t('legend.takeoff')),
+      ffvl.sites.length ? h('span', { class: 'key' }, tri('ffvl'), t('legend.ffvl')) : null,
+      h('span', { class: 'key' }, h('b', { class: 'k-parking' }, 'P'), t('legend.parking')));
     map.on('overlayadd overlayremove', (e) => { if (e.layer === heat) legendBox.hidden = e.type === 'overlayremove'; });
 
     map.on('zoomend', () => { pickHeat(); draw(); });

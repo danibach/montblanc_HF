@@ -311,7 +311,7 @@ with sync_playwright() as p:
     page.click("#m-season button[data-value='']")
     # the tools above the map: search, season, filters; the legend under them; the scale at the top of the map
     check(page.locator(".map-toolbar #m-search").count() == 1 and page.locator(".map-toolbar #m-filters").count() == 1, "map: the tools in one bar")
-    check(page.locator(".map-legend .heat-legend").count() == 1 and page.locator(".map-legend .key").count() == 3, "map: the legend above the map")
+    check(page.locator(".map-legend .heat-legend").count() == 1 and page.locator(".map-legend .key").count() == 3 and "few" not in page.inner_text(".map-legend") and "climb" not in page.inner_text(".map-legend"), "map: the legend above the map (heat map, itinerary, take-off, car park)")
     check(page.locator(".leaflet-top.leaflet-right .leaflet-control-scale").count() == 1, "map: the scale at the top")
     check(page.locator("#m-who").count() == 0, "map: no « My tracks » for a visitor")
     check("1 take-off spot, 1 confirmed outing" in page.inner_text(".side"), "map counts only the verified outing: " + page.inner_text(".side")[:90])
@@ -329,7 +329,7 @@ with sync_playwright() as p:
     check("map-full" in (page.get_attribute(".map-wide", "class") or ""), "map: full screen")
     page.keyboard.press("Escape")
     check("map-full" not in (page.get_attribute(".map-wide", "class") or ""), "map: Escape leaves full screen")
-    check("pilots" in page.inner_text(".heat-legend"), "map: heat map legend")
+    check(page.inner_text(".heat-legend").strip() == "Heat map", "map: heat map legend")
     winter = int(ROW1["outing_date"][5:7]) in (11, 12, 1, 2, 3, 4)
     page.click("#m-season button[data-value=winter]")
     check(("1 take-off spot," if winter else "0 take-off spots,") in page.inner_text(".side"), "map: season filter")
@@ -350,9 +350,11 @@ with sync_playwright() as p:
     page.wait_for_selector(".out-list li", timeout=15000)
     check(page.locator(".start-group").count() == 1 and "From " in page.inner_text(".start-group summary"), "take-off clicked: outings grouped by start place")
     check(page.locator(".out-list li").count() == 1 and "Alice" in page.inner_text(".out-list"), "take-off clicked: its outing is listed")
-    check(page.locator(".leaflet-overlay-pane path.leaflet-interactive").count() == 1, "take-off clicked: one climb drawn, no flight")
+    check(page.locator(".spot-more").count() <= 1 and page.locator(".side details.spot-more[open]").count() == 0, "take-off clicked: more about it folded")
+    # only the itineraries are drawn: an outing's climb appears while it is hovered or kept lit, never a flight
+    check(page.locator(".leaflet-overlay-pane path.leaflet-interactive").count() == 0, "take-off clicked: no pilot's climb drawn by itself")
     page.locator(".out-list li").first.click()
-    check(page.locator(".out-list li.on").count() == 1, "outing clicked: kept lit")
+    check(page.locator(".out-list li.on").count() == 1 and page.locator(".leaflet-overlay-pane path.leaflet-interactive").count() == 1, "outing clicked: kept lit, its climb drawn, no flight")
     page.screenshot(path=f"{SHOTS}/3b-map.png")
 
     page.goto(BASE + f"#/user/{UID}")

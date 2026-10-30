@@ -262,8 +262,6 @@ export default {
   'map.groupTip': '{where} · {takeoffs} · {outings} — clicca per ingrandire',
   'map.groupAria': '{where}, {takeoffs}',
 
-  'heat.routes': 'Percorsi di salita a piedi · piloti',
-  'heat.takeoffs': 'Decolli · piloti',
 
   'search.takeoffAt': 'decollo a {alt} m',
   'search.takeoff': 'decollo',
@@ -304,8 +302,6 @@ export default {
   'status.crowded': { one: '{n} salita: la mappa di calore mostra i percorsi di salita. Passa sopra un’uscita per vedere la sua salita; cliccala per tenerla.', other: '{n} salite: la mappa di calore mostra i percorsi di salita. Passa sopra un’uscita per vedere la sua salita; cliccala per tenerla.' },
   'status.hover': 'Passa sopra un’uscita per evidenziarne la salita; cliccala per tenerla evidenziata.',
 
-  'heat.few': 'pochi',
-  'heat.many': 'molti',
 
   'ffvl.status.active': 'Attivo',
   'ffvl.status.ask': 'Autorizzazione necessaria ogni volta',
@@ -434,8 +430,11 @@ export default {
   'map.clearFilters': 'Azzera',
   'map.showOutings': { one: 'Mostra {n} uscita', other: 'Mostra {n} uscite' },
   'legend.route': 'Itinerario',
-  'legend.climb': 'Salita di un pilota',
-  'legend.takeoff': 'Decollo',
+  'legend.heat': 'Mappa di calore',
+  'legend.takeoff': 'Decollo (H&F Tracks)',
+  'legend.ffvl': 'Decollo FFVL',
+  'legend.parking': 'Parcheggio',
+  'spot.more': 'Altre informazioni sul decollo',
   'home.title': 'Dove voliamo?',
   'home.claim1': 'Salire, decollare, atterrare. Condividere la traccia.',
   'home.claim2': 'Scoprire sentieri, esplorare il cielo.',
