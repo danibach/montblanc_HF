@@ -457,7 +457,7 @@ export default {
   'home.seeAll': 'Tout voir →',
   'home.inspiration': 'Inspiration',
   'home.combos': 'D’un déco à l’autre',
-  'home.combosText': 'Monter, voler, remonter ailleurs : des sorties qui relient plusieurs décos dans la journée.',
+  'home.combosText': 'Monter, voler et repartir pour une montée : des sorties qui relient plusieurs décos dans la journée.',
   'home.takeoffs': { one: '{n} déco', other: '{n} décos' },
   'help.title': 'Aide',
   'help.sub': 'Les questions qu’on se pose en déposant une trace ou en lisant la carte.',

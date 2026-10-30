@@ -457,7 +457,7 @@ export default {
   'home.seeAll': 'Alle ansehen →',
   'home.inspiration': 'Inspiration',
   'home.combos': 'Von Startplatz zu Startplatz',
-  'home.combosText': 'Aufsteigen, fliegen, anderswo wieder aufsteigen: Touren, die an einem Tag mehrere Startplätze verbinden.',
+  'home.combosText': 'Aufsteigen, fliegen und zu einem neuen Aufstieg aufbrechen: Touren, die an einem Tag mehrere Startplätze verbinden.',
   'home.takeoffs': { one: '{n} Startplatz', other: '{n} Startplätze' },
   'help.title': 'Hilfe',
   'help.sub': 'Die Fragen, die beim Hochladen eines Tracks oder beim Lesen der Karte aufkommen.',

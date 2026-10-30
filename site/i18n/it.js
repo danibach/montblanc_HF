@@ -457,7 +457,7 @@ export default {
   'home.seeAll': 'Vedi tutte →',
   'home.inspiration': 'Ispirazione',
   'home.combos': 'Da un decollo all’altro',
-  'home.combosText': 'Salire, volare, risalire altrove: uscite che collegano più decolli in una giornata.',
+  'home.combosText': 'Salire, volare e ripartire per un’altra salita: uscite che collegano più decolli in una giornata.',
   'home.takeoffs': { one: '{n} decollo', other: '{n} decolli' },
   'help.title': 'Aiuto',
   'help.sub': 'Le domande che nascono caricando una traccia o leggendo la mappa.',

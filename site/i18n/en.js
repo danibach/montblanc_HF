@@ -458,7 +458,7 @@ export default {
   'home.seeAll': 'See all →',
   'home.inspiration': 'Inspiration',
   'home.combos': 'From take-off to take-off',
-  'home.combosText': 'Climb, fly, climb again somewhere else: outings that link several take-offs in a day.',
+  'home.combosText': 'Climb, fly and set off on another climb: outings that link several take-offs in a day.',
   'home.takeoffs': { one: '{n} take-off', other: '{n} take-offs' },
   'help.title': 'Help',
   'help.sub': 'The questions that come up when uploading a track or reading the map.',
