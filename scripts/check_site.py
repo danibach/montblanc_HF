@@ -471,8 +471,12 @@ with sync_playwright() as p:
     page.wait_for_selector(".stats", timeout=15000)
     check(page.inner_text("h1") == "Alice" and "Total distance on flight" in page.inner_text(".stats") and page.locator("#f-year").count() == 1, "My H&Fs is the pilot page: name, totals, filters")
     page.select_option("#f-year", "2026")
-    page.wait_for_function("location.hash.startsWith('#/me?year=2026')")
-    check(True, "My H&Fs: the filters stay on #/me")
+    # read the address from here: a waiting function given as text would be refused by the page's script policy
+    for _ in range(50):
+        if "#/me?year=2026" in page.url:
+            break
+        page.wait_for_timeout(100)
+    check("#/me?year=2026" in page.url, "My H&Fs: the filters stay on #/me (" + page.url.split("#")[-1] + ")")
     page.goto(BASE + "#/map")
     page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
     page.click("#m-season button[data-value='']")
