@@ -456,7 +456,7 @@ export default {
   'home.latest': 'Le ultime uscite',
   'home.seeAll': 'Vedi tutte →',
   'home.inspiration': 'Ispirazione',
-  'home.combos': 'I concatenamenti',
+  'home.combos': 'Da un decollo all’altro',
   'home.combosText': 'Salire, volare, risalire altrove: uscite che collegano più decolli in una giornata.',
   'home.takeoffs': { one: '{n} decollo', other: '{n} decolli' },
   'help.title': 'Aiuto',

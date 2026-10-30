@@ -456,7 +456,7 @@ export default {
   'home.latest': 'Die neuesten Touren',
   'home.seeAll': 'Alle ansehen →',
   'home.inspiration': 'Inspiration',
-  'home.combos': 'Verkettete Startplätze',
+  'home.combos': 'Von Startplatz zu Startplatz',
   'home.combosText': 'Aufsteigen, fliegen, anderswo wieder aufsteigen: Touren, die an einem Tag mehrere Startplätze verbinden.',
   'home.takeoffs': { one: '{n} Startplatz', other: '{n} Startplätze' },
   'help.title': 'Hilfe',

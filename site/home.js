@@ -26,6 +26,16 @@ const HEAT = { radius: 18, blur: 16, maxZoom: 9, max: 4, minOpacity: 0.4, gradie
 const STILL = { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
   keyboard: false, touchZoom: false, tap: false, zoomSnap: 0.25 }; // a quarter zoom step: the track fills its card
 
+// a soft colour per flying sector, the same for a sector everywhere (from its name)
+const SECTOR_COLOURS = ['#7fb3d5', '#9cc58f', '#e2b38f', '#c7a4c9', '#e8c36a', '#8fc7c0', '#d99a9a', '#a9b8d9'];
+function sectorDot(name) {
+  let n = 0;
+  for (const c of name) n = (n * 31 + c.codePointAt(0)) >>> 0;
+  const dot = h('span', { class: 'sector-dot', 'aria-hidden': 'true' });
+  dot.style.background = SECTOR_COLOURS[n % SECTOR_COLOURS.length]; // a property, not an attribute: the page's CSP
+  return dot;
+}
+
 function metres(a, b) {
   const r = Math.PI / 180;
   const x = Math.sin(((b[0] - a[0]) * r) / 2) ** 2
@@ -149,7 +159,7 @@ export function buildHome({ latest, mapRows, sites, routes, flown, ffvl = [], lo
   const sectorChips = sectors.size ? h('div', { class: 'hero-sectors' },
     h('span', { class: 'hint' }, t('home.sectors')),
     h('div', { class: 'chips' }, [...sectors.entries()].sort((a, b) => b[1] - a[1]).slice(0, SECTORS).map(([name, n]) =>
-      h('a', { class: 'chip', href: `#/map?sector=${encodeURIComponent(name)}` }, name, ' ', h('span', { class: 'hint' }, `· ${t('home.sectorTakeoffs', { n })}`))))) : null;
+      h('a', { class: 'chip', href: `#/map?sector=${encodeURIComponent(name)}` }, sectorDot(name), name, ' ', h('span', { class: 'hint' }, `· ${t('home.sectorTakeoffs', { n })}`))))) : null;
 
   const overview = h('div', { class: 'mc-map', role: 'img', 'aria-label': t('home.mapAria') });
   const element = h('div', { class: 'home' },

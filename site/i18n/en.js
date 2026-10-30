@@ -457,7 +457,7 @@ export default {
   'home.latest': 'The latest outings',
   'home.seeAll': 'See all →',
   'home.inspiration': 'Inspiration',
-  'home.combos': 'Chained take-offs',
+  'home.combos': 'From take-off to take-off',
   'home.combosText': 'Climb, fly, climb again somewhere else: outings that link several take-offs in a day.',
   'home.takeoffs': { one: '{n} take-off', other: '{n} take-offs' },
   'help.title': 'Help',

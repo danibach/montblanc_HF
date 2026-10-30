@@ -456,7 +456,7 @@ export default {
   'home.latest': 'Les dernières sorties',
   'home.seeAll': 'Tout voir →',
   'home.inspiration': 'Inspiration',
-  'home.combos': 'Les enchaînements',
+  'home.combos': 'D’un déco à l’autre',
   'home.combosText': 'Monter, voler, remonter ailleurs : des sorties qui relient plusieurs décos dans la journée.',
   'home.takeoffs': { one: '{n} déco', other: '{n} décos' },
   'help.title': 'Aide',
