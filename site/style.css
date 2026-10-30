@@ -35,12 +35,24 @@ header.site { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.
 .account { display: flex; gap: .7rem; align-items: center; font-size: .92rem; }
 .account a { color: var(--ink-2); text-decoration: none; }
 .account a:hover { color: var(--ink); }
-.account-menu summary { color: var(--ink-2); padding: .35rem .55rem; border-radius: 8px; cursor: pointer; }
-.account-menu summary:hover, .account-menu[open] summary { background: var(--card-2); color: var(--ink); }
-.account-menu .nav-menu { left: auto; right: 0; gap: .15rem; }
-.account-menu .nav-menu > a, .account-menu .nav-menu > button { padding: .5rem .65rem; border-radius: 8px; text-align: left; color: var(--ink); text-decoration: none; }
-.account-menu .nav-menu > a:hover, .account-menu .nav-menu > button:hover { background: var(--card-2); }
-.menu-lang { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .4rem .65rem; color: var(--muted); }
+/* the account: a pill with the initials, its menu a small card (Sarah, 30 October 2026) */
+.account-menu summary { display: inline-flex; align-items: center; gap: .45rem; color: var(--ink-2); padding: .2rem .65rem .2rem .2rem; border: 1px solid var(--line); border-radius: 999px; background: var(--card); cursor: pointer; }
+.account-menu .ini { line-height: 1; }
+.account-menu summary .ini { margin: 0; width: 26px; height: 26px; background: var(--orange-bg); color: var(--orange-dark); vertical-align: 0; }
+.account-menu summary:hover, .account-menu[open] summary { border-color: var(--field-line); color: var(--ink); }
+.acc-name { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu .nav-menu { left: auto; right: 0; min-width: 15rem; padding: .4rem; gap: 0; }
+.acc-head { display: flex; align-items: center; gap: .65rem; padding: .55rem .6rem; border-radius: 10px; color: var(--ink) !important; text-decoration: none; }
+.acc-head:hover { background: var(--card-2); }
+.acc-head .ini { margin: 0; width: 34px; height: 34px; font-size: .8rem; background: var(--orange-bg); color: var(--orange-dark); vertical-align: 0; flex: none; }
+.acc-head span { display: flex; flex-direction: column; line-height: 1.25; }
+.acc-head small { color: var(--muted); font-size: .8rem; }
+.menu-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .55rem .6rem; margin-top: .3rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
+.menu-langs { display: inline-flex; background: var(--card-2); border-radius: 999px; padding: 2px; }
+.menu-langs button { border: 0; background: transparent; padding: .18rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; color: var(--muted); cursor: pointer; }
+.menu-langs button[aria-pressed=true] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(80, 60, 40, .15); }
+.acc-out { display: block; width: 100%; margin-top: .3rem; padding: .55rem .6rem; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; background: transparent; text-align: left; color: var(--muted); font: inherit; font-size: .88rem; cursor: pointer; }
+.acc-out:hover { color: #b3261e; background: #fdf1ef; }
 /* the one main action: upload a track, an orange outline (Sarah, 30 October 2026: not a filled button) */
 .cta { display: inline-flex; align-items: center; gap: .4rem; color: var(--orange); border: 1.5px solid var(--orange); border-radius: 999px; padding: .32rem .9rem; font-size: .9rem; font-weight: 500; text-decoration: none; background: transparent; }
 .cta:hover, .cta[aria-current=page] { background: var(--orange-bg); }

@@ -485,7 +485,10 @@ with sync_playwright() as p:
     check(page.locator("#lang-pick select").count() == 0, "signed in: no language selector in the header")
     page.click("#account .account-menu summary")
     menu = page.inner_text("#account .nav-menu")
-    check("Sign out" in menu and page.locator("#account .nav-menu select").count() == 1, "signed in: the name's menu holds the page, the language and Sign out")
+    check("Sign out" in menu and page.locator("#account .menu-langs button").count() == 4
+          and page.locator("#account .menu-langs button[aria-pressed=true]").inner_text() == "EN",
+          "signed in: the name's menu holds the page, the language (EN lit) and Sign out")
+    page.screenshot(path=f"{SHOTS}/7-account-menu.png", clip={"x": 760, "y": 0, "width": 520, "height": 330})
     # the pilot page drawn before stays until #/me is drawn: mark it, then wait for the new one
     page.evaluate("document.querySelector('.stats').dataset.before = '1'")
     page.click("#account a[href='#/me']")

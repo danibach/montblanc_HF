@@ -34,13 +34,18 @@ function renderAccount() {
   const box = $('#account');
   box.replaceChildren();
   if (api.state.user) {
-    const name = api.state.profile && api.state.profile.display_name;
+    const name = (api.state.profile && api.state.profile.display_name) || t('account.yourPage');
+    // a pill with the pilot's initials; the menu: who, their page, the language as small buttons, then « Sign out »
+    // apart (Sarah, 30 October 2026: lighter and neater than a row of links)
+    const langs = h('div', { class: 'menu-langs', role: 'group', 'aria-label': t('lang.label') },
+      LANGS.map((l) => h('button', { type: 'button', lang: l.code, title: l.name, 'aria-pressed': String(l.code === getLang()),
+        onclick: () => setLang(l.code, { save: true }) }, l.code.toUpperCase())));
     const menu = h('details', { class: 'nav-more account-menu' },
-      h('summary', null, name || t('account.yourPage')),
+      h('summary', null, initials(name), h('span', { class: 'acc-name' }, name)),
       h('div', { class: 'nav-menu' },
-        h('a', { href: '#/me' }, t('account.yourPage')),
-        h('label', { class: 'menu-lang' }, h('span', null, t('lang.label')), langSelect()),
-        h('button', { class: 'link', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut'))));
+        h('a', { class: 'acc-head', href: '#/me' }, initials(name), h('span', null, h('b', null, name), h('small', null, t('account.yourPage')))),
+        h('div', { class: 'menu-row' }, h('span', null, t('lang.label')), langs),
+        h('button', { class: 'acc-out', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut'))));
     // a choice in the menu closes it
     menu.querySelector('.nav-menu').addEventListener('click', (ev) => { if (ev.target.closest('a, button')) menu.open = false; });
     box.append(menu);
