@@ -35,7 +35,8 @@ for f in "${todo[@]}"; do
   name=$(basename "$f")
   if [ "$DRY" = 1 ]; then echo "Would apply: $name"; continue; fi
   echo "Applying $name ..."
-  { echo "begin;"; cat "$f"; echo; echo "insert into public.applied_migrations(file) values ('$name');"; echo "commit;"; } \
+  # without the byte order mark some Windows editors put first: psql reads it as a syntax error
+  { echo "begin;"; sed '1s/^\xEF\xBB\xBF//' "$f"; echo; echo "insert into public.applied_migrations(file) values ('$name');"; echo "commit;"; } \
     | psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -X -q
   echo "  done: $name"
 done
