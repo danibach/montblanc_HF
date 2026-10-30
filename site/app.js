@@ -258,11 +258,11 @@ async function pageMine(token) {
 // Home: the same for everyone, signed in or not.
 async function pageHome(token) {
   setNav('home');
-  const [{ rows: latest }, mapRows, sites, routes, flown] = await Promise.all([
-    api.listOutings({ limit: 6 }), api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFlownOutings()]);
+  const [{ rows: latest }, mapRows, sites, routes, flown, ffvl] = await Promise.all([
+    api.listOutings({ limit: 6 }), api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFlownOutings(), api.getFfvlSites()]);
   if (token !== routeToken) return;
   // the outings the server has checked: one waiting for it may still be refused
-  show(buildHome({ latest: latest.filter((o) => o.verified !== false), mapRows, sites, routes, flown }));
+  show(buildHome({ latest: latest.filter((o) => o.verified !== false), mapRows, sites, routes, flown, ffvl }));
 }
 
 async function pageRanking(token) {

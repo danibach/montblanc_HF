@@ -112,9 +112,10 @@ const MAP_PICTURE = () => s('svg', { viewBox: '0 0 400 240', preserveAspectRatio
 
 /**
  * The home page. ``latest``: the newest outings (listOutings); ``mapRows``: the outings of the map (getMapOutings);
- * ``sites``, ``routes``: the take-offs and the itineraries of the map; ``flown``: the newest outings with their flights.
+ * ``sites``, ``routes``: the take-offs and the itineraries of the map; ``flown``: the newest outings with their flights;
+ * ``ffvl``: the FFVL's official sites (getFfvlSites), to name the take-offs of a chain.
  */
-export function buildHome({ latest, mapRows, sites, routes, flown }) {
+export function buildHome({ latest, mapRows, sites, routes, flown, ffvl = [] }) {
   const search = h('input', { type: 'search', name: 'q', placeholder: t('home.search'), 'aria-label': t('home.search'), autocomplete: 'off' });
   const form = h('form', { class: 'warm-search', role: 'search', onsubmit: (ev) => {
     ev.preventDefault();
@@ -127,7 +128,9 @@ export function buildHome({ latest, mapRows, sites, routes, flown }) {
   for (const o of mapRows) if (o.takeoff_lat != null && !spots.has(spotKey(o))) spots.set(spotKey(o), o);
 
   const climbOf = new Map(mapRows.map((o) => [o.id, o.climb && o.climb.line]));
-  const named = [...sites.map((x) => [x.lat, x.lon, x.name]), ...mapRows.map((o) => [o.takeoff_lat, o.takeoff_lon, o.takeoff_name])]
+  // the names of take-offs: the register's, the outings', then the FFVL's official ones (Prarion, Tête du Mottey…)
+  const named = [...sites.map((x) => [x.lat, x.lon, x.name]), ...mapRows.map((o) => [o.takeoff_lat, o.takeoff_lon, o.takeoff_name]),
+    ...ffvl.filter((f) => String(f.kind || '').includes('T')).map((f) => [f.lat, f.lon, f.name])]
     .filter((x) => x[0] != null && x[2]);
   const names = (p) => {
     let best = null;
@@ -150,7 +153,7 @@ export function buildHome({ latest, mapRows, sites, routes, flown }) {
   const sectorChips = sectors.size ? h('div', { class: 'hero-sectors' },
     h('span', { class: 'hint' }, t('home.sectors')),
     h('div', { class: 'chips' }, [...sectors.entries()].sort((a, b) => b[1] - a[1]).slice(0, SECTORS).map(([name, n]) =>
-      h('a', { class: 'chip', href: `#/map?sector=${encodeURIComponent(name)}` }, name, h('span', { class: 'hint' }, `· ${t('home.sectorTakeoffs', { n })}`))))) : null;
+      h('a', { class: 'chip', href: `#/map?sector=${encodeURIComponent(name)}` }, name, ' ', h('span', { class: 'hint' }, `· ${t('home.sectorTakeoffs', { n })}`))))) : null;
 
   return h('div', { class: 'home' },
     h('div', { class: 'warm-hero' }, HERO(),
