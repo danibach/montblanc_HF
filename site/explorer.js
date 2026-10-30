@@ -601,8 +601,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     });
   }
 
-  // the take-off's register entry and FFVL card, folded under the itineraries (Sarah, 30 October 2026: the panel
-  // shows first what one comes for)
+  // the take-off's register entry and FFVL card, folded under its name (Sarah, 30 October 2026: short, but in sight)
   function moreAbout(sp) {
     const facts = [siteFacts(sp), ffvlFacts(sp)].filter(Boolean);
     return facts.length ? h('details', { class: 'spot-more' }, h('summary', null, t('spot.more')), facts) : null;
@@ -628,7 +627,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
           h('p', { class: 'hint' }, [plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot'), windsOf(sp)].filter(Boolean).join(' · '))),
         h('button', { class: 'link close', 'aria-label': t('map.back'), onclick: overview }, '×')),
       // replaceChildren would write a null as the text « null »
-      ...[status, list, moreAbout(sp)].filter(Boolean));
+      ...[moreAbout(sp), status, list].filter(Boolean));
     side.scrollTop = 0;
     map.setView([sp.lat, sp.lon], Math.max(map.getZoom(), 13));
 
