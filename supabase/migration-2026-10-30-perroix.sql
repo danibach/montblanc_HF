@@ -1,4 +1,4 @@
-﻿-- « Les Esserts » above Talloires is the landing field of Perroix (Sarah, 30 October 2026): the outings analysed
+-- « Les Esserts » above Talloires is the landing field of Perroix (Sarah, 30 October 2026): the outings analysed
 -- before the engine used the pilots' name (src/mbhf/places.py, START_NAMES) get it too, in their start and title.
 -- Only within about 2 km of the place: other villages have a « Les Esserts » of their own.
 -- Applied once on merge by the « Migrate » action; can be run again without harm (it changes nothing the second time).

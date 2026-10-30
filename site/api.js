@@ -158,7 +158,7 @@ export async function listUserOutings(userId) {
 const MAP_FIELDS = ['id', 'takeoff_lat', 'takeoff_lon', 'takeoff_alt', 'takeoff_name', 'title', 'outing_date',
   'dplus_m', 'walk_km', 'start_place', 'pilot', 'summit_alt', 'user_id', 'climb', 'takeoff_site_id', 'takeoff_site_status', 'route_id'];
 const SITE_FIELDS = ['id', 'name', 'lat', 'lon', 'alt', 'source', 'wind_ok', 'hike_and_fly'];
-const ROUTE_FIELDS = ['id', 'site_id', 'name', 'line'];
+const ROUTE_FIELDS = ['id', 'site_id', 'name', 'line', 'parking'];  // parking: missing before the 30 October migration
 
 const FFVL_FIELDS = ['id', 'name', 'lat', 'lon', 'alt', 'kind', 'status', 'winds'];
 

@@ -6,7 +6,7 @@ import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
 import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
 import { h, s, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle, placeName } from './util.js';
-import { t, tr } from './i18n.js';
+import { fmtDay, t, tr } from './i18n.js';
 import { card as ffvlCard, ffvlLayer, windLabel } from './ffvl.js';
 import { scaleAndRuler } from './ruler.js';
 
@@ -34,7 +34,7 @@ const HEAT_SPOTS = { radius: 20, blur: 15, maxZoom: 8, max: 4, minOpacity: 0.45,
 const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35, gradient: GRADIENT };
 const CLIMB = { color: '#1f4fff', weight: 1.5, opacity: 0.9 };
 const CLIMB_HOT = { color: '#e0161b', weight: 2.5, opacity: 1 };
-// the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per start
+// the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per itinerary
 const ROUTE_W = 2; // fine lines (Sarah, 27 October 2026); a wider invisible line catches the pointer
 const HIT_W = 14;
 const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 2, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
@@ -61,31 +61,6 @@ function segmented(id, label, options) {
     set: (v) => { value = v; for (const b of buttons) b.setAttribute('aria-pressed', String(b.dataset.value === v)); },
   });
   return box;
-}
-
-const PARKING_M = 30; // an itinerary's first point this close to a car park of OpenStreetMap starts at it
-const parkingCache = new Map();
-/** For each point ([lat, lon]), whether OpenStreetMap has a car park within PARKING_M; all false when it cannot say. */
-async function parkingsNear(points) {
-  const key = (p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`;
-  // one question per start: « around » measures to a car park's outline, not its centre (a big car park's centre
-  // can be far from the way's start); a take-off has a few itineraries at most
-  // Overpass is often busy (502, 504): a second try a moment later
-  const ask = async (q) => {
-    for (const wait of [0, 1500]) {
-      if (wait) await new Promise((r) => setTimeout(r, wait));
-      try {
-        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: q }) });
-        if (res.ok) return (await res.json()).elements || [];
-      } catch (_) { /* tried again below */ }
-    }
-    return null;
-  };
-  for (const p of points.filter((x) => !parkingCache.has(key(x)))) {
-    const found = await ask(`[out:json][timeout:15];nwr["amenity"="parking"](around:${PARKING_M},${p[0]},${p[1]});out ids 1;`);
-    if (found) parkingCache.set(key(p), found.length > 0); // no answer: no P there, asked again next time
-  }
-  return points.map((p) => parkingCache.get(key(p)) || false);
 }
 
 const filterIcon = () => s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('path', { d: 'M4 6h16M7 12h10M10 18h4' }));
@@ -348,6 +323,7 @@ function inBand(value, band) {
 const fold = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const squash = (text) => fold(text).replace(/[\s'’-]+/g, '');
 const hasText = (text, query) => fold(text).includes(fold(query)) || squash(text).includes(squash(query));
+const sameText = (a, b) => squash(a) === squash(b);
 
 function season(o) {
   const month = Number(String(o.outing_date || '').slice(5, 7));
@@ -635,14 +611,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     return box;
   }
 
-  // a P where an itinerary starts at a car park: the server starts it there when one is within 100 m
-  // (src/mbhf/routes.py) but does not say so, so the car parks at the starts are asked from OpenStreetMap
-  async function markParkings(rts, mine) {
-    // each P as soon as its answer comes: Overpass can be slow
+  // a P where an itinerary starts at a car park: the server starts it there when one is within 100 m and says so
+  // (src/mbhf/routes.py, migration-2026-10-30-route-parking.sql); nothing is asked from the visitor's browser
+  function markParkings(rts) {
     for (const r of rts) {
-      const [at] = await parkingsNear([r.line[0]]);
-      if (mine !== request) return;
-      if (at) L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
+      if (r.parking) L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
     }
   }
 
@@ -667,6 +640,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     side.replaceChildren(
       h('div', { class: 'side-head' },
         h('div', null,
+          // the panel is a take-off's; an outing below is named after its summit (Sarah, 30 October 2026)
+          h('span', { class: 'side-kind' }, t('spot.kind')),
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, [sectorOf(sp.lat, sp.lon), sp.alt != null ? t('search.takeoffAt', { alt: fmtInt(sp.alt) }) : null].filter(Boolean).join(' · ')),
           h('p', { class: 'hint' }, [plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot'), windsOf(sp)].filter(Boolean).join(' · '))),
@@ -733,15 +708,21 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
 
     function item(o) {
       const climb = climbOfId.get(o.id);
+      // the take-off's name is the panel's title: an outing that went there and nowhere else is named by its date and
+      // pilot; one that went elsewhere too keeps its own title (Sarah, 30 October 2026)
+      const title = outingTitle(o);
+      const own = title && !sameText(title, sp.name);
       const li = h('li', { 'data-id': o.id, tabindex: '0', class: o.id === selected ? 'on' : null },
-        h('b', null, outingTitle(o)),
-        h('span', { class: 'hint' }, `${o.pilot || t('pilot.anonymous')} · ${fmtDate(o.outing_date)}`),
+        own ? h('b', null, t('item.named', { title })) : null,
+        h(own ? 'span' : 'b', { class: own ? 'hint' : null }, `${fmtDay(o.outing_date) || fmtDate(o.outing_date)} · ${o.pilot || t('pilot.anonymous')}`),
+        // the outing's own D+ and km on foot, as on its page: the climb alone can be a part of the day (a first flight,
+        // a drive between two walks), and read beside the outing it looked like the whole (Sarah, 30 October 2026)
         h('span', { class: 'nums' },
-          h('span', { title: climb && climb.dplus_m != null ? t('item.dplusClimb') : t('stat.dplus') }, `↗ ${fmtInt(climbDplus(o, climb))} m`),
-          h('span', { title: t('item.distance') }, climb ? fmtKm(climb.km) : fmtKm(o.walk_km)),
-          h('span', { title: t('item.time') }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : '')),
-        climb ? null : h('span', { class: 'hint' }, t('item.noClimb')),
-        h('a', { href: `#/outing/${o.id}` }, t('item.open')));
+          h('span', { title: t('stat.dplus') }, `↗ ${fmtInt(o.dplus_m)} m`),
+          h('span', { title: t('stat.walk') }, fmtKm(o.walk_km)),
+          h('span', { title: t('item.time') }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : ''),
+          h('a', { class: 'open', href: `#/outing/${o.id}`, 'aria-label': t('item.open') }, t('item.openShort'))),
+        climb ? null : h('span', { class: 'hint' }, t('item.noClimb')));
       li.addEventListener('mouseenter', () => restyle(o.id));
       li.addEventListener('mouseleave', () => restyle(null));
       li.addEventListener('focus', () => restyle(o.id));
@@ -773,17 +754,19 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     for (const [key, outings] of ordered) starts.set(placeOf.get(key), [...(starts.get(placeOf.get(key)) || []), [key, outings]]);
     const count = (ways) => ways.reduce((n, [, outings]) => n + outings.length, 0);
     const startList = [...starts.entries()].sort((a, b) => count(b[1]) - count(a[1]));
-    // one colour per start; its busiest way in a full line, the others dotted
+    // one colour per itinerary, in full lines: orange, blue, green… in the order of the list (Sarah, 30 October 2026:
+    // no more dotted lines for the other ways from the same start)
     const look = new Map();
-    startList.forEach(([, ways], i) => ways.forEach(([key], j) => look.set(key, { color: PALETTE[i % PALETTE.length], main: j === 0 })));
+    let colour = 0;
+    for (const [, ways] of startList) for (const [key] of ways) look.set(key, { color: PALETTE[colour++ % PALETTE.length] });
 
     // a thin line per route on a white casing (the number of outings is in the list, not in the width)
     const routeLines = new Map();
     for (const [key, outings] of ordered) {
       const route = key.startsWith('route:') ? siteRoutes.get(Number(key.slice(6))) : null;
       if (!route || !route.line || route.line.length < 2) continue;
-      const { color, main } = look.get(key);
-      const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round', dashArray: main ? null : '1 8' };
+      const { color } = look.get(key);
+      const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round' };
       const casing = L.polyline(route.line, { ...ROUTE_CASING, interactive: false }).addTo(climbs);
       const line = L.polyline(route.line, { ...style, interactive: false }).addTo(climbs);
       // the line is fine: an invisible wider one above it takes the pointer
@@ -826,7 +809,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       if (group) group.scrollIntoView({ block: 'nearest' });
     }
     const swatch = (key) => {
-      const i = h('i', { class: look.get(key) && !look.get(key).main ? 'swatch dotted' : 'swatch' });
+      const i = h('i', { class: 'swatch' });
       if (look.get(key)) i.style.setProperty('--c', look.get(key).color); // a property, not an attribute: the page's CSP
       return i;
     };
@@ -882,7 +865,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
         // a start with several ways: a folder of them
         const fkey = `start:${place}`;
         const keys = ways.map(([key]) => key);
-        const summary = h('summary', null, swatch(keys[0]), fromPlace(place),
+        const summary = h('summary', null, fromPlace(place),
           h('span', { class: 'hint' }, ` · ${t('route.ways', { n: ways.length })}`), h('span', { class: 'badge' }, fmtInt(count(ways))));
         summary.addEventListener('mouseenter', () => paintRoutes(keys));
         summary.addEventListener('mouseleave', () => paintRoutes([]));
@@ -938,7 +921,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, t('sort.label')), sortPick));
     renderList();
     // every itinerary of the take-off, even one none of the listed outings is tied to yet
-    markParkings([...siteRoutes.values()].filter((r) => r.line && r.line.length > 1), mine);
+    markParkings([...siteRoutes.values()].filter((r) => r.line && r.line.length > 1));
     status.textContent = byRoute
       ? t('status.byRoute', { n: routeLines.size })
       : crowded

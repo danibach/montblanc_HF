@@ -6,13 +6,14 @@ within 15 to 110 m on the live climbs, different paths stray 400 m or more) are 
 Since 29 October 2026 (Sarah, from a prototype on the live climbs; see Notion « Points ouverts et idées »), a trace
 and an itinerary are two things. The trace of an outing is kept whole (its numbers, the heat map of the ways up, even
 when it leaves from home). The itinerary is the line the map proposes, and it never starts at a private place:
-* each climb counts from where it joins the public network for good (``Access.junction``: the paths, tracks and
-  streets of OpenStreetMap; private ways and driveways left out), never from its first fix;
+* each climb counts from where it first joins the public network for good (``Access.junction``: the paths, tracks
+  and streets of OpenStreetMap; private ways and driveways left out), never from its first fix;
 * climbs that join one another (one goes along the other for ``INSIDE_SHARE`` of the rest of its way, that rest
   being ``JOINED_MIN`` of its way at least) are one itinerary; the other ways pilots took stay on the heat map;
 * the itinerary starts at the most used start (starts within ``STARTS_M`` are one), the lowest on a tie (the one
   with the longest way up), and at a parking when one is within ``PARKING_M`` of it;
-* its line is the median of its climbs laid along the climb of that start with the longest way up.
+* its line is the median of its climbs laid along the climb of that start with the longest way up;
+* its start is named after an official FFVL landing within ``LANDING_M``, else after the place OpenStreetMap gives.
 Without the public network (OpenStreetMap did not answer), the climbs count from their first fix: the sync then
 keeps the take-off's itineraries as they were rather than make them so.
 
@@ -34,10 +35,16 @@ JOINED_MIN = 0.5       # ... when that rest is at least this share of its way: e
 STARTS_M = 150.0       # starts this close are one start
 PARKING_M = 100.0      # a parking this close to the start: the itinerary starts there
 ON_NETWORK_M = 35.0    # a fix this close to a public way is on the public network ...
-NETWORK_SHARE = 0.85   # ... and a climb has joined it when this share of the rest of its fixes is
+NETWORK_SHARE = 0.85   # ... and a climb has joined it when this share of its fixes over the next JOIN_M is
+JOIN_M = 300.0
 # the start names pilots use, where the map's differ (Sarah, 29 October 2026: Les Esserts is the landing field of
 # Perroix); each one only within 2 km of the given point
 PLACE_NAMES = {("Les Esserts", 45.852, 6.212): "Perroix"}
+# an official FFVL landing this close to an itinerary's start names it, as pilots know the place (Sarah, 30 October
+# 2026: « From Doussard », not the hamlet « From Le Vorget »); the landings pilots call otherwise, and those whose
+# name says less than the village (None: the start keeps its own name)
+LANDING_M = 500.0
+LANDING_NAMES = {"Planfait – Perroix": "Perroix", "Aerogliss": None, "La Vesanciere – Haut": None}
 STEP_M = 25.0
 ALIGN_AHEAD = 40       # laying a climb along another: look this many points (1 km) ahead for the nearest one
 LINE_POINTS = 120      # a median line keeps at most this many points
@@ -132,6 +139,23 @@ def _place(c: Climb) -> Optional[str]:
         if name == c.start_place and math.hypot((lon - plon) * 111320.0 * math.cos(math.radians(plat)), (lat - plat) * 110540.0) <= 2000:
             return said
     return c.start_place
+
+
+def landing_name(point: list, landings: list[dict]) -> Optional[str]:
+    """The name of the official landing within LANDING_M of ``point`` ([lat, lon]), the nearest, as pilots say it
+    (LANDING_NAMES); None when there is none, or when that landing does not name its starts."""
+    lat0 = point[0]
+    p = _xy([point], lat0)[0]
+    near = []
+    for t in landings or []:
+        q = _xy([[t["lat"], t["lon"]]], lat0)[0]
+        d = math.hypot(q[0] - p[0], q[1] - p[1])
+        if d <= LANDING_M and t.get("name"):
+            near.append((d, t["name"]))
+    if not near:
+        return None
+    name = min(near)[1]
+    return LANDING_NAMES.get(name, name)
 
 
 def starts(route: list[Climb]) -> list[list[Climb]]:
@@ -287,16 +311,23 @@ class Access:
         return False
 
     def junction(self, line: list) -> int:
-        """The index of ``line`` from which the climb is on the public network for good (NETWORK_SHARE of the rest);
-        0 when it never is (a climb off the paths keeps its own start)."""
-        on = [self.on_network(p) for p in _xy(line, self.lat0)]
-        rest = 0
-        best = 0
-        for i in range(len(on) - 1, -1, -1):
-            rest += on[i]
-            if on[i] and rest / (len(on) - i) >= NETWORK_SHARE:
-                best = i
-        return best if len(line) - best >= 2 else 0
+        """The index of ``line`` where the climb first joins the public network for good: a fix on it, with
+        NETWORK_SHARE of the fixes of the next JOIN_M on it too; 0 when it never does (a climb off the paths keeps its
+        own start). Only the way in from a private place is cut: a climb that leaves the paths higher up (snow, the
+        last slope to a summit) keeps the rest of its way (Sarah, 30 October 2026: the « for good » of the whole rest
+        cut La Tournette's itinerary to its last 130 m)."""
+        pts = _xy(line, self.lat0)
+        on = [self.on_network(p) for p in pts]
+        along = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            along.append(along[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
+        for i in range(len(on) - 1):
+            if not on[i]:
+                continue
+            window = [on[k] for k in range(i, len(on)) if along[k] - along[i] <= JOIN_M]
+            if sum(window) / len(window) >= NETWORK_SHARE:
+                return i
+        return 0
 
     def parking_near(self, point: list) -> Optional[list]:
         """The parking within PARKING_M of ``point`` ([lat, lon]), the nearest, or None."""
@@ -307,12 +338,13 @@ class Access:
         return _latlon([min(near, key=lambda q: math.hypot(q[0] - p[0], q[1] - p[1]))], self.lat0)[0]
 
 
-def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None) -> list[dict]:
+def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None, landings: Optional[list] = None) -> list[dict]:
     """``[{name, start_place, line, outing_ids}]`` for one take-off. A start with one way: « From La Clusaz ». A start
     with several: each way named after a place it goes by and the others do not, « via Les Corbassières »
     (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…
     With ``access``, each climb counts from where it joins the public network and an itinerary starts at a parking
-    within PARKING_M of its start."""
+    within PARKING_M of its start. ``landings`` ([{name, lat, lon}], the FFVL's): one within LANDING_M of an
+    itinerary's start names it."""
     if access is not None:
         public = []
         for c in climbs:
@@ -327,8 +359,9 @@ def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None) ->
         parking = access.parking_near(line[0]) if access is not None else None
         if parking:
             line = [parking] + line
+        place = landing_name(line[0], landings) or place
         out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
-                    "line": line, "outing_ids": [c.id for c in g]})
+                    "line": line, "outing_ids": [c.id for c in g], "parking": bool(parking)})
     by_place: dict = {}
     for r in out:
         by_place.setdefault(r["start_place"], []).append(r)

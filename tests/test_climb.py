@@ -43,6 +43,19 @@ def test_a_drive_before_the_walk_is_left_out():
     assert c["line"][0] == [45.005, 6.0] and c["line"][-1] == [45.015, 6.0]
 
 
+def test_a_short_gps_gap_does_not_cut_the_climb():
+    # Montagne de Vaunessin (30 October 2026): 3 minutes « as fast as a car » in the middle of the walk, a GPS gap
+    labels = [WALK] * 8 + [VEHICLE] * 2 + [WALK] * 5 + [FLIGHT] * 3
+    c = climb_of(toy_trace(labels), [])
+    assert c["line"][0] == [45.0, 6.0] and c["duration_s"] == 15 * 60 and c["v"] >= 2
+
+
+def test_a_drive_between_two_walks_still_cuts_the_climb():
+    labels = [WALK] * 3 + [VEHICLE] * 20 + [WALK] * 5 + [FLIGHT] * 3  # 20 minutes and 2 km by car
+    c = climb_of(toy_trace(labels), [])
+    assert c["line"][0] == [45.023, 6.0] and c["duration_s"] == 5 * 60
+
+
 def test_no_climb_without_walk_or_flight():
     assert climb_of(toy_trace([WALK] * 10), []) is None
     assert climb_of(toy_trace([FLIGHT] * 10), []) is None

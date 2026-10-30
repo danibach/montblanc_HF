@@ -28,26 +28,46 @@ let routeToken = 0;       // a slow answer for a page we already left must not d
 
 // ---------------------------------------------------------------- shell
 
+// Signed in, the header is lighter (Sarah, 30 October 2026): the pilot's name opens a menu with their page, the
+// language and « Sign out »; signed out, « Sign in » and the language stay in sight.
 function renderAccount() {
   const box = $('#account');
   box.replaceChildren();
   if (api.state.user) {
-    const name = api.state.profile && api.state.profile.display_name;
-    box.append(
-      h('a', { href: '#/me' }, name || t('account.yourPage')),
-      h('button', { class: 'link', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut')),
-    );
+    const name = (api.state.profile && api.state.profile.display_name) || t('account.yourPage');
+    // a pill with the pilot's initials; the menu: who, their page, the language as small buttons, then « Sign out »
+    // apart (Sarah, 30 October 2026: lighter and neater than a row of links)
+    const langs = h('div', { class: 'menu-langs', role: 'group', 'aria-label': t('lang.label') },
+      LANGS.map((l) => h('button', { type: 'button', lang: l.code, title: l.name, 'aria-pressed': String(l.code === getLang()),
+        onclick: () => setLang(l.code, { save: true }) }, l.code.toUpperCase())));
+    const menu = h('details', { class: 'nav-more account-menu' },
+      h('summary', null, initials(name), h('span', { class: 'acc-name' }, name)),
+      h('div', { class: 'nav-menu' },
+        h('a', { class: 'acc-head', href: '#/me' }, initials(name), h('span', null, h('b', null, name), h('small', null, t('account.yourPage')))),
+        h('div', { class: 'menu-row' }, h('span', null, t('lang.label')), langs),
+        h('button', { class: 'acc-out', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut'))));
+    // a choice in the menu closes it
+    menu.querySelector('.nav-menu').addEventListener('click', (ev) => { if (ev.target.closest('a, button')) menu.open = false; });
+    box.append(menu);
   } else {
     box.append(h('a', { href: '#/login' }, t('account.signIn')));
   }
+  renderLangPick();
 }
 
-/** The language selector, in the header. The names are written in their own language, so each can be found. */
-function renderLangPick() {
-  const select = h('select', { id: 'lang', 'aria-label': t('lang.label'), title: t('lang.label') },
+/** The language selector. The names are written in their own language, so each can be found. */
+function langSelect() {
+  const select = h('select', { 'aria-label': t('lang.label'), title: t('lang.label') },
     LANGS.map((l) => h('option', { value: l.code, lang: l.code, selected: l.code === getLang() }, l.name)));
   select.addEventListener('change', () => setLang(select.value, { save: true }));
-  $('#lang-pick').replaceChildren(select);
+  return select;
+}
+
+/** The language in the header, for a visitor who is not signed in (signed in: in the menu of their name). */
+function renderLangPick() {
+  const pick = $('#lang-pick');
+  if (api.state.user) pick.replaceChildren();
+  else pick.replaceChildren(Object.assign(langSelect(), { id: 'lang' }));
 }
 
 /** The texts of index.html (menu, loading line): marked data-i18n, in English there as a fallback without script. */
@@ -73,10 +93,6 @@ function setNav(name) {
     if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  // « Explore » is lit when one of its entries is, and closes once an entry is picked
-  const more = $('#nav-more');
-  more.classList.toggle('on', !!more.querySelector('a[aria-current]'));
-  more.open = false;
 }
 
 function show(...nodes) {

@@ -276,11 +276,12 @@ export default {
   'climbs.loading': 'Caricamento delle salite…',
   'climbs.partial': 'Alcune tracce non è stato possibile caricarle ({error}).',
 
-  'item.dplusClimb': 'D+ della salita',
-  'item.distance': 'Distanza della salita',
   'item.time': 'Durata della salita',
   'item.noClimb': 'Nessuna traccia di salita da disegnare.',
   'item.open': 'Apri l’uscita →',
+  'item.openShort': 'Apri →',
+  'item.named': 'Uscita: {title}',
+  'spot.kind': 'Decollo',
 
   'route.from': 'Da {place}',
   'route.via': 'via {place}',
@@ -298,7 +299,7 @@ export default {
   'sort.aria': 'Ordina le uscite',
   'sort.label': 'Ordine',
 
-  'status.byRoute': { one: '{n} percorso di salita verso questo decollo, un colore per partenza (linea tratteggiata: un altro percorso dalla stessa partenza). Ogni linea corre lungo il centro delle salite delle sue uscite. Passa sopra un percorso per evidenziarlo e cliccalo per tenerlo evidenziato; passa sopra un’uscita per vedere la sua salita.', other: '{n} percorsi di salita verso questo decollo, un colore per partenza (linea tratteggiata: un altro percorso dalla stessa partenza). Ogni linea corre lungo il centro delle salite delle sue uscite. Passa sopra un percorso per evidenziarlo e cliccalo per tenerlo evidenziato; passa sopra un’uscita per vedere la sua salita.' },
+  'status.byRoute': { one: '{n} itinerario · cliccalo per vederlo sulla mappa.', other: '{n} itinerari · cliccane uno per vederlo sulla mappa.' },
   'status.crowded': { one: '{n} salita: la mappa di calore mostra i percorsi di salita. Passa sopra un’uscita per vedere la sua salita; cliccala per tenerla.', other: '{n} salite: la mappa di calore mostra i percorsi di salita. Passa sopra un’uscita per vedere la sua salita; cliccala per tenerla.' },
   'status.hover': 'Passa sopra un’uscita per evidenziarne la salita; cliccala per tenerla evidenziata.',
 
@@ -415,7 +416,6 @@ export default {
 
   // warm design (Sarah, 30 October 2026): menu, home, map tools, help as questions and answers
   'nav.home': 'Home',
-  'nav.explore': 'Esplora',
   'nav.all': 'Tutte le uscite',
   'nav.help': 'Aiuto',
   'nav.upload': 'Carica la mia traccia',

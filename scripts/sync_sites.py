@@ -217,6 +217,28 @@ def recentre(register: Register, outings: list[dict], assigned: dict, provisiona
     return len(moved)
 
 
+def rename_unnamed(register: Register, outings: list[dict], assigned: dict, provisional_by_id: dict) -> int:
+    """A provisional take-off made before its outing had place names is called « Take-off · 3,530 m »: once its
+    outings have a name, it takes the one most of them give (Sarah, 30 October 2026: the Dômes de Miage). Returns
+    how many were renamed."""
+    names: dict[int, list[str]] = {}
+    for o in outings:
+        site_id = assigned.get(o["id"])
+        if site_id in provisional_by_id:
+            name = provisional_site(o)["name"]
+            if not name.startswith("Take-off"):
+                names.setdefault(site_id, []).append(name)
+    renamed = []
+    for site_id, found in names.items():
+        site = provisional_by_id[site_id]
+        if str(site.get("name") or "").startswith("Take-off"):
+            site["name"] = max(set(found), key=found.count)
+            renamed.append(site)
+    if renamed:
+        register.upsert(renamed)
+    return len(renamed)
+
+
 def sync(api, dry_run: bool = False) -> None:
     register = Register(api, dry_run)
     outings = register.select("outings", f"select={OUTING_COLUMNS}&status=eq.published&takeoff_lat=not.is.null&order=created_at.asc")
@@ -225,8 +247,11 @@ def sync(api, dry_run: bool = False) -> None:
     raw = ffvl_file()
     ffvl = ffvl_takeoffs(raw)
     print(f"FFVL take-offs: {len(ffvl)}")
+    terrains = ffvl_terrains(raw)
+    # the official landings name the starts of the itineraries near them (src/mbhf/routes.py, LANDING_M)
+    landings = [t for t in terrains if "L" in t["kind"]]
     try:  # the official take-offs and landings shown on the map (migration-2026-10-25-ffvl-terrains.sql)
-        print(f"FFVL sites for the map: {register.write_ffvl(ffvl_terrains(raw))}")
+        print(f"FFVL sites for the map: {register.write_ffvl(terrains)}")
     except RuntimeError as exc:
         print(f"FFVL sites for the map not written: {exc}")
     osm = osm_around([(o["takeoff_lat"], o["takeoff_lon"]) for o in outings]) if outings else []
@@ -254,6 +279,7 @@ def sync(api, dry_run: bool = False) -> None:
         index = SiteIndex(official + list(provisional_by_id.values()))
         counts, used, assigned = tie_all(outings, index, register, provisional_by_id)
     print(f"provisional take-offs moved to the middle of their outings: {moved}")
+    print(f"provisional take-offs named after their outings: {rename_unnamed(register, outings, assigned, provisional_by_id)}")
     print("outings tied: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
     unused = [s["id"] for s in provisional if s["id"] not in used]
     register.delete_sites(unused)
@@ -261,7 +287,7 @@ def sync(api, dry_run: bool = False) -> None:
     sites_by_id = {s["id"]: s for s in official} | provisional_by_id
     print(f"titles given from the summit or take-off: {retitle(register, outings, assigned, sites_by_id)}")
     try:
-        made = sum(rebuild_routes(register, site_id) for site_id in used if site_id is not None)
+        made = sum(rebuild_routes(register, site_id, landings) for site_id in used if site_id is not None)
         print(f"routes: {made} for {len(used)} take-offs")
         if not register.dry:
             print(f"outings whose public start goes up to their itinerary: {sum(hide_up_to_itinerary(register, s) for s in used if s is not None)}")
@@ -269,7 +295,7 @@ def sync(api, dry_run: bool = False) -> None:
         print(f"routes not made: {exc}")
 
 
-def rebuild_routes(register: Register, site_id: int) -> int:
+def rebuild_routes(register: Register, site_id: int, landings: Optional[list] = None) -> int:
     """Make the routes of one take-off again from the climbs of its public outings (src/mbhf/routes.py), and tie
     the outings to them. Returns how many routes. The itineraries start from the public network and its parkings
     (OpenStreetMap): when it cannot be read, the take-off keeps the itineraries it has, so that none ever starts at
@@ -305,16 +331,27 @@ def rebuild_routes(register: Register, site_id: int) -> int:
             print(f"take-off {site_id}: OpenStreetMap unavailable, its itineraries are kept as they were")
             return 0
 
-    routes = routes_of(climbs, via, access)
+    if landings is None and climbs:  # one take-off on its own (a new outing): the landings of the register around it
+        try:
+            landings = register.select("ffvl_terrains", f"select=name,lat,lon&kind=neq.T&lat=gte.{box[0]}&lat=lte.{box[2]}"
+                                                        f"&lon=gte.{box[1]}&lon=lte.{box[3]}")
+        except Exception as exc:  # the table is not there yet: the starts keep their own names
+            print(f"take-off {site_id}: FFVL landings not read ({exc})")
+            landings = []
+    routes = routes_of(climbs, via, access, landings)
     if register.dry:
         return len(routes)
     # the take-off's routes are made again: the old ones go (their outings lose their route_id until just below)
     register.api.request("DELETE", f"/rest/v1/routes?takeoff_site_id=eq.{site_id}")
     if not routes:
         return 0
-    _, raw = register.api.request("POST", "/rest/v1/routes", [
-        {"takeoff_site_id": site_id, "name": r["name"], "start_place": r["start_place"], "line": r["line"],
-         "outing_count": len(r["outing_ids"])} for r in routes], extra={"Prefer": "return=representation"})
+    rows = [{"takeoff_site_id": site_id, "name": r["name"], "start_place": r["start_place"], "line": r["line"],
+             "outing_count": len(r["outing_ids"]), "parking": r.get("parking", False)} for r in routes]
+    try:
+        _, raw = register.api.request("POST", "/rest/v1/routes", rows, extra={"Prefer": "return=representation"})
+    except Exception:  # migration-2026-10-30-route-parking.sql not run yet: the itineraries without their car park
+        _, raw = register.api.request("POST", "/rest/v1/routes", [{k: v for k, v in r.items() if k != "parking"} for r in rows],
+                                      extra={"Prefer": "return=representation"})
     for route, row in zip(routes, json.loads(raw)):
         register.api.request("PATCH", f"/rest/v1/outings?id=in.({','.join(route['outing_ids'])})", {"route_id": row["id"]},
                              extra={"Prefer": "return=minimal"})

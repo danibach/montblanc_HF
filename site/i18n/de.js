@@ -276,11 +276,12 @@ export default {
   'climbs.loading': 'Aufstiege werden geladen…',
   'climbs.partial': 'Einige Tracks konnten nicht geladen werden ({error}).',
 
-  'item.dplusClimb': 'D+ des Aufstiegs',
-  'item.distance': 'Strecke des Aufstiegs',
   'item.time': 'Dauer des Aufstiegs',
   'item.noClimb': 'Kein Aufstiegstrack zum Zeichnen.',
   'item.open': 'Tour öffnen →',
+  'item.openShort': 'Öffnen →',
+  'item.named': 'Tour: {title}',
+  'spot.kind': 'Startplatz',
 
   'route.from': 'Ab {place}',
   'route.via': 'via {place}',
@@ -298,7 +299,7 @@ export default {
   'sort.aria': 'Touren sortieren',
   'sort.label': 'Sortierung',
 
-  'status.byRoute': { one: '{n} Aufstiegsweg zu diesem Startplatz, eine Farbe pro Ausgangspunkt (gepunktete Linie: ein anderer Weg vom selben Ausgangspunkt). Jede Linie verläuft in der Mitte der Aufstiege ihrer Touren. Fahre über einen Weg, um ihn hervorzuheben, und klicke ihn an, um ihn hervorgehoben zu lassen; fahre über eine Tour, um ihren eigenen Aufstieg zu sehen.', other: '{n} Aufstiegswege zu diesem Startplatz, eine Farbe pro Ausgangspunkt (gepunktete Linie: ein anderer Weg vom selben Ausgangspunkt). Jede Linie verläuft in der Mitte der Aufstiege ihrer Touren. Fahre über einen Weg, um ihn hervorzuheben, und klicke ihn an, um ihn hervorgehoben zu lassen; fahre über eine Tour, um ihren eigenen Aufstieg zu sehen.' },
+  'status.byRoute': { one: '{n} Route · klicke darauf, um sie auf der Karte zu sehen.', other: '{n} Routen · klicke auf eine, um sie auf der Karte zu sehen.' },
   'status.crowded': { one: '{n} Aufstieg: Die Heatmap zeigt die Aufstiegswege. Fahre über eine Tour, um ihren Aufstieg zu sehen; klicke sie an, um ihn zu behalten.', other: '{n} Aufstiege: Die Heatmap zeigt die Aufstiegswege. Fahre über eine Tour, um ihren Aufstieg zu sehen; klicke sie an, um ihn zu behalten.' },
   'status.hover': 'Fahre über eine Tour, um ihren Aufstieg hervorzuheben; klicke sie an, um ihn hervorgehoben zu lassen.',
 
@@ -415,7 +416,6 @@ export default {
 
   // warm design (Sarah, 30 October 2026): menu, home, map tools, help as questions and answers
   'nav.home': 'Start',
-  'nav.explore': 'Entdecken',
   'nav.all': 'Alle Touren',
   'nav.help': 'Hilfe',
   'nav.upload': 'Meinen Track hochladen',

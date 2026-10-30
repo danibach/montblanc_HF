@@ -276,11 +276,12 @@ export default {
   'climbs.loading': 'Chargement des montées…',
   'climbs.partial': 'Certaines traces n’ont pas pu être chargées ({error}).',
 
-  'item.dplusClimb': 'D+ de la montée',
-  'item.distance': 'Distance de la montée',
   'item.time': 'Durée de la montée',
   'item.noClimb': 'Aucune trace de montée à dessiner.',
   'item.open': 'Ouvrir la sortie →',
+  'item.openShort': 'Ouvrir →',
+  'item.named': 'Sortie : {title}',
+  'spot.kind': 'Décollage',
 
   'route.from': 'Depuis {place}',
   'route.via': 'via {place}',
@@ -298,7 +299,7 @@ export default {
   'sort.aria': 'Trier les sorties',
   'sort.label': 'Tri',
 
-  'status.byRoute': { one: '{n} chemin de montée vers ce décollage, une couleur par départ (ligne pointillée : un autre chemin depuis le même départ). Chaque ligne suit le milieu des montées de ses sorties. Survolez un chemin pour le mettre en évidence et cliquez pour le garder ; survolez une sortie pour voir sa propre montée.', other: '{n} chemins de montée vers ce décollage, une couleur par départ (ligne pointillée : un autre chemin depuis le même départ). Chaque ligne suit le milieu des montées de ses sorties. Survolez un chemin pour le mettre en évidence et cliquez pour le garder ; survolez une sortie pour voir sa propre montée.' },
+  'status.byRoute': { one: '{n} itinéraire · cliquez dessus pour le voir sur la carte.', other: '{n} itinéraires · cliquez sur l’un d’eux pour le voir sur la carte.' },
   'status.crowded': { one: '{n} montée : la carte de chaleur montre les chemins de montée. Survolez une sortie pour voir sa montée ; cliquez pour la garder.', other: '{n} montées : la carte de chaleur montre les chemins de montée. Survolez une sortie pour voir sa montée ; cliquez pour la garder.' },
   'status.hover': 'Survolez une sortie pour mettre sa montée en évidence ; cliquez pour la garder.',
 
@@ -415,7 +416,6 @@ export default {
 
   // warm design (Sarah, 30 October 2026): menu, home, map tools, help as questions and answers
   'nav.home': 'Accueil',
-  'nav.explore': 'Explorer',
   'nav.all': 'Toutes les sorties',
   'nav.help': 'Aide',
   'nav.upload': 'Déposer ma trace',
