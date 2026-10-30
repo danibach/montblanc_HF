@@ -446,6 +446,8 @@ export default {
   'home.mapTitle': 'Tutti gli itinerari, decollo per decollo',
   'home.mapText': 'Gli itinerari dei piloti, il calore dei percorsi più battuti, i decolli.',
   'home.routes': { one: '{n} itinerario', other: '{n} itinerari' },
+  'home.trackAria': 'La traccia di {title} sulla mappa',
+  'home.mapAria': 'I decolli della mappa e il loro calore',
   'home.openMap': 'Apri la mappa →',
   'home.latest': 'Le ultime uscite',
   'home.seeAll': 'Vedi tutte →',

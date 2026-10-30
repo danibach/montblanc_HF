@@ -447,6 +447,8 @@ export default {
   'home.mapTitle': 'Every itinerary, take-off by take-off',
   'home.mapText': 'The pilots’ itineraries, the heat of the most used ways, the take-offs.',
   'home.routes': { one: '{n} itinerary', other: '{n} itineraries' },
+  'home.trackAria': 'The track of {title} on the map',
+  'home.mapAria': 'The take-offs of the map and their heat',
   'home.openMap': 'Open the map →',
   'home.latest': 'The latest outings',
   'home.seeAll': 'See all →',

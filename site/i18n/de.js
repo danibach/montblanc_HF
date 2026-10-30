@@ -446,6 +446,8 @@ export default {
   'home.mapTitle': 'Alle Routen, Startplatz für Startplatz',
   'home.mapText': 'Die Routen der Piloten, die Wärme der meistbegangenen Wege, die Startplätze.',
   'home.routes': { one: '{n} Route', other: '{n} Routen' },
+  'home.trackAria': 'Der Track von {title} auf der Karte',
+  'home.mapAria': 'Die Startplätze der Karte und ihre Wärme',
   'home.openMap': 'Karte öffnen →',
   'home.latest': 'Die neuesten Touren',
   'home.seeAll': 'Alle ansehen →',

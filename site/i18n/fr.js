@@ -446,6 +446,8 @@ export default {
   'home.mapTitle': 'Tous les itinéraires, déco par déco',
   'home.mapText': 'Les itinéraires des pilotes, la chaleur des chemins les plus empruntés, les décos.',
   'home.routes': { one: '{n} itinéraire', other: '{n} itinéraires' },
+  'home.trackAria': 'La trace de {title} sur la carte',
+  'home.mapAria': 'Les décos de la carte et leur chaleur',
   'home.openMap': 'Ouvrir la carte →',
   'home.latest': 'Les dernières sorties',
   'home.seeAll': 'Tout voir →',

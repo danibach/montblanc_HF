@@ -262,7 +262,9 @@ async function pageHome(token) {
     api.listOutings({ limit: 6 }), api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFlownOutings(), api.getFfvlSites()]);
   if (token !== routeToken) return;
   // the outings the server has checked: one waiting for it may still be refused
-  show(buildHome({ latest: latest.filter((o) => o.verified !== false), mapRows, sites, routes, flown, ffvl }));
+  const home = buildHome({ latest: latest.filter((o) => o.verified !== false), mapRows, sites, routes, flown, ffvl, loadTraces: api.getTraces });
+  show(home.element);
+  requestAnimationFrame(() => home.start());
 }
 
 async function pageRanking(token) {

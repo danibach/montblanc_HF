@@ -467,8 +467,10 @@ with sync_playwright() as p:
     check("Processing" in page.inner_text("main"), "own page shows the pending upload")
     check("Delete my account" in page.inner_text("main"), "own page offers account deletion")
     check(page.locator("#account a[href='#/me']").count() == 1, "own page: reached from the account bar")
+    # the pilot page drawn before stays until #/me is drawn: mark it, then wait for the new one
+    page.evaluate("document.querySelector('.stats').dataset.before = '1'")
     page.click("#account a[href='#/me']")
-    page.wait_for_selector(".stats", timeout=15000)
+    page.wait_for_selector(".stats:not([data-before])", timeout=15000)
     check(page.inner_text("h1") == "Alice" and "Total distance on flight" in page.inner_text(".stats") and page.locator("#f-year").count() == 1, "My H&Fs is the pilot page: name, totals, filters")
     page.select_option("#f-year", "2026")
     # read the address from here: a waiting function given as text would be refused by the page's script policy

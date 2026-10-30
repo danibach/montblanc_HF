@@ -366,7 +366,7 @@ body.map-full-open { overflow: hidden; }
 /* home: the map card */
 .map-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); margin-top: 1.4rem; background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; color: var(--ink); text-decoration: none; }
 .map-card:hover { border-color: var(--field-line); }
-.map-card svg { display: block; width: 100%; height: 100%; min-height: 200px; }
+
 .mc-text { display: flex; flex-direction: column; justify-content: center; gap: .5rem; padding: 1.5rem; }
 .mc-title { font-size: 1.35rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
 .mc-btn { align-self: flex-start; margin-top: .3rem; background: var(--ink); color: #fff; border-radius: 999px; padding: .45rem 1rem; font-size: .9rem; }
@@ -374,7 +374,10 @@ body.map-full-open { overflow: hidden; }
 .climb-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .9rem; }
 .climb-card { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; color: var(--ink); text-decoration: none; }
 .climb-card:hover { border-color: var(--field-line); box-shadow: 0 6px 18px rgba(120, 80, 40, .08); }
-.climb-card .mini { display: block; width: 100%; height: auto; background: var(--terrain); }
+/* a card's map: the real map and track, a picture only (a click opens the outing) */
+.cc-map { height: 140px; background: var(--terrain); pointer-events: none; border-bottom: 1px solid var(--line); }
+.mc-map { min-height: 240px; height: 100%; background: var(--terrain); pointer-events: none; }
+.cc-map .leaflet-control-attribution, .mc-map .leaflet-control-attribution { font-size: 8px !important; line-height: 1.2; }
 .cc-body { display: flex; flex-direction: column; gap: .15rem; padding: .7rem .85rem .85rem; }
 .cc-who { font-size: .82rem; color: var(--ink-2); }
 .cc-title { font-weight: 600; font-size: 1rem; margin-top: .2rem; }
