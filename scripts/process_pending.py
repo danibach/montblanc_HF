@@ -252,9 +252,34 @@ def fill_public(api: Api) -> int:
     return done
 
 
+OLD_CLIMB = "climb=not.is.null&climb->>v=is.null&trace=not.is.null"  # made before src/mbhf/climb.py's VERSION
+
+
+def refresh_climbs(api: Api) -> int:
+    """Make again, BATCH at a time, the climbs made with an older rule (climb.VERSION: a short GPS gap no longer cuts
+    a climb), and their public parts, cut up to the outing's itinerary when other climbs take it as the sync does."""
+    from mbhf.climb import VERSION, climb_of
+
+    done = 0
+    rows = api.select(f"{PUBLISHED}&{OLD_CLIMB}&select=id,trace,flights,route_id&order=created_at.asc&limit={BATCH}")
+    for row in rows:
+        climb = climb_of(row["trace"], row["flights"]) or {"v": VERSION}  # none: marked, so that it is not read again
+        api.patch(row["id"], {"climb": climb})
+        itinerary = None
+        if row.get("route_id"):
+            _, raw = api.request("GET", f"/rest/v1/routes?select=line,outing_count&id=eq.{row['route_id']}")
+            route = (json.loads(raw) or [None])[0]
+            if route and (route.get("outing_count") or 0) >= 2:
+                itinerary = route["line"]
+        save_public(api, row["id"], row["trace"], climb if climb.get("line") else None, itinerary)
+        done += 1
+    print(f"climbs made again with the rule of today: {done}")
+    return done
+
+
 def fill_climbs(api: Api) -> None:
     """Compute the climb of every published outing that has none yet, from its stored trace."""
-    from mbhf.climb import climb_of
+    from mbhf.climb import VERSION, climb_of
 
     done = 0
     while True:
@@ -263,7 +288,7 @@ def fill_climbs(api: Api) -> None:
             break
         for row in rows:
             # an outing without a climb gets an empty object, so that it is not read again
-            api.patch(row["id"], {"climb": climb_of(row["trace"], row["flights"]) or {}})
+            api.patch(row["id"], {"climb": climb_of(row["trace"], row["flights"]) or {"v": VERSION}})
             done += 1
     print(f"climbs filled in: {done}")
 
@@ -337,14 +362,16 @@ def main() -> int:
     pending, no_names = waiting(api)
     try:
         no_public = api.count(f"{PUBLISHED}&trace_public=is.null&trace=not.is.null")
+        old_climbs = api.count(f"{PUBLISHED}&{OLD_CLIMB}")
     except Exception:  # the migration is not run yet
-        no_public = 0
-    print(f"waiting: {pending} new, {no_names} without place names, {no_public} without a public part")
+        no_public = old_climbs = 0
+    print(f"waiting: {pending} new, {no_names} without place names, {no_public} without a public part, "
+          f"{old_climbs} climbs of an older rule")
     if args.count_only:
         out = os.environ.get("GITHUB_OUTPUT")
         if out:
             with open(out, "a") as fh:
-                fh.write(f"count={pending + no_names + no_public}\n")
+                fh.write(f"count={pending + no_names + no_public + old_climbs}\n")
         return 0
     if pending:
         process_pending(api)
@@ -352,6 +379,8 @@ def main() -> int:
         retry_places(api)
     if no_public:
         fill_public(api)
+    if old_climbs:
+        refresh_climbs(api)
     return 0
 
 

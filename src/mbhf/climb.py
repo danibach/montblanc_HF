@@ -19,6 +19,12 @@ from .outing import OutingConfig, climbs
 from .segment import FLIGHT, WALK
 
 MAX_POINTS = 80        # the line kept for the map
+# a short stretch labelled other than walking inside the climb (a GPS gap: the phone finds itself far away, as fast as
+# a car) does not cut it; a drive or a lift is longer (Sarah, 30 October 2026: Montagne de Vaunessin, 156 m of its
+# 733 m). With no ranking any more, a doubtful stretch keeps the climb whole
+GAP_S = 300.0
+GAP_M = 1000.0
+VERSION = 2            # the rule the stored climbs were made with: those of an older one are made again
 TOLERANCE_M = 12.0     # simplification: a fix closer than this to the straight line between its neighbours goes
 
 
@@ -68,13 +74,26 @@ def climb_of(trace: Optional[dict], flights: Optional[list]) -> Optional[dict]:
     last = end - 1
     while last >= 0 and m[last] != WALK:
         last -= 1
+    lat, lon, alt = trace["lat"], trace["lon"], trace["alt"]
     first = last
-    while first > 0 and m[first - 1] == WALK:
-        first -= 1
+    while first > 0:
+        if m[first - 1] == WALK:
+            first -= 1
+            continue
+        # a stretch that is neither walking nor flying, with walking before it: a short one is a GPS gap
+        gap_end = first - 1
+        gap_start = gap_end
+        while gap_start > 0 and m[gap_start - 1] not in (WALK, FLIGHT):
+            gap_start -= 1
+        if gap_start == 0 or m[gap_start - 1] != WALK:
+            break
+        a, b = gap_start - 1, first
+        if t[b] - t[a] > GAP_S and haversine_m(lat[a], lon[a], lat[b], lon[b]) > GAP_M:
+            break
+        first = gap_start - 1
     if last < 1 or last - first < 1:
         return None
     idx = list(range(first, last + 1)) + [end]  # up to the take-off itself
-    lat, lon, alt = trace["lat"], trace["lon"], trace["alt"]
     metres = sum(haversine_m(lat[a], lon[a], lat[b], lon[b]) for a, b in zip(idx, idx[1:]))
     up, _ = climbs([alt[i] for i in idx if alt[i] is not None], OutingConfig().climb_threshold_m)
     line = [(lat[i], lon[i]) for i in idx]
@@ -88,4 +107,5 @@ def climb_of(trace: Optional[dict], flights: Optional[list]) -> Optional[dict]:
         "dplus_m": round(up),
         "km": round(metres / 1000, 2),
         "duration_s": round(t[end] - t[first]),
+        "v": VERSION,
     }

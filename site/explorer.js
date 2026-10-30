@@ -743,9 +743,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       const li = h('li', { 'data-id': o.id, tabindex: '0', class: o.id === selected ? 'on' : null },
         own ? h('b', null, t('item.named', { title })) : null,
         h(own ? 'span' : 'b', { class: own ? 'hint' : null }, `${fmtDay(o.outing_date) || fmtDate(o.outing_date)} · ${o.pilot || t('pilot.anonymous')}`),
+        // the outing's own D+ and km on foot, as on its page: the climb alone can be a part of the day (a first flight,
+        // a drive between two walks), and read beside the outing it looked like the whole (Sarah, 30 October 2026)
         h('span', { class: 'nums' },
-          h('span', { title: climb && climb.dplus_m != null ? t('item.dplusClimb') : t('stat.dplus') }, `↗ ${fmtInt(climbDplus(o, climb))} m`),
-          h('span', { title: t('item.distance') }, climb ? fmtKm(climb.km) : fmtKm(o.walk_km)),
+          h('span', { title: t('stat.dplus') }, `↗ ${fmtInt(o.dplus_m)} m`),
+          h('span', { title: t('stat.walk') }, fmtKm(o.walk_km)),
           h('span', { title: t('item.time') }, climb ? `⏱ ${fmtDur(climb.duration_s)}` : ''),
           h('a', { class: 'open', href: `#/outing/${o.id}`, 'aria-label': t('item.open') }, t('item.openShort'))),
         climb ? null : h('span', { class: 'hint' }, t('item.noClimb')));
