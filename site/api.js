@@ -113,9 +113,27 @@ export async function listOutings({ userId, year, country, sort = 'date', dir = 
   return { rows: data || [], total: count || 0 };
 }
 
+// What visitors are sent of an outing (migration-2026-10-29-private-starts.sql, src/mbhf/privacy.py): the public part
+// of its trace, without the start near home and the way back. The pilot reads their whole trace and start apart.
+const OUTING_COLUMNS = 'id,user_id,created_at,status,verified,hidden,reject_reason,title,outing_date,started_at,duration_s,' +
+  'country_code,country_name,start_commune,summit_name,summit_lat,summit_lon,summit_alt,takeoff_name,takeoff_lat,' +
+  'takeoff_lon,takeoff_alt,landing_lat,landing_lon,landing_alt,dplus_m,dminus_m,walk_km,flight_free_km,' +
+  'flight_path_km,score,flights,warnings,file_path,file_parts,manual_flights,trace_public,profiles(id,display_name)';
+
 export async function getOuting(id) {
-  const { data, error } = await sb.from('outings').select('*,profiles(id,display_name)').eq('id', id).maybeSingle();
+  let { data, error } = await sb.from('outings').select(OUTING_COLUMNS).eq('id', id).maybeSingle();
+  if (error && /trace_public/.test(error.message)) {
+    // the migration is not run yet: every column is still readable
+    ({ data, error } = await sb.from('outings').select('*,profiles(id,display_name)').eq('id', id).maybeSingle());
+    return error ? Promise.reject(new Error(error.message)) : data;
+  }
   if (error) throw new Error(error.message);
+  if (!data) return data;
+  data.trace = data.trace_public;
+  if (state.user && state.user.id === data.user_id) {
+    const own = await sb.rpc('my_outing_private', { p_id: id });
+    if (!own.error && own.data) Object.assign(data, own.data);
+  }
   return data;
 }
 
@@ -183,9 +201,13 @@ export async function getMapOutings() {
 export async function getTraces(ids) {
   const out = [];
   for (let i = 0; i < ids.length; i += 25) {
-    const { data, error } = await sb.from('outings').select('id,trace,flights').in('id', ids.slice(i, i + 25));
+    const part = ids.slice(i, i + 25);
+    let { data, error } = await sb.from('outings').select('id,trace_public,flights').in('id', part);
+    if (error && /trace_public/.test(error.message)) {
+      ({ data, error } = await sb.from('outings').select('id,trace,flights').in('id', part)); // migration not run yet
+    }
     if (error) throw new Error(error.message);
-    out.push(...data);
+    out.push(...data.map((r) => ('trace_public' in r ? { ...r, trace: r.trace_public } : r)));
   }
   return out;
 }

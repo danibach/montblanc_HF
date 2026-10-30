@@ -263,6 +263,8 @@ def sync(api, dry_run: bool = False) -> None:
     try:
         made = sum(rebuild_routes(register, site_id) for site_id in used if site_id is not None)
         print(f"routes: {made} for {len(used)} take-offs")
+        if not register.dry:
+            print(f"outings whose public start goes up to their itinerary: {sum(hide_up_to_itinerary(register, s) for s in used if s is not None)}")
     except RuntimeError as exc:  # migration-2026-10-23-routes.sql not run yet: the take-offs are done anyway
         print(f"routes not made: {exc}")
 
@@ -317,6 +319,29 @@ def rebuild_routes(register: Register, site_id: int) -> int:
         register.api.request("PATCH", f"/rest/v1/outings?id=in.({','.join(route['outing_ids'])})", {"route_id": row["id"]},
                              extra={"Prefer": "return=minimal"})
     return len(routes)
+
+
+def hide_up_to_itinerary(register: Register, site_id: int) -> int:
+    """What visitors see of the outings of an itinerary that several climbs take starts where each one joins it
+    (src/mbhf/privacy.py): the way from a pilot's door to the itinerary is never shown. Returns how many."""
+    from mbhf.privacy import public_parts
+
+    try:
+        routes = register.select("routes", f"select=id,line,outing_count&takeoff_site_id=eq.{site_id}&outing_count=gte.2")
+    except Exception:
+        return 0
+    done = 0
+    for route in routes:
+        rows = register.select("outings", f"select=id,trace,climb&route_id=eq.{route['id']}&status=eq.published")
+        for r in rows:
+            try:
+                register.api.request("PATCH", f"/rest/v1/outings?id=eq.{r['id']}", public_parts(r.get("trace"), r.get("climb") or None, route["line"]),
+                                     extra={"Prefer": "return=minimal"})
+                done += 1
+            except Exception as exc:  # the migration is not run yet
+                print(f"public part of {r['id']} not saved: {exc}")
+                return done
+    return done
 
 
 def main() -> int:
