@@ -58,6 +58,11 @@ export default {
 
   'page.all': 'Sorties',
   'all.sub': 'Les sorties de tous les pilotes, de la plus récente à la plus ancienne. Cliquez un titre de colonne pour trier.',
+  'view.label': 'Affichage',
+  'view.cards': 'Cartes',
+  'view.list': 'Liste',
+  'all.subCards': 'Les sorties de tous les pilotes, de la plus récente à la plus ancienne. En liste, on peut les trier.',
+  'rank.kms': '{walk} km à pied · {fly} km en vol',
 
   'filter.allTime': 'Depuis toujours',
 

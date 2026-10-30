@@ -491,3 +491,15 @@ td.num.up { color: var(--green); }
 td.num.down { color: var(--orange); }
 .ini { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--green-bg); color: var(--green); font-size: .68rem; font-weight: 600; margin-right: .5rem; vertical-align: -5px; }
 h1 + .sub { margin-bottom: .2rem; }
+/* All outings as cards, the Pilots as cards (Sarah, 30 October 2026) */
+.view-pick { margin-left: auto; }
+.all-cards { margin-bottom: 1rem; }
+.climb-card .dot { align-self: flex-start; margin-top: .2rem; }
+.pilot-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: .9rem; }
+.pilot-card { display: flex; gap: .9rem; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: .9rem 1rem; color: var(--ink); text-decoration: none; }
+.pilot-card:hover { border-color: var(--field-line); box-shadow: 0 6px 18px rgba(120, 80, 40, .08); }
+.ini.big { width: 52px; height: 52px; font-size: 1.1rem; margin: 0; flex: none; vertical-align: 0; }
+.pc-body { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.pc-body b { font-size: 1.02rem; font-weight: 600; overflow-wrap: anywhere; }
+.pc-nums { font-weight: 500; font-variant-numeric: tabular-nums; }
+.pc-body .hint { font-size: .82rem; }

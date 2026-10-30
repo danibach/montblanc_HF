@@ -226,8 +226,15 @@ with sync_playwright() as p:
 
     # ============ anonymous visitor
     page, external, logs = new_page(b)
+    # All outings: cards with their map by default, the sortable table under « List »
     page.goto(BASE + "#/all")
+    page.wait_for_selector(".all-cards .climb-card", timeout=30000)
+    check(page.locator(".all-cards .climb-card").count() == 2 and page.locator(".view-pick button[aria-pressed=true]").inner_text() == "Cards", "All: the outings as cards")
+    page.wait_for_selector(".all-cards .cc-map.leaflet-container path", timeout=15000)
+    check(True, "All: a card shows its track on the map")
+    page.click(".view-pick button:has-text('List')")
     page.wait_for_selector("tbody tr", timeout=30000)
+    check("view=list" in page.url, "All: « List » shows the table, kept in the address")
     rows = page.locator("tbody tr")
     check(rows.count() == 2, f"list shows the 2 published outings ({rows.count()})")
     check(page.inner_text("main").count("Validation pending") == 1, "only the unverified outing carries the badge")
@@ -249,7 +256,7 @@ with sync_playwright() as p:
     page.fill("#help-search", "")
     check("score" not in page.evaluate("document.querySelector('.help').textContent").lower(), "Help: no score")
     check(page.url.endswith("#/help"), "Help: the topics keep the address")
-    page.goto(BASE + "#/all")
+    page.goto(BASE + "#/all?view=list")
     page.wait_for_selector("tbody tr", timeout=30000)
     check("Country" not in page.inner_text("thead") and "Pilot" in page.inner_text("thead"), "All: no Country column, Pilot column kept")
     check("Hike (km)" in page.inner_text("thead") and "Fly (km)" in page.inner_text("thead"), "All: distances shown")
@@ -291,11 +298,14 @@ with sync_playwright() as p:
     page.screenshot(path=f"{SHOTS}/2-outing.png", full_page=True)
 
     page.goto(BASE + "#/ranking")
-    page.wait_for_selector("tbody tr", timeout=15000)
-    check(page.locator("tbody tr").count() == 2 and "Alice" in page.locator("tbody tr").nth(0).inner_text() or "Bruno" in page.locator("tbody tr").nth(0).inner_text(), "ranking: 2 pilots")
-    check("Alice" in page.locator("tbody tr").nth(0).inner_text() and "Score" not in page.inner_text("thead") and "#" not in page.inner_text("thead"), "pilots: by name, no rank, no score")
-    check("Hike (km)" in page.inner_text("thead") and "Fly (km)" in page.inner_text("thead"), "ranking: distance columns")
-    check(f"{ROW1['walk_km']:.1f}" in page.inner_text("tbody") and f"{ROW1['flight_free_km']:.1f}" in page.inner_text("tbody"), "ranking: a pilot's km on foot and in flight")
+    page.wait_for_selector(".pilot-card", timeout=15000)
+    cards = page.locator(".pilot-card")
+    check(cards.count() == 2, "pilots: one card each (%d)" % cards.count())
+    check("Alice" in cards.nth(0).inner_text() and "score" not in page.inner_text(".pilot-cards").lower() and "#" not in page.inner_text(".pilot-cards"), "pilots: by name, no rank, no score")
+    check(f"{ROW1['walk_km']:.1f} km on foot" in cards.nth(0).inner_text() and f"{ROW1['flight_free_km']:.1f} km in flight" in cards.nth(0).inner_text(), "pilots: a pilot's km on foot and in flight")
+    page.fill("#f-pilot", "bru")
+    check(page.locator(".pilot-card").count() == 1 and "Bruno" in page.inner_text(".pilot-cards"), "pilots: the search keeps the matching cards")
+    page.fill("#f-pilot", "")
     page.select_option("#f-year", "2026")
     page.wait_for_function("location.hash.includes('year=2026')")
     page.screenshot(path=f"{SHOTS}/3-ranking.png")
@@ -495,7 +505,7 @@ with sync_playwright() as p:
     for locale, lang, nav, listed in [("de-CH", "de", "Karte", "Touren"), ("fr-CH", "fr", "Carte", "Sorties"),
                                       ("it-IT", "it", "Mappa", "Uscite"), ("es-ES", "en", "Map", "Outings")]:
         page, external, logs = new_page(b, locale=locale)
-        page.goto(BASE + "#/all")
+        page.goto(BASE + "#/all?view=list")
         page.wait_for_selector("tbody tr", timeout=30000)
         check(page.evaluate("document.documentElement.lang") == lang, f"language {locale}: page is in {lang}")
         check(nav in page.inner_text("#nav") and listed in page.inner_text("h1"), f"language {locale}: menu and title in {lang}")
@@ -511,7 +521,7 @@ with sync_playwright() as p:
 
     # ============ phone
     page, external, logs = new_page(b, width=390, height=844)
-    page.goto(BASE + "#/all")
+    page.goto(BASE + "#/all?view=list")
     page.wait_for_selector("tbody tr", timeout=30000)
     check(page.evaluate("document.documentElement.scrollWidth") <= 390, "phone: list has no sideways scroll of the page")
     page.goto(BASE + f"#/outing/{ROW1['id']}")

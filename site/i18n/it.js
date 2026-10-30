@@ -58,6 +58,11 @@ export default {
 
   'page.all': 'Uscite',
   'all.sub': 'Le uscite di tutti i piloti, dalla più recente. Clicca il titolo di una colonna per ordinare.',
+  'view.label': 'Visualizzazione',
+  'view.cards': 'Schede',
+  'view.list': 'Elenco',
+  'all.subCards': 'Le uscite di tutti i piloti, dalla più recente. In elenco si possono ordinare.',
+  'rank.kms': '{walk} km a piedi · {fly} km in volo',
 
   'filter.allTime': 'Sempre',
 

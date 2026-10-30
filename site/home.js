@@ -6,7 +6,8 @@
 
 import { sectorOf } from './sectors.js';
 import { simpleBackground } from './basemaps.js';
-import { h, s, fmtInt, fmtDate, outingTitle, pilotName } from './util.js';
+import { STILL, drawCardMaps, outingCard } from './cards.js';
+import { h, s, fmtInt } from './util.js';
 import { t } from './i18n.js';
 
 // Two take-offs of one outing closer than this are the same one (a second flight from the same place is a lap, not
@@ -17,14 +18,8 @@ const NAME_M = 300;
 const LATEST = 3;
 const COMBOS = 3;
 const SECTORS = 8;
-// colours of a trace by mode (0 on foot, 1 flight, 2 vehicle: as on an outing's page); a ride is not drawn
-const MODE_COLOUR = ['#1f7a4d', '#ff5a1f'];
-const MAX_POINTS = 600; // a card's track is drawn from at most this many points
 const FRAME_M = 120000; // the map of the take-offs shows those within this distance of their middle
 const HEAT = { radius: 18, blur: 16, maxZoom: 9, max: 4, minOpacity: 0.4, gradient: { 0.4: '#f2c79a', 0.7: '#ff8a4c', 1: '#ff5a1f' } };
-// a map that is only a picture
-const STILL = { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
-  keyboard: false, touchZoom: false, tap: false, zoomSnap: 0.25 }; // a quarter zoom step: the track fills its card
 
 // a soft colour per flying sector, the same for a sector everywhere (from its name)
 const SECTOR_COLOURS = ['#7fb3d5', '#9cc58f', '#e2b38f', '#c7a4c9', '#e8c36a', '#8fc7c0', '#d99a9a', '#a9b8d9'];
@@ -41,35 +36,6 @@ function metres(a, b) {
   const x = Math.sin(((b[0] - a[0]) * r) / 2) ** 2
     + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(((b[1] - a[1]) * r) / 2) ** 2;
   return 12742000 * Math.asin(Math.sqrt(x));
-}
-
-/** The parts of a trace in one mode each: [{mode, line}], from at most MAX_POINTS points. */
-function tracePieces(trace) {
-  const n = trace.lat.length;
-  const step = Math.max(1, Math.ceil(n / MAX_POINTS));
-  const out = [];
-  for (let i = 0; i < n; i += step) {
-    const mode = trace.m ? trace.m[i] : 0;
-    const p = [trace.lat[i], trace.lon[i]];
-    const last = out[out.length - 1];
-    if (last && last.mode === mode) last.line.push(p);
-    else {
-      if (last) last.line.push(p); // the parts touch
-      out.push({ mode, line: [p] });
-    }
-  }
-  return out.filter((x) => x.line.length > 1 && MODE_COLOUR[x.mode]);
-}
-
-const nums = (o) => h('span', { class: 'cc-nums' },
-  h('span', { class: 'up' }, `+${fmtInt(o.dplus_m)} m`), ' · ', h('span', { class: 'down' }, `−${fmtInt(o.dminus_m)} m`));
-
-const who = (o) => h('span', { class: 'cc-who' }, pilotName(o.profiles), ' · ', fmtDate(o.outing_date));
-
-function outingCard(o) {
-  return h('a', { class: 'climb-card', href: `#/outing/${o.id}` },
-    h('div', { class: 'cc-map', 'data-outing': o.id, role: 'img', 'aria-label': t('home.trackAria', { title: outingTitle(o) }) }),
-    h('span', { class: 'cc-body' }, who(o), h('b', { class: 'cc-title' }, outingTitle(o)), nums(o)));
 }
 
 /** The distinct take-offs of an outing's flights, in the order flown: [[lat, lon, alt], …]. */
@@ -92,13 +58,7 @@ export function combos(rows) {
 function comboCard({ o, takeoffs }, names) {
   const chain = [];
   takeoffs.forEach((p, i) => { if (i) chain.push(h('i', null, '→')); chain.push(h('span', null, names(p))); });
-  return h('a', { class: 'climb-card', href: `#/outing/${o.id}` },
-    h('div', { class: 'cc-map', 'data-outing': o.id, role: 'img', 'aria-label': t('home.trackAria', { title: outingTitle(o) }) }),
-    h('span', { class: 'cc-body' }, who(o),
-      h('b', { class: 'cc-title' }, outingTitle(o)),
-      h('span', { class: 'hint' }, t('home.takeoffs', { n: takeoffs.length })),
-      h('span', { class: 'chain' }, chain),
-      nums(o)));
+  return outingCard(o, h('span', { class: 'hint' }, t('home.takeoffs', { n: takeoffs.length })), h('span', { class: 'chain' }, chain));
 }
 
 const HERO = () => s('svg', { class: 'warm-sky', viewBox: '0 0 1000 380', preserveAspectRatio: 'xMidYMax slice', 'aria-hidden': 'true' },
@@ -206,27 +166,7 @@ export function buildHome({ latest, mapRows, sites, routes, flown, ffvl = [], lo
       map.fitBounds(L.latLngBounds((near.length ? near : points).map((sp) => [sp.lat, sp.lon])), { padding: [24, 24], maxZoom: 11 });
     }
     // each card: its track, read once for all the cards
-    const boxes = [...element.querySelectorAll('.cc-map')];
-    if (!boxes.length || !loadTraces) return;
-    const ids = [...new Set(boxes.map((b) => b.dataset.outing))];
-    loadTraces(ids).then((rows) => {
-      const traces = new Map(rows.map((r) => [r.id, r.trace]));
-      for (const box of boxes) {
-        const trace = traces.get(box.dataset.outing);
-        if (!trace || !trace.lat || !box.isConnected) continue;
-        const pieces = tracePieces(trace);
-        if (!pieces.length) continue;
-        const map = L.map(box, { ...STILL, attributionControl: false });
-        simpleBackground(L, map);
-        // the climb in full green on a white casing; the flight softer: a plain light orange line (Sarah, 30 October 2026)
-        for (const p of pieces) {
-          const flight = p.mode === 1;
-          if (!flight) L.polyline(p.line, { color: '#fff', weight: 5, opacity: 0.85, interactive: false }).addTo(map);
-          L.polyline(p.line, { color: MODE_COLOUR[p.mode], weight: flight ? 2 : 2.5, opacity: flight ? 0.6 : 1, interactive: false }).addTo(map);
-        }
-        map.fitBounds(L.latLngBounds(pieces.flatMap((p) => p.line)), { padding: [14, 14] });
-      }
-    }).catch(() => { /* the cards stay without their map */ });
+    drawCardMaps(element, loadTraces);
   };
   return { element, start };
 }

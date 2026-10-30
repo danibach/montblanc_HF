@@ -59,6 +59,11 @@ export default {
 
   'page.all': 'Outings',
   'all.sub': 'Every pilot’s outings, newest first. Click a column title to sort.',
+  'view.label': 'View',
+  'view.cards': 'Cards',
+  'view.list': 'List',
+  'all.subCards': 'Every pilot’s outings, newest first. As a list, they can be sorted.',
+  'rank.kms': '{walk} km on foot · {fly} km in flight',
 
   'filter.allTime': 'All time',
 

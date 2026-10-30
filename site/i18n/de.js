@@ -58,6 +58,11 @@ export default {
 
   'page.all': 'Touren',
   'all.sub': 'Die Touren aller Piloten, die neuesten zuerst. Klicken Sie einen Spaltentitel zum Sortieren.',
+  'view.label': 'Ansicht',
+  'view.cards': 'Karten',
+  'view.list': 'Liste',
+  'all.subCards': 'Die Touren aller Piloten, die neuesten zuerst. Als Liste lassen sie sich sortieren.',
+  'rank.kms': '{walk} km zu Fuß · {fly} km im Flug',
 
   'filter.allTime': 'Gesamte Zeit',
 

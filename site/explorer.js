@@ -63,6 +63,9 @@ function segmented(id, label, options) {
   return box;
 }
 
+// the same start under the name the pilots use (Sarah, 29 October 2026; src/mbhf/routes.py)
+const PLACE_NAMES = { 'Les Esserts': 'Perroix' };
+
 const PARKING_M = 30; // an itinerary's first point this close to a car park of OpenStreetMap starts at it
 const parkingCache = new Map();
 /** For each point ([lat, lon]), whether OpenStreetMap has a car park within PARKING_M; all false when it cannot say. */
@@ -358,6 +361,9 @@ function season(o) {
  * « My tracks »), or null. Returns {element, start}: start() is called once the element is in the page.
  */
 export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = { sites: [], info: null }, me = null) {
+  // the start places as the pilots name them (the PLACE_NAMES of src/mbhf/routes.py): an outing analysed before the
+  // rename still says « Les Esserts », the landing field of Perroix, and was listed as a start of its own
+  for (const o of rows) if (PLACE_NAMES[o.start_place]) o.start_place = PLACE_NAMES[o.start_place];
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': t('map.aria') });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
