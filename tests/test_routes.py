@@ -107,6 +107,25 @@ def test_a_climb_that_leaves_the_paths_higher_up_keeps_its_way():
     assert abs(route["line"][0][1] - 6.45) < 0.0002 and abs(route["line"][-1][0] - UP[-1][0]) < 0.0005
 
 
+def test_a_start_is_named_after_the_official_landing_next_to_it():
+    # Col de la Forclaz (30 October 2026): the climbs leave from the hamlet Le Vorget, 300 m from the FFVL landing
+    # of Doussard: pilots say « from Doussard »
+    doussard = {"name": "Doussard", "lat": UP[0][0] - 0.0027, "lon": UP[0][1]}  # 300 m below the start
+    route, = routes_of([Climb("a", UP, "Le Vorget")], landings=[doussard])
+    assert route["name"] == "From Doussard" and route["start_place"] == "Doussard"
+    far = {**doussard, "lat": UP[0][0] - 0.0063}  # 700 m: too far, the hamlet keeps its name
+    route, = routes_of([Climb("a", UP, "Le Vorget")], landings=[far])
+    assert route["name"] == "From Le Vorget"
+
+
+def test_landings_pilots_call_otherwise():
+    at = lambda name: {"name": name, "lat": UP[0][0] - 0.0009, "lon": UP[0][1]}
+    route, = routes_of([Climb("a", UP, "Talloires")], landings=[at("Planfait – Perroix")])
+    assert route["name"] == "From Perroix"
+    route, = routes_of([Climb("a", UP, "Saint-André-les-Alpes")], landings=[at("Aerogliss")])
+    assert route["name"] == "From Saint-André-les-Alpes"
+
+
 def test_private_ways_are_not_the_public_network():
     access = Access([way(UP, "service", service="driveway"), way(shifted(UP, dlon=0.003), access="private")], lat0=45.9)
     assert access.junction(UP) == 0 and not access.on_network((0.0, 0.0))

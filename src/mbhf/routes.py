@@ -12,7 +12,8 @@ when it leaves from home). The itinerary is the line the map proposes, and it ne
   being ``JOINED_MIN`` of its way at least) are one itinerary; the other ways pilots took stay on the heat map;
 * the itinerary starts at the most used start (starts within ``STARTS_M`` are one), the lowest on a tie (the one
   with the longest way up), and at a parking when one is within ``PARKING_M`` of it;
-* its line is the median of its climbs laid along the climb of that start with the longest way up.
+* its line is the median of its climbs laid along the climb of that start with the longest way up;
+* its start is named after an official FFVL landing within ``LANDING_M``, else after the place OpenStreetMap gives.
 Without the public network (OpenStreetMap did not answer), the climbs count from their first fix: the sync then
 keeps the take-off's itineraries as they were rather than make them so.
 
@@ -39,6 +40,11 @@ JOIN_M = 300.0
 # the start names pilots use, where the map's differ (Sarah, 29 October 2026: Les Esserts is the landing field of
 # Perroix); each one only within 2 km of the given point
 PLACE_NAMES = {("Les Esserts", 45.852, 6.212): "Perroix"}
+# an official FFVL landing this close to an itinerary's start names it, as pilots know the place (Sarah, 30 October
+# 2026: « From Doussard », not the hamlet « From Le Vorget »); the landings pilots call otherwise, and those whose
+# name says less than the village (None: the start keeps its own name)
+LANDING_M = 500.0
+LANDING_NAMES = {"Planfait – Perroix": "Perroix", "Aerogliss": None, "La Vesanciere – Haut": None}
 STEP_M = 25.0
 ALIGN_AHEAD = 40       # laying a climb along another: look this many points (1 km) ahead for the nearest one
 LINE_POINTS = 120      # a median line keeps at most this many points
@@ -133,6 +139,23 @@ def _place(c: Climb) -> Optional[str]:
         if name == c.start_place and math.hypot((lon - plon) * 111320.0 * math.cos(math.radians(plat)), (lat - plat) * 110540.0) <= 2000:
             return said
     return c.start_place
+
+
+def landing_name(point: list, landings: list[dict]) -> Optional[str]:
+    """The name of the official landing within LANDING_M of ``point`` ([lat, lon]), the nearest, as pilots say it
+    (LANDING_NAMES); None when there is none, or when that landing does not name its starts."""
+    lat0 = point[0]
+    p = _xy([point], lat0)[0]
+    near = []
+    for t in landings or []:
+        q = _xy([[t["lat"], t["lon"]]], lat0)[0]
+        d = math.hypot(q[0] - p[0], q[1] - p[1])
+        if d <= LANDING_M and t.get("name"):
+            near.append((d, t["name"]))
+    if not near:
+        return None
+    name = min(near)[1]
+    return LANDING_NAMES.get(name, name)
 
 
 def starts(route: list[Climb]) -> list[list[Climb]]:
@@ -315,12 +338,13 @@ class Access:
         return _latlon([min(near, key=lambda q: math.hypot(q[0] - p[0], q[1] - p[1]))], self.lat0)[0]
 
 
-def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None) -> list[dict]:
+def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None, landings: Optional[list] = None) -> list[dict]:
     """``[{name, start_place, line, outing_ids}]`` for one take-off. A start with one way: « From La Clusaz ». A start
     with several: each way named after a place it goes by and the others do not, « via Les Corbassières »
     (``via(lat, lon, avoid) -> name or None``, from OpenStreetMap), else « Main way » for the busiest, « Way 2 »…
     With ``access``, each climb counts from where it joins the public network and an itinerary starts at a parking
-    within PARKING_M of its start."""
+    within PARKING_M of its start. ``landings`` ([{name, lat, lon}], the FFVL's): one within LANDING_M of an
+    itinerary's start names it."""
     if access is not None:
         public = []
         for c in climbs:
@@ -335,6 +359,7 @@ def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None) ->
         parking = access.parking_near(line[0]) if access is not None else None
         if parking:
             line = [parking] + line
+        place = landing_name(line[0], landings) or place
         out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
                     "line": line, "outing_ids": [c.id for c in g]})
     by_place: dict = {}

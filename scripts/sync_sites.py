@@ -225,8 +225,11 @@ def sync(api, dry_run: bool = False) -> None:
     raw = ffvl_file()
     ffvl = ffvl_takeoffs(raw)
     print(f"FFVL take-offs: {len(ffvl)}")
+    terrains = ffvl_terrains(raw)
+    # the official landings name the starts of the itineraries near them (src/mbhf/routes.py, LANDING_M)
+    landings = [t for t in terrains if "L" in t["kind"]]
     try:  # the official take-offs and landings shown on the map (migration-2026-10-25-ffvl-terrains.sql)
-        print(f"FFVL sites for the map: {register.write_ffvl(ffvl_terrains(raw))}")
+        print(f"FFVL sites for the map: {register.write_ffvl(terrains)}")
     except RuntimeError as exc:
         print(f"FFVL sites for the map not written: {exc}")
     osm = osm_around([(o["takeoff_lat"], o["takeoff_lon"]) for o in outings]) if outings else []
@@ -261,7 +264,7 @@ def sync(api, dry_run: bool = False) -> None:
     sites_by_id = {s["id"]: s for s in official} | provisional_by_id
     print(f"titles given from the summit or take-off: {retitle(register, outings, assigned, sites_by_id)}")
     try:
-        made = sum(rebuild_routes(register, site_id) for site_id in used if site_id is not None)
+        made = sum(rebuild_routes(register, site_id, landings) for site_id in used if site_id is not None)
         print(f"routes: {made} for {len(used)} take-offs")
         if not register.dry:
             print(f"outings whose public start goes up to their itinerary: {sum(hide_up_to_itinerary(register, s) for s in used if s is not None)}")
@@ -269,7 +272,7 @@ def sync(api, dry_run: bool = False) -> None:
         print(f"routes not made: {exc}")
 
 
-def rebuild_routes(register: Register, site_id: int) -> int:
+def rebuild_routes(register: Register, site_id: int, landings: Optional[list] = None) -> int:
     """Make the routes of one take-off again from the climbs of its public outings (src/mbhf/routes.py), and tie
     the outings to them. Returns how many routes. The itineraries start from the public network and its parkings
     (OpenStreetMap): when it cannot be read, the take-off keeps the itineraries it has, so that none ever starts at
@@ -305,7 +308,14 @@ def rebuild_routes(register: Register, site_id: int) -> int:
             print(f"take-off {site_id}: OpenStreetMap unavailable, its itineraries are kept as they were")
             return 0
 
-    routes = routes_of(climbs, via, access)
+    if landings is None and climbs:  # one take-off on its own (a new outing): the landings of the register around it
+        try:
+            landings = register.select("ffvl_terrains", f"select=name,lat,lon&kind=neq.T&lat=gte.{box[0]}&lat=lte.{box[2]}"
+                                                        f"&lon=gte.{box[1]}&lon=lte.{box[3]}")
+        except Exception as exc:  # the table is not there yet: the starts keep their own names
+            print(f"take-off {site_id}: FFVL landings not read ({exc})")
+            landings = []
+    routes = routes_of(climbs, via, access, landings)
     if register.dry:
         return len(routes)
     # the take-off's routes are made again: the old ones go (their outings lose their route_id until just below)
