@@ -97,9 +97,15 @@ function localTitle(title) {
   return parts.length === 2 && parts[0] && parts[1] ? t('title.from', { takeoff: parts[0], start: parts[1] }) : title;
 }
 
+// Places under the name the pilots use (Sarah, 30 October 2026: « Les Esserts » is the landing field of Perroix,
+// everywhere Perroix). The same names as START_NAMES in src/mbhf/places.py and PLACE_NAMES in src/mbhf/routes.py.
+const PLACE_NAMES = { 'Les Esserts': 'Perroix' };
+export const placeName = (name) => PLACE_NAMES[name] || name;
+const renamePlaces = (text) => Object.entries(PLACE_NAMES).reduce((s, [from, to]) => s.split(from).join(to), String(text));
+
 /** The title to show: the stored one, or "Hike & Fly · 29 Sep 2021 · 1,606 m" when OpenStreetMap gave no name. */
 export function outingTitle(o) {
-  if (o.title && o.title !== 'Hike & Fly outing') return localTitle(o.title);
+  if (o.title && o.title !== 'Hike & Fly outing') return localTitle(renamePlaces(o.title));
   const parts = ['Hike & Fly'];
   const day = fmtDay(o.outing_date);
   if (day) parts.push(day);

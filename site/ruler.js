@@ -47,10 +47,10 @@ export function upDown(alts, noise = NOISE_M) {
   return { up, down };
 }
 
-/** The metric scale bar (bottom left) and the ruler button (top left, under the full screen one). */
+/** The metric scale bar (top right) and the ruler button (top left, under the full screen one). */
 export function scaleAndRuler(L, map) {
-  // bottom right, above the credits: bottom left holds the heat map's legend
-  L.control.scale({ imperial: false, position: 'bottomright', maxWidth: 120 }).addTo(map);
+  // at the top, where the eye is when reading the map (Sarah, 30 October 2026)
+  L.control.scale({ imperial: false, position: 'topright', maxWidth: 120 }).addTo(map);
 
   let on = false;
   let points = [];

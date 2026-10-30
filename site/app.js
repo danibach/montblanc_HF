@@ -1,9 +1,11 @@
 // The site: a small single-page app. Routes are in the address after "#".
-//   #/                 My H&Fs: the signed-in person's own outings (filter by year and country)
+//   #/                 Home: the question and a search, the map, the latest outings, chained take-offs, sectors
+//   #/me               My H&Fs: the signed-in person's own outings (filter by year and country)
 //   #/all              All: the outings of everyone (filter by year and country)
 //   #/outing/<id>      one outing: map, profile, numbers
 //   #/user/<id>        a participant: statistics and outings
-//   #/ranking          the pilots and their totals (by year or all time); no ranking: H&F Tracks is a library of outings
+//   #/ranking          the pilots and their totals (by year or all time); no ranking: H&F Tracks is a library of outings.
+//                      Out of the menu for now (Sarah, 30 October 2026): the community comes later
 //   #/map              map of the take-offs: heat map, take-off markers, climbs and outings of a take-off
 //   #/upload           send a track (needs an account)
 //   #/mark             mark the flights of a refused track by hand, on a map (opened from the Upload page)
@@ -16,7 +18,9 @@ import { buildMap, buildProfile, legend, downloadText, trackToGpx } from './char
 import { buildExplorer } from './explorer.js';
 import { buildMarkTool } from './mark.js';
 import { buildHelp } from './help.js';
-import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
+import { buildHome } from './home.js';
+import { drawCardMaps, outingCard } from './cards.js';
+import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle, placeName } from './util.js';
 import { LANGS, getLang, initI18n, onLang, setLang, t, tr } from './i18n.js';
 
 const view = $('#view');
@@ -30,13 +34,12 @@ function renderAccount() {
   if (api.state.user) {
     const name = api.state.profile && api.state.profile.display_name;
     box.append(
-      h('a', { href: `#/user/${api.state.user.id}` }, name || t('account.yourPage')),
+      h('a', { href: '#/me' }, name || t('account.yourPage')),
       h('button', { class: 'link', onclick: async () => { await api.signOut(); location.hash = '#/'; } }, t('account.signOut')),
     );
   } else {
     box.append(h('a', { href: '#/login' }, t('account.signIn')));
   }
-  box.append(h('a', { href: '#/help', class: 'help-link' }, t('account.help')));
 }
 
 /** The language selector, in the header. The names are written in their own language, so each can be found. */
@@ -66,10 +69,14 @@ function renderFooter() {
 }
 
 function setNav(name) {
-  for (const a of document.querySelectorAll('#nav a')) {
+  for (const a of document.querySelectorAll('#nav a, #cta')) {
     if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
+  // « Explore » is lit when one of its entries is, and closes once an entry is picked
+  const more = $('#nav-more');
+  more.classList.toggle('on', !!more.querySelector('a[aria-current]'));
+  more.open = false;
 }
 
 function show(...nodes) {
@@ -117,7 +124,7 @@ function outingDetail(o) {
       stat(fmtKm(o.flight_free_km), t('stat.freeFai')),
       stat(fmtDur(o.duration_s), t('stat.duration'))),
     h('dl', { class: 'places' },
-      place(t('detail.startFoot'), [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
+      place(t('detail.startFoot'), [placeName(o.start_place), o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
       place(t('detail.summit'), `${o.summit_name || coords(o.summit_lat, o.summit_lon) || '–'}${o.summit_alt != null ? ` · ${fmtInt(o.summit_alt)} m` : ''}`),
       place(t('detail.takeoff'), `${o.takeoff_name || coords(o.takeoff_lat, o.takeoff_lon) || '–'}${o.takeoff_alt != null ? ` · ${fmtInt(o.takeoff_alt)} m` : ''}`),
       place(t('detail.country'), o.country_name || o.country_code)),
@@ -131,11 +138,11 @@ function outingDetail(o) {
 function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
   return rows.map((r) => h('tr', null,
     h('td', null, fmtDate(r.outing_date)),
-    showPilot ? h('td', null, link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
+    showPilot ? h('td', null, initials(pilotName(r.profiles)), link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
     h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, outingTitle(r)) : (r.title || t('outing.uploadedTrack')),
       r.status === 'published' && r.verified === false ? [' ', statusBadge(r)] : null),
-    h('td', { class: 'num' }, fmtInt(r.dplus_m)),
-    h('td', { class: 'num' }, fmtInt(r.dminus_m)),
+    h('td', { class: 'num up' }, fmtInt(r.dplus_m)),
+    h('td', { class: 'num down' }, fmtInt(r.dminus_m)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
     h('td', { class: 'num' }, fmtDist(r.flight_free_km)),
     showStatus ? h('td', null, statusBadge(r)) : null));
@@ -175,9 +182,16 @@ async function filterBar(current, onChange, { yearLabel } = {}) {
   const change = () => onChange({ year: year.value || '', country: country.value || '' });
   year.addEventListener('change', change);
   country.addEventListener('change', change);
-  return h('div', { class: 'filters' },
-    h('div', { class: 'field' }, h('label', { for: 'f-year' }, t('filter.year')), year),
-    h('div', { class: 'field' }, h('label', { for: 'f-country' }, t('detail.country')), country));
+  // one bar of rounded fields, as on the map (Sarah, 30 October 2026); their names stay for screen readers
+  year.setAttribute('aria-label', t('filter.year'));
+  country.setAttribute('aria-label', t('detail.country'));
+  return h('div', { class: 'list-toolbar' }, year, country);
+}
+
+/** A pilot's initials in a round badge, before the name in the lists. */
+function initials(name) {
+  const letters = String(name || '?').split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+  return h('span', { class: 'ini', 'aria-hidden': 'true' }, letters || '?');
 }
 
 function query() {
@@ -185,8 +199,9 @@ function query() {
   return Object.fromEntries(new URLSearchParams(q));
 }
 
-function goFilters(path, { year, country, sort, dir, page }) {
+function goFilters(path, { year, country, sort, dir, page, view }) {
   const p = new URLSearchParams();
+  if (view === 'list') p.set('view', 'list'); // the cards are the default view, out of the address
   if (year) p.set('year', year);
   if (country) p.set('country', country);
   // The default order (newest first) stays out of the address.
@@ -198,19 +213,27 @@ function goFilters(path, { year, country, sort, dir, page }) {
 // ---------------------------------------------------------------- pages
 
 // The filtered, sortable, paged list of outings (filter bar, table, pager). `path` is the page's address (the
-// filters and the order live in it), `userId` limits it to one pilot. Returns the nodes to show, or null when
-// the page has been left or redirected meanwhile.
-async function outingsSection(token, { path, userId, showPilot, empty }) {
+// filters and the order live in it), `userId` limits it to one pilot. With `cards`, the outings are shown as cards
+// with their map (as on the home page), and a « Cards | List » switch brings the sortable table. Returns the nodes
+// to show, or null when the page has been left or redirected meanwhile.
+const CARDS_PER_PAGE = 12;
+async function outingsSection(token, { path, userId, showPilot, empty, cards = false }) {
   const q = query();
-  const sort = api.SORT_COLUMNS[q.sort] ? q.sort : 'date';
+  const asCards = cards && q.view !== 'list';
+  const sort = api.SORT_COLUMNS[q.sort] && !asCards ? q.sort : 'date';
   const dir = q.sort && q.dir === 'asc' ? 'asc' : (q.sort && q.dir === 'desc' ? 'desc' : (sort === 'date' ? 'desc' : 'asc'));
   const page = Math.max(1, parseInt(q.page, 10) || 1);
-  const size = CONFIG.PAGE_SIZE;
+  const size = asCards ? CARDS_PER_PAGE : CONFIG.PAGE_SIZE;
   // Changing a filter or the order goes back to page 1; the order is kept when a filter changes.
-  const go = (extra) => goFilters(path, { year: q.year, country: q.country, sort, dir, ...extra });
+  const go = (extra) => goFilters(path, { year: q.year, country: q.country, sort, dir, view: q.view, ...extra });
   const bar = await filterBar(q, (v) => go({ ...v, page: 1 }));
+  if (cards) {
+    const pick = (view, label) => h('button', { type: 'button', 'aria-pressed': String((view === 'list') === !asCards),
+      onclick: () => go({ view, page: 1, sort: 'date', dir: 'desc' }) }, label);
+    bar.append(h('div', { class: 'seg-big view-pick', role: 'group', 'aria-label': t('view.label') }, pick('cards', t('view.cards')), pick('list', t('view.list'))));
+  }
 
-  const { rows, total } = await api.listOutings({ userId, year: q.year, country: q.country, sort, dir, offset: (page - 1) * size });
+  const { rows, total } = await api.listOutings({ userId, year: q.year, country: q.country, sort, dir, offset: (page - 1) * size, limit: size });
   if (token !== routeToken) return null;
   const pages = Math.max(1, Math.ceil(total / size));
   if (page > pages) { go({ page: pages }); return null; }   // a page that no longer exists (filters changed): go to the last one
@@ -229,25 +252,43 @@ async function outingsSection(token, { path, userId, showPilot, empty }) {
     h('span', { class: 'hint' }, t('pager.page', { page, pages })),
     h('button', { disabled: page >= pages, onclick: () => go({ page: page + 1 }) }, t('pager.next'))) : null;
 
+  if (asCards && total) {
+    // an outing the server has not checked yet carries its badge on its card
+    const grid = h('div', { class: 'climb-cards all-cards' }, rows.map((r) => outingCard(r, r.verified === false ? statusBadge(r) : null)));
+    requestAnimationFrame(() => drawCardMaps(grid, api.getTraces));
+    return [bar, grid, count, pager];
+  }
   return [bar,
     total
       ? [table(listHeaders({ showPilot }), outingRows(rows, { showPilot }), '', { key: sort, dir, onSort }), count, pager]
       : notice('info', empty)];
 }
 
-// All: everyone's outings.
+// All: everyone's outings, as cards (or the table).
 async function pageAll(token) {
   setNav('all');
-  const section = await outingsSection(token, { path: 'all', showPilot: true, empty: h('p', null, t('list.none')) });
-  if (section) show(h('h1', null, t('page.all')), section);
+  const section = await outingsSection(token, { path: 'all', showPilot: true, cards: true, empty: h('p', null, t('list.none')) });
+  if (section) show(h('h1', null, t('page.all')), h('p', { class: 'sub' }, t(query().view === 'list' ? 'all.sub' : 'all.subCards')), section);
 }
 
-// My H&Fs is the pilot page of the signed-in person, at the address "#/".
+// My H&Fs is the pilot page of the signed-in person, at the address "#/me".
 async function pageMine(token) {
   const me = api.state.user;
-  // Signed out: there is no page of one's own, so the visitor lands on everyone's outings.
-  if (!me) return location.replace(`${location.pathname}#/all`);
-  await pageUser(token, me.id, { path: '' });
+  // Signed out: there is no page of one's own, so the visitor is asked to sign in.
+  if (!me) return location.replace(`${location.pathname}#/login`);
+  await pageUser(token, me.id, { path: 'me' });
+}
+
+// Home: the same for everyone, signed in or not.
+async function pageHome(token) {
+  setNav('home');
+  const [{ rows: latest }, mapRows, sites, routes, flown, ffvl] = await Promise.all([
+    api.listOutings({ limit: 6 }), api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFlownOutings(), api.getFfvlSites()]);
+  if (token !== routeToken) return;
+  // the outings the server has checked: one waiting for it may still be refused
+  const home = buildHome({ latest: latest.filter((o) => o.verified !== false), mapRows, sites, routes, flown, ffvl, loadTraces: api.getTraces });
+  show(home.element);
+  requestAnimationFrame(() => home.start());
 }
 
 async function pageRanking(token) {
@@ -258,16 +299,16 @@ async function pageRanking(token) {
   if (token !== routeToken) return;
   // No ranking (Sarah, 29 October 2026: a library of outings, not a challenge): the pilots by name.
   const entries = rows.map((r) => ({ r, name: pilotName(r) })).sort((a, b) => a.name.localeCompare(b.name));
-  const rowOf = ({ r, name }) => h('tr', null,
-    h('td', null, link(`#/user/${r.user_id}`, name)),
-    h('td', { class: 'num' }, fmtInt(r.outings)),
-    h('td', { class: 'num' }, fmtInt(r.dplus)),
-    h('td', { class: 'num' }, fmtInt(r.dminus)),
-    h('td', { class: 'num' }, fmtDist(r.walk_km)),
-    h('td', { class: 'num' }, fmtDist(r.flight_km)));
-  const tableNode = rows.length
-    ? table([{ label: t('col.pilot') }, { label: t('col.outings'), num: true }, { label: t('col.dplus'), num: true }, { label: t('col.dminus'), num: true }, { label: t('col.hike'), num: true }, { label: t('col.fly'), num: true }], entries.map(rowOf))
-    : null;
+  // one card per pilot (Sarah, 30 October 2026): initials, name, outings, then the climb and the distances
+  const cardOf = ({ r, name }) => h('a', { class: 'pilot-card', href: `#/user/${r.user_id}` },
+    h('span', { class: 'ini big', 'aria-hidden': 'true' }, initials(name).textContent),
+    h('span', { class: 'pc-body' },
+      h('b', null, name),
+      h('span', { class: 'hint' }, t('unit.outing', { n: r.outings })),
+      h('span', { class: 'pc-nums' },
+        h('span', { class: 'up' }, `+${fmtInt(r.dplus)} m`), ' · ', h('span', { class: 'down' }, `−${fmtInt(r.dminus)} m`)),
+      h('span', { class: 'hint' }, t('rank.kms', { walk: fmtDist(r.walk_km), fly: fmtDist(r.flight_km) }))));
+  const tableNode = rows.length ? h('div', { class: 'pilot-cards' }, entries.map(cardOf)) : null;
 
   // Search a pilot by name: case and accents ignored, every word must be found in the name.
   const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -279,22 +320,20 @@ async function pageRanking(token) {
     const words = fold(search.value).split(/\s+/).filter(Boolean);
     const hits = entries.filter((e) => words.every((w) => fold(e.name).includes(w)));
     if (tableNode) {
-      tableNode.querySelector('tbody').replaceChildren(...hits.map(rowOf));
+      tableNode.replaceChildren(...hits.map(cardOf));
       tableNode.hidden = !hits.length;
     }
     none.hidden = !words.length || hits.length > 0;
     found.textContent = words.length && hits.length ? t('rank.found', { hits: hits.length, n: entries.length }) : '';
   };
   search.addEventListener('input', apply);
-  const searchBox = rows.length
-    ? h('div', { class: 'filters' }, h('div', { class: 'field' }, h('label', { for: 'f-pilot' }, t('col.pilot')), search))
-    : null;
+  // the search in the same bar as the year and country
+  if (rows.length) bar.prepend(search);
 
   show(
     h('h1', null, t('page.ranking')),
     h('p', { class: 'sub' }, t('rank.sub')),
     bar,
-    searchBox,
     tableNode || notice('info', h('p', null, t('list.none'))),
     found,
     none);
@@ -304,11 +343,8 @@ async function pageMap(token) {
   setNav('map');
   const [rows, sites, routes, ffvl] = await Promise.all([api.getMapOutings(), api.getMapSites(), api.getMapRoutes(), api.getFfvlSites()]);
   if (token !== routeToken) return;
-  const mapView = buildExplorer(rows, api.getTraces, sites, routes, { sites: ffvl, info: api.getFfvlInfo });
-  show(
-    h('h1', null, t('page.map')),
-    h('p', { class: 'sub' }, t('map.sub')),
-    mapView.element);
+  const mapView = buildExplorer(rows, api.getTraces, sites, routes, { sites: ffvl, info: api.getFfvlInfo }, api.state.user ? api.state.user.id : null);
+  show(mapView.element);
   requestAnimationFrame(() => mapView.start());
 }
 
@@ -357,10 +393,9 @@ function reportForm(outingId) {
   return h('details', null, h('summary', { class: 'hint' }, t('report.summary')), form);
 }
 
-// A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "" for My H&Fs.
+// A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "me" for My H&Fs.
 async function pageUser(token, id, opts = {}) {
-  // The entry "My H&Fs" is lit on one's own page, and only there.
-  setNav(api.state.user && api.state.user.id === id ? 'home' : null);
+  setNav(null);   // one's own page is reached from the account bar, not the menu
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
   if (!profile) return show(notice('error', h('p', null, t('user.missing'))));
@@ -726,7 +761,7 @@ function confirmGroups(groups, out) {
 // ---------------------------------------------------------------- mark flights by hand
 
 function pageHelp() {
-  setNav(null);
+  setNav('help');
   show(buildHelp());
 }
 
@@ -881,7 +916,8 @@ async function route() {
   window.scrollTo(0, 0);
   document.body.classList.toggle('wide', path[0] === 'map');
   try {
-    if (path[0] === '') { loading(); await pageMine(token); }
+    if (path[0] === '') { loading(); await pageHome(token); }
+    else if (path[0] === 'me') { loading(); await pageMine(token); }
     else if (path[0] === 'all') { loading(); await pageAll(token); }
     else if (path[0] === 'ranking') { loading(); await pageRanking(token); }
     else if (path[0] === 'map') { loading(); await pageMap(token); }
@@ -907,7 +943,7 @@ async function route() {
     renderAccount();
     const here = (location.hash.replace(/^#\/?/, '').split('/')[0]);
     const id = api.state.user ? api.state.user.id : null;
-    if (here === 'login' || here === 'upload' || (here === 'user' && api.state.user) || (here === '' && id !== homeUser)) route();
+    if (here === 'login' || here === 'upload' || (here === 'user' && api.state.user) || (here === 'me' && id !== homeUser)) route();
     homeUser = id;
   });
   await api.refreshSession();
