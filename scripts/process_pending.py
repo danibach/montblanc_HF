@@ -179,7 +179,8 @@ def process_pending(api: Api) -> None:
             reject(api, row["id"], "This track was already submitted.")
             continue
         print(f"  published: score {outing['score']} (D+ {outing['dplus_m']}, D- {outing['dminus_m']})")
-        save_climb(api, row["id"], values["trace"], outing["flights"])
+        climb = save_climb(api, row["id"], values["trace"], outing["flights"])
+        save_public(api, row["id"], values["trace"], climb)
         tie_takeoff(api, row["id"], values)
 
 
@@ -217,9 +218,38 @@ def save_climb(api: Api, outing_id: str, trace, flights) -> None:
     from mbhf.climb import climb_of
 
     try:
-        api.patch(outing_id, {"climb": climb_of(trace, flights)})
+        climb = climb_of(trace, flights)
+        api.patch(outing_id, {"climb": climb})
+        return climb
     except Exception as exc:
         print(f"  climb not saved: {exc}")
+        return None
+
+
+def save_public(api: Api, outing_id: str, trace, climb, itinerary=None) -> None:
+    """What visitors see of the outing (src/mbhf/privacy.py): its trace and its climb without the start near home and
+    the way back after landing. Written apart, like the climb (migration-2026-10-29-private-starts.sql)."""
+    from mbhf.privacy import public_parts
+
+    try:
+        api.patch(outing_id, public_parts(trace, climb, itinerary))
+    except Exception as exc:
+        print(f"  public parts not saved: {exc}")
+
+
+def fill_public(api: Api) -> int:
+    """The public parts of published outings that have none yet (the outings published before they existed)."""
+    done = 0
+    try:
+        rows = api.select(f"{PUBLISHED}&trace_public=is.null&trace=not.is.null&select=id,trace,climb&order=created_at.asc&limit={BATCH}")
+    except Exception as exc:  # the migration is not run yet
+        print(f"public parts not filled in: {exc}")
+        return 0
+    for row in rows:
+        save_public(api, row["id"], row["trace"], row.get("climb") or None)
+        done += 1
+    print(f"public parts filled in: {done}")
+    return done
 
 
 def fill_climbs(api: Api) -> None:
@@ -305,17 +335,23 @@ def main() -> int:
         fill_climbs(api)
         return 0
     pending, no_names = waiting(api)
-    print(f"waiting: {pending} new, {no_names} without place names")
+    try:
+        no_public = api.count(f"{PUBLISHED}&trace_public=is.null&trace=not.is.null")
+    except Exception:  # the migration is not run yet
+        no_public = 0
+    print(f"waiting: {pending} new, {no_names} without place names, {no_public} without a public part")
     if args.count_only:
         out = os.environ.get("GITHUB_OUTPUT")
         if out:
             with open(out, "a") as fh:
-                fh.write(f"count={pending + no_names}\n")
+                fh.write(f"count={pending + no_names + no_public}\n")
         return 0
     if pending:
         process_pending(api)
     if no_names:
         retry_places(api)
+    if no_public:
+        fill_public(api)
     return 0
 
 

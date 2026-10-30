@@ -54,6 +54,7 @@ def build_row(rid, user, name, gen, title_places=True):
     row.update({"id": rid, "user_id": user, "status": "published", "reject_reason": None, "hidden": False, "verified": rid.endswith("1"),
                 "created_at": "2026-09-12T20:00:00Z", "file_path": f"{user}/{rid}.gpx",
                 "profiles": {"id": user, "display_name": name}})
+    row["trace_public"] = row["trace"]  # what visitors are sent (src/mbhf/privacy.py); the whole one here, for the checks
     return res, row
 
 
