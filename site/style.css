@@ -35,6 +35,12 @@ header.site { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.
 .account { display: flex; gap: .7rem; align-items: center; font-size: .92rem; }
 .account a { color: var(--ink-2); text-decoration: none; }
 .account a:hover { color: var(--ink); }
+.account-menu summary { color: var(--ink-2); padding: .35rem .55rem; border-radius: 8px; cursor: pointer; }
+.account-menu summary:hover, .account-menu[open] summary { background: var(--card-2); color: var(--ink); }
+.account-menu .nav-menu { left: auto; right: 0; gap: .15rem; }
+.account-menu .nav-menu > a, .account-menu .nav-menu > button { padding: .5rem .65rem; border-radius: 8px; text-align: left; color: var(--ink); text-decoration: none; }
+.account-menu .nav-menu > a:hover, .account-menu .nav-menu > button:hover { background: var(--card-2); }
+.menu-lang { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .4rem .65rem; color: var(--muted); }
 /* the one main action: upload a track, an orange outline (Sarah, 30 October 2026: not a filled button) */
 .cta { display: inline-flex; align-items: center; gap: .4rem; color: var(--orange); border: 1.5px solid var(--orange); border-radius: 999px; padding: .32rem .9rem; font-size: .9rem; font-weight: 500; text-decoration: none; background: transparent; }
 .cta:hover, .cta[aria-current=page] { background: var(--orange-bg); }

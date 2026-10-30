@@ -481,6 +481,11 @@ with sync_playwright() as p:
     check("Processing" in page.inner_text("main"), "own page shows the pending upload")
     check("Delete my account" in page.inner_text("main"), "own page offers account deletion")
     check(page.locator("#account a[href='#/me']").count() == 1, "own page: reached from the account bar")
+    # signed in, the language and « Sign out » are in the menu of the pilot's name, not in the header
+    check(page.locator("#lang-pick select").count() == 0, "signed in: no language selector in the header")
+    page.click("#account .account-menu summary")
+    menu = page.inner_text("#account .nav-menu")
+    check("Sign out" in menu and page.locator("#account .nav-menu select").count() == 1, "signed in: the name's menu holds the page, the language and Sign out")
     # the pilot page drawn before stays until #/me is drawn: mark it, then wait for the new one
     page.evaluate("document.querySelector('.stats').dataset.before = '1'")
     page.click("#account a[href='#/me']")
