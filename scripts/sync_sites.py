@@ -217,6 +217,28 @@ def recentre(register: Register, outings: list[dict], assigned: dict, provisiona
     return len(moved)
 
 
+def rename_unnamed(register: Register, outings: list[dict], assigned: dict, provisional_by_id: dict) -> int:
+    """A provisional take-off made before its outing had place names is called « Take-off · 3,530 m »: once its
+    outings have a name, it takes the one most of them give (Sarah, 30 October 2026: the Dômes de Miage). Returns
+    how many were renamed."""
+    names: dict[int, list[str]] = {}
+    for o in outings:
+        site_id = assigned.get(o["id"])
+        if site_id in provisional_by_id:
+            name = provisional_site(o)["name"]
+            if not name.startswith("Take-off"):
+                names.setdefault(site_id, []).append(name)
+    renamed = []
+    for site_id, found in names.items():
+        site = provisional_by_id[site_id]
+        if str(site.get("name") or "").startswith("Take-off"):
+            site["name"] = max(set(found), key=found.count)
+            renamed.append(site)
+    if renamed:
+        register.upsert(renamed)
+    return len(renamed)
+
+
 def sync(api, dry_run: bool = False) -> None:
     register = Register(api, dry_run)
     outings = register.select("outings", f"select={OUTING_COLUMNS}&status=eq.published&takeoff_lat=not.is.null&order=created_at.asc")
@@ -257,6 +279,7 @@ def sync(api, dry_run: bool = False) -> None:
         index = SiteIndex(official + list(provisional_by_id.values()))
         counts, used, assigned = tie_all(outings, index, register, provisional_by_id)
     print(f"provisional take-offs moved to the middle of their outings: {moved}")
+    print(f"provisional take-offs named after their outings: {rename_unnamed(register, outings, assigned, provisional_by_id)}")
     print("outings tied: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
     unused = [s["id"] for s in provisional if s["id"] not in used]
     register.delete_sites(unused)
@@ -322,9 +345,13 @@ def rebuild_routes(register: Register, site_id: int, landings: Optional[list] = 
     register.api.request("DELETE", f"/rest/v1/routes?takeoff_site_id=eq.{site_id}")
     if not routes:
         return 0
-    _, raw = register.api.request("POST", "/rest/v1/routes", [
-        {"takeoff_site_id": site_id, "name": r["name"], "start_place": r["start_place"], "line": r["line"],
-         "outing_count": len(r["outing_ids"])} for r in routes], extra={"Prefer": "return=representation"})
+    rows = [{"takeoff_site_id": site_id, "name": r["name"], "start_place": r["start_place"], "line": r["line"],
+             "outing_count": len(r["outing_ids"]), "parking": r.get("parking", False)} for r in routes]
+    try:
+        _, raw = register.api.request("POST", "/rest/v1/routes", rows, extra={"Prefer": "return=representation"})
+    except Exception:  # migration-2026-10-30-route-parking.sql not run yet: the itineraries without their car park
+        _, raw = register.api.request("POST", "/rest/v1/routes", [{k: v for k, v in r.items() if k != "parking"} for r in rows],
+                                      extra={"Prefer": "return=representation"})
     for route, row in zip(routes, json.loads(raw)):
         register.api.request("PATCH", f"/rest/v1/outings?id=in.({','.join(route['outing_ids'])})", {"route_id": row["id"]},
                              extra={"Prefer": "return=minimal"})

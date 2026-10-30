@@ -135,6 +135,13 @@ def test_no_parking_near_the_start_keeps_the_start():
     access = Access([way(UP), parking(45.90 - 0.003, 6.45)], lat0=45.9)  # 330 m below: too far
     route, = routes_of([Climb("a", UP)], access=access)
     assert abs(route["line"][0][0] - UP[0][0]) < 0.0002
+    assert route["parking"] is False  # the map draws no P
+
+
+def test_an_itinerary_says_it_starts_at_a_car_park():
+    access = Access([way(UP), parking(45.90 - 0.0005, 6.45)], lat0=45.9)  # 55 m below the start
+    route, = routes_of([Climb("a", UP)], access=access)
+    assert route["parking"] is True and abs(route["line"][0][0] - (45.90 - 0.0005)) < 0.0001
 
 
 def test_routes_named_after_their_start_with_variants():

@@ -150,6 +150,7 @@ create table if not exists public.routes (
   start_place text,
   line jsonb not null,
   outing_count integer not null default 0,
+  parking boolean not null default false,   -- the itinerary starts at a car park (migration-2026-10-30-route-parking.sql)
   updated_at timestamptz not null default now()
 );
 create index if not exists routes_site_idx on public.routes (takeoff_site_id);
@@ -333,10 +334,10 @@ grant execute on function public.outing_filters() to anon, authenticated;
 grant execute on function public.map_outings() to anon, authenticated;
 grant execute on function public.map_takeoff_sites() to anon, authenticated;
 
--- the routes of the map's outings: [id, take-off id, name, line]
+-- the routes of the map's outings: [id, take-off id, name, line, parking]
 create or replace function public.map_routes() returns json
 language sql stable as $$
-  select coalesce(json_agg(json_build_array(r.id, r.takeoff_site_id, r.name, r.line)), '[]'::json)
+  select coalesce(json_agg(json_build_array(r.id, r.takeoff_site_id, r.name, r.line, r.parking)), '[]'::json)
   from public.routes r
   where r.id in (select o.route_id from public.outings o
                  where o.status = 'published' and o.verified and not o.hidden and o.route_id is not null)

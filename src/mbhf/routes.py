@@ -361,7 +361,7 @@ def routes_of(climbs: list[Climb], via=None, access: Optional[Access] = None, la
             line = [parking] + line
         place = landing_name(line[0], landings) or place
         out.append({"name": f"From {place}" if place else "From an unnamed start", "start_place": place,
-                    "line": line, "outing_ids": [c.id for c in g]})
+                    "line": line, "outing_ids": [c.id for c in g], "parking": bool(parking)})
     by_place: dict = {}
     for r in out:
         by_place.setdefault(r["start_place"], []).append(r)

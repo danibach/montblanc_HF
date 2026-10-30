@@ -63,31 +63,6 @@ function segmented(id, label, options) {
   return box;
 }
 
-const PARKING_M = 30; // an itinerary's first point this close to a car park of OpenStreetMap starts at it
-const parkingCache = new Map();
-/** For each point ([lat, lon]), whether OpenStreetMap has a car park within PARKING_M; all false when it cannot say. */
-async function parkingsNear(points) {
-  const key = (p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`;
-  // one question per start: « around » measures to a car park's outline, not its centre (a big car park's centre
-  // can be far from the way's start); a take-off has a few itineraries at most
-  // Overpass is often busy (502, 504): a second try a moment later
-  const ask = async (q) => {
-    for (const wait of [0, 1500]) {
-      if (wait) await new Promise((r) => setTimeout(r, wait));
-      try {
-        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: q }) });
-        if (res.ok) return (await res.json()).elements || [];
-      } catch (_) { /* tried again below */ }
-    }
-    return null;
-  };
-  for (const p of points.filter((x) => !parkingCache.has(key(x)))) {
-    const found = await ask(`[out:json][timeout:15];nwr["amenity"="parking"](around:${PARKING_M},${p[0]},${p[1]});out ids 1;`);
-    if (found) parkingCache.set(key(p), found.length > 0); // no answer: no P there, asked again next time
-  }
-  return points.map((p) => parkingCache.get(key(p)) || false);
-}
-
 const filterIcon = () => s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('path', { d: 'M4 6h16M7 12h10M10 18h4' }));
 
 // « 3 outings », « 1 pilot »: the plural forms of the language (key of site/i18n/*.js)
@@ -636,14 +611,11 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     return box;
   }
 
-  // a P where an itinerary starts at a car park: the server starts it there when one is within 100 m
-  // (src/mbhf/routes.py) but does not say so, so the car parks at the starts are asked from OpenStreetMap
-  async function markParkings(rts, mine) {
-    // each P as soon as its answer comes: Overpass can be slow
+  // a P where an itinerary starts at a car park: the server starts it there when one is within 100 m and says so
+  // (src/mbhf/routes.py, migration-2026-10-30-route-parking.sql); nothing is asked from the visitor's browser
+  function markParkings(rts) {
     for (const r of rts) {
-      const [at] = await parkingsNear([r.line[0]]);
-      if (mine !== request) return;
-      if (at) L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
+      if (r.parking) L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
     }
   }
 
@@ -949,7 +921,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, t('sort.label')), sortPick));
     renderList();
     // every itinerary of the take-off, even one none of the listed outings is tied to yet
-    markParkings([...siteRoutes.values()].filter((r) => r.line && r.line.length > 1), mine);
+    markParkings([...siteRoutes.values()].filter((r) => r.line && r.line.length > 1));
     status.textContent = byRoute
       ? t('status.byRoute', { n: routeLines.size })
       : crowded
