@@ -298,7 +298,7 @@ export default {
   'sort.aria': 'Ordina le uscite',
   'sort.label': 'Ordine',
 
-  'status.byRoute': { one: '{n} percorso di salita verso questo decollo, un colore per partenza (linea tratteggiata: un altro percorso dalla stessa partenza). Ogni linea corre lungo il centro delle salite delle sue uscite. Passa sopra un percorso per evidenziarlo e cliccalo per tenerlo evidenziato; passa sopra un’uscita per vedere la sua salita.', other: '{n} percorsi di salita verso questo decollo, un colore per partenza (linea tratteggiata: un altro percorso dalla stessa partenza). Ogni linea corre lungo il centro delle salite delle sue uscite. Passa sopra un percorso per evidenziarlo e cliccalo per tenerlo evidenziato; passa sopra un’uscita per vedere la sua salita.' },
+  'status.byRoute': { one: '{n} percorso di salita verso questo decollo. Ogni linea corre lungo il centro delle salite delle sue uscite. Passa sopra un percorso per evidenziarlo e cliccalo per tenerlo evidenziato; passa sopra un’uscita per vedere la sua salita.', other: '{n} percorsi di salita verso questo decollo, ognuno del suo colore. Ogni linea corre lungo il centro delle salite delle sue uscite. Passa sopra un percorso per evidenziarlo e cliccalo per tenerlo evidenziato; passa sopra un’uscita per vedere la sua salita.' },
   'status.crowded': { one: '{n} salita: la mappa di calore mostra i percorsi di salita. Passa sopra un’uscita per vedere la sua salita; cliccala per tenerla.', other: '{n} salite: la mappa di calore mostra i percorsi di salita. Passa sopra un’uscita per vedere la sua salita; cliccala per tenerla.' },
   'status.hover': 'Passa sopra un’uscita per evidenziarne la salita; cliccala per tenerla evidenziata.',
 

@@ -96,6 +96,17 @@ def test_an_itinerary_never_starts_at_a_house():
     assert route["outing_ids"] == ["a"]
 
 
+def test_a_climb_that_leaves_the_paths_higher_up_keeps_its_way():
+    # La Tournette (30 October 2026): the path for the first 1.6 km, then the snow off the paths to the top. The
+    # itinerary starts at the foot of the path, not at the summit's path 130 m below the take-off
+    access = Access([way(UP[:17]), way(UP[-2:])], lat0=45.9)
+    assert access.junction(UP) == 0
+    house = [[45.90, 6.45 - 0.0052 + 0.0013 * k] for k in range(4)]
+    assert access.junction(house + UP) == len(house)  # the way in from a house is still cut
+    route, = routes_of([Climb("a", house + UP)], access=access)
+    assert abs(route["line"][0][1] - 6.45) < 0.0002 and abs(route["line"][-1][0] - UP[-1][0]) < 0.0005
+
+
 def test_private_ways_are_not_the_public_network():
     access = Access([way(UP, "service", service="driveway"), way(shifted(UP, dlon=0.003), access="private")], lat0=45.9)
     assert access.junction(UP) == 0 and not access.on_network((0.0, 0.0))

@@ -299,7 +299,7 @@ export default {
   'sort.aria': 'Sort the outings',
   'sort.label': 'Sort',
 
-  'status.byRoute': { one: '{n} way up to this take-off, one colour per start (a dotted line: another way from the same start). Each line runs down the middle of its outings\' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.', other: '{n} ways up to this take-off, one colour per start (a dotted line: another way from the same start). Each line runs down the middle of its outings\' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.' },
+  'status.byRoute': { one: '{n} way up to this take-off. Each line runs down the middle of its outings\' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.', other: '{n} ways up to this take-off, each in its own colour. Each line runs down the middle of its outings\' climbs. Hover a way to light it and click it to keep it lit; hover an outing to see its own climb.' },
   'status.crowded': { one: '{n} climb: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.', other: '{n} climbs: the heat map shows the ways up. Hover an outing to see its climb; click it to keep it.' },
   'status.hover': 'Hover an outing to light its climb; click it to keep it lit.',
 

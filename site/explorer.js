@@ -34,7 +34,7 @@ const HEAT_SPOTS = { radius: 20, blur: 15, maxZoom: 8, max: 4, minOpacity: 0.45,
 const HEAT_ROUTES = { radius: 7, blur: 9, maxZoom: 14, max: 2, minOpacity: 0.35, gradient: GRADIENT };
 const CLIMB = { color: '#1f4fff', weight: 1.5, opacity: 0.9 };
 const CLIMB_HOT = { color: '#e0161b', weight: 2.5, opacity: 1 };
-// the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per start
+// the routes of a take-off, as Strava or Komoot draw a way: a thin line on a white casing, one colour per itinerary
 const ROUTE_W = 2; // fine lines (Sarah, 27 October 2026); a wider invisible line catches the pointer
 const HIT_W = 14;
 const ROUTE_CASING = { color: '#fff', weight: ROUTE_W + 2, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
@@ -773,17 +773,19 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     for (const [key, outings] of ordered) starts.set(placeOf.get(key), [...(starts.get(placeOf.get(key)) || []), [key, outings]]);
     const count = (ways) => ways.reduce((n, [, outings]) => n + outings.length, 0);
     const startList = [...starts.entries()].sort((a, b) => count(b[1]) - count(a[1]));
-    // one colour per start; its busiest way in a full line, the others dotted
+    // one colour per itinerary, in full lines: orange, blue, green… in the order of the list (Sarah, 30 October 2026:
+    // no more dotted lines for the other ways from the same start)
     const look = new Map();
-    startList.forEach(([, ways], i) => ways.forEach(([key], j) => look.set(key, { color: PALETTE[i % PALETTE.length], main: j === 0 })));
+    let colour = 0;
+    for (const [, ways] of startList) for (const [key] of ways) look.set(key, { color: PALETTE[colour++ % PALETTE.length] });
 
     // a thin line per route on a white casing (the number of outings is in the list, not in the width)
     const routeLines = new Map();
     for (const [key, outings] of ordered) {
       const route = key.startsWith('route:') ? siteRoutes.get(Number(key.slice(6))) : null;
       if (!route || !route.line || route.line.length < 2) continue;
-      const { color, main } = look.get(key);
-      const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round', dashArray: main ? null : '1 8' };
+      const { color } = look.get(key);
+      const style = { color, weight: ROUTE_W, opacity: 0.95, lineCap: 'round', lineJoin: 'round' };
       const casing = L.polyline(route.line, { ...ROUTE_CASING, interactive: false }).addTo(climbs);
       const line = L.polyline(route.line, { ...style, interactive: false }).addTo(climbs);
       // the line is fine: an invisible wider one above it takes the pointer
@@ -826,7 +828,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       if (group) group.scrollIntoView({ block: 'nearest' });
     }
     const swatch = (key) => {
-      const i = h('i', { class: look.get(key) && !look.get(key).main ? 'swatch dotted' : 'swatch' });
+      const i = h('i', { class: 'swatch' });
       if (look.get(key)) i.style.setProperty('--c', look.get(key).color); // a property, not an attribute: the page's CSP
       return i;
     };
@@ -882,7 +884,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
         // a start with several ways: a folder of them
         const fkey = `start:${place}`;
         const keys = ways.map(([key]) => key);
-        const summary = h('summary', null, swatch(keys[0]), fromPlace(place),
+        const summary = h('summary', null, fromPlace(place),
           h('span', { class: 'hint' }, ` · ${t('route.ways', { n: ways.length })}`), h('span', { class: 'badge' }, fmtInt(count(ways))));
         summary.addEventListener('mouseenter', () => paintRoutes(keys));
         summary.addEventListener('mouseleave', () => paintRoutes([]));
