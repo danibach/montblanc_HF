@@ -58,6 +58,7 @@ export default {
   'list.none': 'No outing yet for these filters.',
 
   'page.all': 'Outings',
+  'all.sub': 'Every pilot’s outings, newest first. Click a column title to sort.',
 
   'filter.allTime': 'All time',
 

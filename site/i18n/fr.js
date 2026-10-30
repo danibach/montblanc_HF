@@ -57,6 +57,7 @@ export default {
   'list.none': 'Aucune sortie pour ces filtres.',
 
   'page.all': 'Sorties',
+  'all.sub': 'Les sorties de tous les pilotes, de la plus récente à la plus ancienne. Cliquez un titre de colonne pour trier.',
 
   'filter.allTime': 'Depuis toujours',
 

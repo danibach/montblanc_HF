@@ -136,11 +136,11 @@ function outingDetail(o) {
 function outingRows(rows, { showPilot = true, showStatus = false } = {}) {
   return rows.map((r) => h('tr', null,
     h('td', null, fmtDate(r.outing_date)),
-    showPilot ? h('td', null, link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
+    showPilot ? h('td', null, initials(pilotName(r.profiles)), link(`#/user/${r.user_id}`, pilotName(r.profiles))) : null,
     h('td', { class: 'wrap' }, r.status === 'published' || !showStatus ? link(`#/outing/${r.id}`, outingTitle(r)) : (r.title || t('outing.uploadedTrack')),
       r.status === 'published' && r.verified === false ? [' ', statusBadge(r)] : null),
-    h('td', { class: 'num' }, fmtInt(r.dplus_m)),
-    h('td', { class: 'num' }, fmtInt(r.dminus_m)),
+    h('td', { class: 'num up' }, fmtInt(r.dplus_m)),
+    h('td', { class: 'num down' }, fmtInt(r.dminus_m)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
     h('td', { class: 'num' }, fmtDist(r.flight_free_km)),
     showStatus ? h('td', null, statusBadge(r)) : null));
@@ -180,9 +180,16 @@ async function filterBar(current, onChange, { yearLabel } = {}) {
   const change = () => onChange({ year: year.value || '', country: country.value || '' });
   year.addEventListener('change', change);
   country.addEventListener('change', change);
-  return h('div', { class: 'filters' },
-    h('div', { class: 'field' }, h('label', { for: 'f-year' }, t('filter.year')), year),
-    h('div', { class: 'field' }, h('label', { for: 'f-country' }, t('detail.country')), country));
+  // one bar of rounded fields, as on the map (Sarah, 30 October 2026); their names stay for screen readers
+  year.setAttribute('aria-label', t('filter.year'));
+  country.setAttribute('aria-label', t('detail.country'));
+  return h('div', { class: 'list-toolbar' }, year, country);
+}
+
+/** A pilot's initials in a round badge, before the name in the lists. */
+function initials(name) {
+  const letters = String(name || '?').split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+  return h('span', { class: 'ini', 'aria-hidden': 'true' }, letters || '?');
 }
 
 function query() {
@@ -244,7 +251,7 @@ async function outingsSection(token, { path, userId, showPilot, empty }) {
 async function pageAll(token) {
   setNav('all');
   const section = await outingsSection(token, { path: 'all', showPilot: true, empty: h('p', null, t('list.none')) });
-  if (section) show(h('h1', null, t('page.all')), section);
+  if (section) show(h('h1', null, t('page.all')), h('p', { class: 'sub' }, t('all.sub')), section);
 }
 
 // My H&Fs is the pilot page of the signed-in person, at the address "#/me".
@@ -276,10 +283,10 @@ async function pageRanking(token) {
   // No ranking (Sarah, 29 October 2026: a library of outings, not a challenge): the pilots by name.
   const entries = rows.map((r) => ({ r, name: pilotName(r) })).sort((a, b) => a.name.localeCompare(b.name));
   const rowOf = ({ r, name }) => h('tr', null,
-    h('td', null, link(`#/user/${r.user_id}`, name)),
+    h('td', null, initials(name), link(`#/user/${r.user_id}`, name)),
     h('td', { class: 'num' }, fmtInt(r.outings)),
-    h('td', { class: 'num' }, fmtInt(r.dplus)),
-    h('td', { class: 'num' }, fmtInt(r.dminus)),
+    h('td', { class: 'num up' }, fmtInt(r.dplus)),
+    h('td', { class: 'num down' }, fmtInt(r.dminus)),
     h('td', { class: 'num' }, fmtDist(r.walk_km)),
     h('td', { class: 'num' }, fmtDist(r.flight_km)));
   const tableNode = rows.length
@@ -303,15 +310,13 @@ async function pageRanking(token) {
     found.textContent = words.length && hits.length ? t('rank.found', { hits: hits.length, n: entries.length }) : '';
   };
   search.addEventListener('input', apply);
-  const searchBox = rows.length
-    ? h('div', { class: 'filters' }, h('div', { class: 'field' }, h('label', { for: 'f-pilot' }, t('col.pilot')), search))
-    : null;
+  // the search in the same bar as the year and country
+  if (rows.length) bar.prepend(search);
 
   show(
     h('h1', null, t('page.ranking')),
     h('p', { class: 'sub' }, t('rank.sub')),
     bar,
-    searchBox,
     tableNode || notice('info', h('p', null, t('list.none'))),
     found,
     none);

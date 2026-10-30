@@ -478,3 +478,16 @@ body.map-full-open { overflow: hidden; }
 .ov-count { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--orange); color: #fff; display: grid; place-items: center; font-size: .72rem; font-weight: 600; }
 .ov-sector[open] { padding-bottom: .4rem; }
 .sector-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+/* lists (All outings, Pilots, a pilot's page): the same look as the home and the map (Sarah, 30 October 2026) */
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 1rem 0 .8rem; }
+.list-toolbar select, .list-toolbar input { border-radius: 999px; padding: .42rem .9rem; background: var(--card); border-color: var(--line); font-size: .9rem; }
+.list-toolbar input[type=search] { flex: 1 1 14rem; max-width: 22rem; border-radius: 12px; }
+.table-wrap { border-radius: 14px; border-color: var(--line); }
+th { font-size: .78rem; letter-spacing: .01em; padding-top: .7rem; padding-bottom: .7rem; }
+td { border-bottom-color: var(--card-2); }
+td a { color: var(--ink); text-decoration: none; font-weight: 500; }
+td a:hover { text-decoration: underline; text-decoration-color: var(--field-line); }
+td.num.up { color: var(--green); }
+td.num.down { color: var(--orange); }
+.ini { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--green-bg); color: var(--green); font-size: .68rem; font-weight: 600; margin-right: .5rem; vertical-align: -5px; }
+h1 + .sub { margin-bottom: .2rem; }

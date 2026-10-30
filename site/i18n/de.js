@@ -57,6 +57,7 @@ export default {
   'list.none': 'Noch keine Tour für diese Filter.',
 
   'page.all': 'Touren',
+  'all.sub': 'Die Touren aller Piloten, die neuesten zuerst. Klicken Sie einen Spaltentitel zum Sortieren.',
 
   'filter.allTime': 'Gesamte Zeit',
 

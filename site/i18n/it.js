@@ -57,6 +57,7 @@ export default {
   'list.none': 'Nessuna uscita per questi filtri.',
 
   'page.all': 'Uscite',
+  'all.sub': 'Le uscite di tutti i piloti, dalla più recente. Clicca il titolo di una colonna per ordinare.',
 
   'filter.allTime': 'Sempre',
 
