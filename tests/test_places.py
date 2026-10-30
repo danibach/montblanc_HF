@@ -93,3 +93,15 @@ def test_mapped_paragliding_site_names_the_takeoff():
     no_summit = {**p, "summit": None}
     assert place_title(no_summit, "2021-09-29", 2205) == "Planfait"  # no named summit: the mapped take-off
     assert "free_flying" in overpass_query(OUTING)
+
+
+def test_les_esserts_above_talloires_is_perroix_but_not_elsewhere():
+    # Sarah, 30 October 2026: « Les Esserts » above Talloires is the landing field of Perroix
+    from mbhf.places import resolve_places
+
+    def answer(lat, lon):
+        return {"elements": [{"type": "node", "id": 1, "lat": lat, "lon": lon, "tags": {"place": "hamlet", "name": "Les Esserts"}}]}
+
+    here = resolve_places({"start": {"lat": 45.8525, "lon": 6.2125}}, answer(45.8527, 6.2127))
+    elsewhere = resolve_places({"start": {"lat": 46.30, "lon": 6.50}}, answer(46.3002, 6.5002))
+    assert here["start_place"] == "Perroix" and elsewhere["start_place"] == "Les Esserts"

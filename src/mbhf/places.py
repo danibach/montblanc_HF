@@ -132,6 +132,20 @@ def _nearest(nodes: list[dict], p: dict, radius: int, alt: Optional[float] = Non
     return best
 
 
+# Starts under the name the pilots use (Sarah, 30 October 2026): OpenStreetMap's « Les Esserts » above Talloires is
+# the landing field of Perroix. Only near that point: other villages have a « Les Esserts » of their own. The same
+# names as PLACE_NAMES in routes.py and in site/util.js.
+START_NAMES = {("Les Esserts", 45.852, 6.212): "Perroix"}
+START_NAMES_M = 2000.0
+
+
+def _start_name(name: str, start: dict) -> str:
+    for (osm, lat, lon), pilots in START_NAMES.items():
+        if name == osm and haversine_m(start["lat"], start["lon"], lat, lon) <= START_NAMES_M:
+            return pilots
+    return name
+
+
 def resolve_places(outing: dict, response: dict) -> dict:
     """Turn the Overpass answer into names. Missing information stays None."""
     elements = response.get("elements", []) if isinstance(response, dict) else []
@@ -155,7 +169,7 @@ def resolve_places(outing: dict, response: dict) -> dict:
     start = outing.get("start")
     if start:
         near = _nearest(places, start, PLACE_RADIUS_M)
-        out["start_place"] = _name(near["tags"]) if near else None
+        out["start_place"] = _start_name(_name(near["tags"]), start) if near else None
 
     summit = outing.get("summit")
     if summit:

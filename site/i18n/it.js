@@ -453,7 +453,7 @@ export default {
   'home.sectors': 'Esplora per settore',
   'home.sectorTakeoffs': { one: '{n} decollo', other: '{n} decolli' },
   'home.mapTag': 'La mappa',
-  'home.mapTitle': 'Tutti gli itinerari, decollo per decollo',
+  'home.mapTitle': 'Tutti gli itinerari, tutti i decolli',
   'home.mapText': 'Gli itinerari dei piloti, il calore dei percorsi più battuti, i decolli.',
   'home.routes': { one: '{n} itinerario', other: '{n} itinerari' },
   'home.trackAria': 'La traccia di {title} sulla mappa',

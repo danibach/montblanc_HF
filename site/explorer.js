@@ -5,7 +5,7 @@
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
 import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
-import { h, s, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle } from './util.js';
+import { h, s, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle, placeName } from './util.js';
 import { t, tr } from './i18n.js';
 import { card as ffvlCard, ffvlLayer, windLabel } from './ffvl.js';
 import { scaleAndRuler } from './ruler.js';
@@ -63,28 +63,27 @@ function segmented(id, label, options) {
   return box;
 }
 
-// the same start under the name the pilots use (Sarah, 29 October 2026; src/mbhf/routes.py)
-const PLACE_NAMES = { 'Les Esserts': 'Perroix' };
-
 const PARKING_M = 30; // an itinerary's first point this close to a car park of OpenStreetMap starts at it
 const parkingCache = new Map();
 /** For each point ([lat, lon]), whether OpenStreetMap has a car park within PARKING_M; all false when it cannot say. */
 async function parkingsNear(points) {
   const key = (p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`;
-  const ask = points.filter((p) => !parkingCache.has(key(p)));
-  if (ask.length) {
-    try {
-      const q = `[out:json][timeout:15];(${ask.map((p) => `nwr["amenity"="parking"](around:${PARKING_M},${p[0]},${p[1]});`).join('')});out center;`;
-      const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: q }) });
-      const found = ((await res.json()).elements || []).map((e) => (e.center ? [e.center.lat, e.center.lon] : [e.lat, e.lon])).filter((c) => c[0] != null);
-      const r = Math.PI / 180;
-      const m = (a, b) => 12742000 * Math.asin(Math.sqrt(Math.sin(((b[0] - a[0]) * r) / 2) ** 2
-        + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(((b[1] - a[1]) * r) / 2) ** 2));
-      // a car park's centre can be farther than its edge: the way's start is at its centre (src/mbhf/routes.py)
-      for (const p of ask) parkingCache.set(key(p), found.some((c) => m(p, c) < PARKING_M * 2));
-    } catch (_) {
-      return points.map(() => false); // no answer: no P, asked again next time
+  // one question per start: « around » measures to a car park's outline, not its centre (a big car park's centre
+  // can be far from the way's start); a take-off has a few itineraries at most
+  // Overpass is often busy (502, 504): a second try a moment later
+  const ask = async (q) => {
+    for (const wait of [0, 1500]) {
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      try {
+        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: q }) });
+        if (res.ok) return (await res.json()).elements || [];
+      } catch (_) { /* tried again below */ }
     }
+    return null;
+  };
+  for (const p of points.filter((x) => !parkingCache.has(key(x)))) {
+    const found = await ask(`[out:json][timeout:15];nwr["amenity"="parking"](around:${PARKING_M},${p[0]},${p[1]});out ids 1;`);
+    if (found) parkingCache.set(key(p), found.length > 0); // no answer: no P there, asked again next time
   }
   return points.map((p) => parkingCache.get(key(p)) || false);
 }
@@ -361,9 +360,9 @@ function season(o) {
  * « My tracks »), or null. Returns {element, start}: start() is called once the element is in the page.
  */
 export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = { sites: [], info: null }, me = null) {
-  // the start places as the pilots name them (the PLACE_NAMES of src/mbhf/routes.py): an outing analysed before the
-  // rename still says « Les Esserts », the landing field of Perroix, and was listed as a start of its own
-  for (const o of rows) if (PLACE_NAMES[o.start_place]) o.start_place = PLACE_NAMES[o.start_place];
+  // the start places as the pilots name them (site/util.js): an outing analysed before the rename still says
+  // « Les Esserts », the landing field of Perroix, and was listed as a start of its own
+  for (const o of rows) o.start_place = placeName(o.start_place);
   const mapBox = h('div', { class: 'map map-wide', role: 'region', 'aria-label': t('map.aria') });
   const side = h('aside', { class: 'side', 'aria-live': 'polite' });
   const years = [...new Set(rows.map((o) => String(o.outing_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
@@ -639,12 +638,12 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
   // a P where an itinerary starts at a car park: the server starts it there when one is within 100 m
   // (src/mbhf/routes.py) but does not say so, so the car parks at the starts are asked from OpenStreetMap
   async function markParkings(rts, mine) {
-    const at = await parkingsNear(rts.map((r) => r.line[0]));
-    if (mine !== request) return;
-    rts.forEach((r, i) => {
-      if (!at[i]) return;
-      L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
-    });
+    // each P as soon as its answer comes: Overpass can be slow
+    for (const r of rts) {
+      const [at] = await parkingsNear([r.line[0]]);
+      if (mine !== request) return;
+      if (at) L.marker(r.line[0], { icon: L.divIcon({ className: 'p-mark', html: 'P', iconSize: [16, 16] }), interactive: false, keyboard: false }).addTo(climbs);
+    }
   }
 
   // the take-off's register entry and FFVL card, folded under its name (Sarah, 30 October 2026: short, but in sight)
@@ -938,7 +937,8 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, t('sort.label')), sortPick));
     renderList();
-    markParkings(ordered.map(([key]) => siteRoutes.get(Number(key.slice(6)))).filter((r) => r && r.line && r.line.length > 1), mine);
+    // every itinerary of the take-off, even one none of the listed outings is tied to yet
+    markParkings([...siteRoutes.values()].filter((r) => r.line && r.line.length > 1), mine);
     status.textContent = byRoute
       ? t('status.byRoute', { n: routeLines.size })
       : crowded

@@ -454,7 +454,7 @@ export default {
   'home.sectors': 'Explore by sector',
   'home.sectorTakeoffs': { one: '{n} take-off', other: '{n} take-offs' },
   'home.mapTag': 'The map',
-  'home.mapTitle': 'Every itinerary, take-off by take-off',
+  'home.mapTitle': 'Every itinerary, every take-off',
   'home.mapText': 'The pilots’ itineraries, the heat of the most used ways, the take-offs.',
   'home.routes': { one: '{n} itinerary', other: '{n} itineraries' },
   'home.trackAria': 'The track of {title} on the map',

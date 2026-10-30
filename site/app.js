@@ -19,7 +19,7 @@ import { buildMarkTool } from './mark.js';
 import { buildHelp } from './help.js';
 import { buildHome } from './home.js';
 import { drawCardMaps, outingCard } from './cards.js';
-import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle } from './util.js';
+import { $, h, notice, table, fmtInt, fmtKm, fmtDur, fmtDate, pilotName, outingTitle, placeName } from './util.js';
 import { LANGS, getLang, initI18n, onLang, setLang, t, tr } from './i18n.js';
 
 const view = $('#view');
@@ -123,7 +123,7 @@ function outingDetail(o) {
       stat(fmtKm(o.flight_free_km), t('stat.freeFai')),
       stat(fmtDur(o.duration_s), t('stat.duration'))),
     h('dl', { class: 'places' },
-      place(t('detail.startFoot'), [o.start_place, o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
+      place(t('detail.startFoot'), [placeName(o.start_place), o.start_commune && o.start_commune !== o.start_place ? o.start_commune : null].filter(Boolean).join(', ') || coords(o.start_lat, o.start_lon)),
       place(t('detail.summit'), `${o.summit_name || coords(o.summit_lat, o.summit_lon) || '–'}${o.summit_alt != null ? ` · ${fmtInt(o.summit_alt)} m` : ''}`),
       place(t('detail.takeoff'), `${o.takeoff_name || coords(o.takeoff_lat, o.takeoff_lon) || '–'}${o.takeoff_alt != null ? ` · ${fmtInt(o.takeoff_alt)} m` : ''}`),
       place(t('detail.country'), o.country_name || o.country_code)),

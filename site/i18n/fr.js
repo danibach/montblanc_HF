@@ -453,7 +453,7 @@ export default {
   'home.sectors': 'Explorer par secteur',
   'home.sectorTakeoffs': { one: '{n} déco', other: '{n} décos' },
   'home.mapTag': 'La carte',
-  'home.mapTitle': 'Tous les itinéraires, déco par déco',
+  'home.mapTitle': 'Tous les itinéraires, tous les décollages',
   'home.mapText': 'Les itinéraires des pilotes, la chaleur des chemins les plus empruntés, les décos.',
   'home.routes': { one: '{n} itinéraire', other: '{n} itinéraires' },
   'home.trackAria': 'La trace de {title} sur la carte',

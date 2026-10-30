@@ -453,7 +453,7 @@ export default {
   'home.sectors': 'Nach Gebiet entdecken',
   'home.sectorTakeoffs': { one: '{n} Startplatz', other: '{n} Startplätze' },
   'home.mapTag': 'Die Karte',
-  'home.mapTitle': 'Alle Routen, Startplatz für Startplatz',
+  'home.mapTitle': 'Alle Routen, alle Startplätze',
   'home.mapText': 'Die Routen der Piloten, die Wärme der meistbegangenen Wege, die Startplätze.',
   'home.routes': { one: '{n} Route', other: '{n} Routen' },
   'home.trackAria': 'Der Track von {title} auf der Karte',
