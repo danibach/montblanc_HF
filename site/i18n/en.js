@@ -9,7 +9,7 @@ export default {
   'account.help': 'Help',
 
   'footer.public': 'Published tracks are public: map, profile and statistics. The original file stays private.',
-  'footer.sources': 'Place names come from OpenStreetMap and ground altitudes from Open-Meteo (the preview sends them a few points of the flight). Scores are automatic: D+ on foot plus D− in flight, in metres.',
+  'footer.sources': 'Place names come from OpenStreetMap and ground altitudes from Open-Meteo (the preview sends them a few points of the flight).',
   'footer.remove': 'To remove a track or an account: {mail} (or use the delete buttons).',
 
   'common.loading': 'Loading…',
@@ -20,7 +20,6 @@ export default {
   'detail.takeoff': 'Take-off',
   'detail.landing': 'Landing',
 
-  'stat.score': 'Score',
   'stat.dplus': 'D+ on foot',
   'stat.dminus': 'D− in flight',
   'stat.walk': 'Distance on foot',
@@ -44,7 +43,6 @@ export default {
   'col.dminus': 'D− (m)',
   'col.hike': 'Hike (km)',
   'col.fly': 'Fly (km)',
-  'col.score': 'Score',
   'col.status': 'Status',
 
   'filter.allYears': 'All years',
@@ -73,7 +71,7 @@ export default {
 
   'page.ranking': 'Pilots',
 
-  'rank.sub': 'Sum of the scores of all outings. Score = D+ on foot + D− in flight (metres).',
+  'rank.sub': 'The pilots and their outings: D+ on foot, D− in flight and distances, for a year or all time.',
 
   'page.map': 'Take-off map',
 
@@ -98,7 +96,6 @@ export default {
 
   'list.noneUser': 'No published outing for these filters.',
 
-  'stat.totalScore': 'Total score',
   'stat.totalFlight': 'Total distance on flight',
 
   'name.choose': 'Choose the name shown next to your outings',
@@ -134,8 +131,7 @@ export default {
   'upload.original': 'Send the recording exactly as your device or app saved it. Do not edit it, merge it or correct its elevation with a track tool: flight altitudes must be the measured ones, not adjusted to the terrain. Such tracks are refused, unless you mark the flight by hand afterwards.',
   'upload.analysing': 'Analysing…',
   'upload.tooBig': 'This file is larger than {mb} MB. Export only this activity, not a whole year.',
-  'upload.points': { one: '{n} point', other: '{n} points' },
-  'upload.verdictRest': ' — {up} m climbed on foot and {down} m flown down.',
+  'upload.verdictRest': '{up} m climbed on foot and {down} m flown down.',
   'upload.publish': 'Publish this outing',
   'upload.published': 'Published. The server now checks the result: the “Validation pending” badge disappears within a few minutes once it is confirmed.',
   'upload.seeOuting': 'See your outing',
@@ -219,11 +215,10 @@ export default {
   'engine.installing': 'Installing the analysis program…',
 
   'help.title': 'Help',
-  'help.sub': 'How to send a track, what the columns mean, and how the score is worked out.',
+  'help.sub': 'How to send a track, what the columns mean, and the rules of an outing.',
   'help.toc': 'On this page',
   'help.tocUpload': 'Upload',
   'help.tocColumns': 'The columns',
-  'help.tocScore': 'The score',
   'help.tocRules': 'What counts',
   'help.tocPages': 'The pages',
   'help.up.h': 'Upload',
@@ -231,7 +226,7 @@ export default {
   'help.up.files': 'Files',
   'help.up.files.d': 'IGC, GPX, KML, TCX or FIT, up to {mb} MB each, with time stamps and altitude. A plain KML line has no time stamps and is refused.',
   'help.up.one': 'One file',
-  'help.up.one.d': 'Choose it, read the preview (score, D+, D−, map, profile, place names), then press Publish. Nothing is public before that.',
+  'help.up.one.d': 'Choose it, read the preview (D+, D−, map, profile, place names), then press Publish. Nothing is public before that.',
   'help.up.several': 'Several files at once',
   'help.up.several.d': 'Each one is analysed in turn. By default each outing is published as soon as it is ready, so nothing is lost if you close the page; untick the box to review the list first and publish together. Keep the page open until the list is finished.',
   'help.up.multi': 'One outing in several files',
@@ -252,27 +247,19 @@ export default {
   'help.col.dplus.d': 'Height climbed on foot, in metres: the sum of the climbs, on an altitude averaged over about a minute. A dip of less than 15 m does not end a climb, which keeps GPS noise out. The climb after the last flight counts too (back to the car, up to the bivouac); a climb given up before a ride in a vehicle does not.',
   'help.col.dminus.d': 'Height lost in flight, in metres: for each flight, the altitude at take-off minus the altitude at landing. Thermals are ignored: only the net difference counts, so climbing in a thermal does not add anything.',
   'help.col.hike.d': 'Distance covered on foot, in kilometres, summed over the whole track. Rides in a vehicle (car, lift, bike) are not counted.',
-  'help.col.fly.d': 'The FAI free distance, in kilometres: the longest route flown from a start point through up to three turn points to a finish, summed over all the flights of the outing. It is the "Free distance FAI" of the page of an outing. It is not part of the score.',
-  'help.col.score.d': 'D+ on foot plus D− in flight, in metres (see below).',
+  'help.col.fly.d': 'The FAI free distance, in kilometres: the longest route flown from a start point through up to three turn points to a finish, summed over all the flights of the outing. It is the "Free distance FAI" of the page of an outing.',
   'help.col.outings.d': 'In Pilots: the number of published outings of the pilot. The totals follow the year and country filters.',
-  'help.score.h': 'The score',
-  'help.score.formula': 'Score = D+ on foot + D− in flight',
-  'help.score.intro': 'The score measures how much vertical height an outing covers, by its own effort and by its flight, with a formula anyone can redo. Distance does not enter the score: the aim is not to fly the farthest.',
-  'help.score.ex': 'An outing with {a} m of D+ and {b} m of D− scores {c}.',
-  'help.score.one': 'Several walks and flights in one track are one adventure: the D+ and the D− are added.',
-  'help.score.total': 'A pilot\'s total (page Pilots) is the sum of the scores of all their published outings, for a year or all time. Every outing counts, not only the best ones.',
-  'help.score.same': 'The score is computed by the same code in your browser and on the server, so the preview and the final result agree.',
   'help.rules.h': 'What counts as an outing',
   'help.rules.climb': 'At least one flight, and at least 200 m of climbing on foot, both within the recorded track, in any order (e.g. a flight followed by a hike to the next take-off counts). Climbs by motorised means, such as a lift ride or a vehicle, do not count.',
   'help.rules.flight': 'A flight must lose at least 30 m of height and glide with a ratio of at least 4 (a speed-riding wing 4 to 5, a paraglider 7 to 9). Take-off does not have to be at the summit.',
   'help.rules.ground': 'A descent slower than about 18 km/h, or one that follows the ground (ski, run, bike), is not a flight. The tracks are compared with the ground altitude (Open-Meteo).',
   'help.rules.zero': 'Altitudes recorded as 0 m are ignored, with a warning: a receiver without an altitude fix would otherwise count thousands of metres of climb.',
   'help.rules.gap': 'A recording gap of more than 10 minutes is judged walked or driven, from what was recorded around it, the time it took and what a walker could do. If it was probably walked it counts; if it was probably a ride, nothing is counted across it. A doubtful case is decided anyway and flagged "to be checked".',
-  'help.rules.rides': 'Rides in a vehicle are marked and left out of the score.',
+  'help.rules.rides': 'Rides in a vehicle are marked and left out of the D+ and the distances.',
   'help.pages.h': 'The pages',
   'help.pages.home': 'Your own page: your totals and your outings, with filters by year and country.',
   'help.pages.all': 'The outings of everyone, with the same filters and sorting.',
-  'help.pages.ranking': 'The ranking by total score, with each pilot\'s outings, D+, D−, distances on foot and in flight; search a pilot by name.',
+  'help.pages.ranking': 'Every pilot, by name, with their outings, D+, D−, distances on foot and in flight; search a pilot by name.',
   'help.pages.map': 'The take-offs and the ways up on foot. Zoomed out, a heat map of the take-offs; zoomed in, of the climbs. Click a take-off to see the routes that lead to it and their outings; hover or click a route line to light it.',
   'help.pages.upload': 'Send one or several tracks (see above).',
   'help.credits': 'Place names come from OpenStreetMap and the take-off register from FFVL open data (Licence Ouverte 2.0) and OpenStreetMap (ODbL).',

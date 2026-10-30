@@ -8,7 +8,7 @@ export default {
   'account.help': 'Hilfe',
 
   'footer.public': 'Veröffentlichte Tracks sind öffentlich: Karte, Profil und Statistiken. Die Originaldatei bleibt privat.',
-  'footer.sources': 'Ortsnamen stammen von OpenStreetMap, Geländehöhen von Open-Meteo (die Vorschau sendet ihnen einige Punkte des Flugs). Die Punkte werden automatisch berechnet: Aufstieg zu Fuß (D+) plus Höhenverlust im Flug (D−), in Metern.',
+  'footer.sources': 'Ortsnamen stammen von OpenStreetMap, Geländehöhen von Open-Meteo (die Vorschau sendet ihnen einige Punkte des Flugs).',
   'footer.remove': 'Um einen Track oder ein Konto zu entfernen: {mail} (oder die Löschen-Schaltflächen benutzen).',
 
   'common.loading': 'Wird geladen…',
@@ -19,7 +19,6 @@ export default {
   'detail.takeoff': 'Startplatz',
   'detail.landing': 'Landeplatz',
 
-  'stat.score': 'Punkte',
   'stat.dplus': 'D+ zu Fuß',
   'stat.dminus': 'D− im Flug',
   'stat.walk': 'Strecke zu Fuß',
@@ -43,7 +42,6 @@ export default {
   'col.dminus': 'D− (m)',
   'col.hike': 'Wandern (km)',
   'col.fly': 'Fliegen (km)',
-  'col.score': 'Punkte',
   'col.status': 'Status',
 
   'filter.allYears': 'Alle Jahre',
@@ -72,7 +70,7 @@ export default {
 
   'page.ranking': 'Piloten',
 
-  'rank.sub': 'Summe der Punkte aller Touren. Punkte = D+ zu Fuß + D− im Flug (Meter).',
+  'rank.sub': 'Die Piloten und ihre Touren: D+ zu Fuß, D− im Flug und Strecken, für ein Jahr oder insgesamt.',
 
   'page.map': 'Startplatzkarte',
 
@@ -97,7 +95,6 @@ export default {
 
   'list.noneUser': 'Keine veröffentlichte Tour für diese Filter.',
 
-  'stat.totalScore': 'Gesamtpunkte',
   'stat.totalFlight': 'Gesamtstrecke im Flug',
 
   'name.choose': 'Wähle den Namen, der neben deinen Touren angezeigt wird',
@@ -133,8 +130,7 @@ export default {
   'upload.original': 'Sende die Aufzeichnung genau so, wie dein Gerät oder deine App sie gespeichert hat. Bearbeite sie nicht, füge sie nicht zusammen und korrigiere ihre Höhe nicht mit einem Track-Programm: Die Flughöhen müssen die gemessenen sein, nicht ans Gelände angepasste. Solche Tracks werden abgelehnt, es sei denn, du markierst den Flug anschließend von Hand.',
   'upload.analysing': 'Wird analysiert…',
   'upload.tooBig': 'Diese Datei ist größer als {mb} MB. Exportiere nur diese Aktivität, nicht ein ganzes Jahr.',
-  'upload.points': { one: '{n} Punkt', other: '{n} Punkte' },
-  'upload.verdictRest': ' — {up} m zu Fuß aufgestiegen und {down} m im Flug abgestiegen.',
+  'upload.verdictRest': '{up} m zu Fuß aufgestiegen und {down} m im Flug abgestiegen.',
   'upload.publish': 'Diese Tour veröffentlichen',
   'upload.published': 'Veröffentlicht. Der Server prüft das Ergebnis jetzt: Das Zeichen „Prüfung ausstehend“ verschwindet innerhalb weniger Minuten, sobald es bestätigt ist.',
   'upload.seeOuting': 'Deine Tour ansehen',
@@ -218,11 +214,10 @@ export default {
   'engine.installing': 'Das Analyseprogramm wird installiert…',
 
   'help.title': 'Hilfe',
-  'help.sub': 'Wie du einen Track sendest, was die Spalten bedeuten und wie die Punkte berechnet werden.',
+  'help.sub': 'Wie du einen Track sendest, was die Spalten bedeuten und die Regeln einer Tour.',
   'help.toc': 'Auf dieser Seite',
   'help.tocUpload': 'Hochladen',
   'help.tocColumns': 'Die Spalten',
-  'help.tocScore': 'Die Punkte',
   'help.tocRules': 'Was zählt',
   'help.tocPages': 'Die Seiten',
   'help.up.h': 'Hochladen',
@@ -230,7 +225,7 @@ export default {
   'help.up.files': 'Dateien',
   'help.up.files.d': 'IGC, GPX, KML, TCX oder FIT, je bis zu {mb} MB, mit Zeitstempeln und Höhe. Eine einfache KML-Linie hat keine Zeitstempel und wird abgelehnt.',
   'help.up.one': 'Eine Datei',
-  'help.up.one.d': 'Wähle sie aus, sieh dir die Vorschau an (Punkte, D+, D−, Karte, Profil, Ortsnamen) und drücke dann auf Veröffentlichen. Vorher ist nichts öffentlich.',
+  'help.up.one.d': 'Wähle sie aus, sieh dir die Vorschau an (D+, D−, Karte, Profil, Ortsnamen) und drücke dann auf Veröffentlichen. Vorher ist nichts öffentlich.',
   'help.up.several': 'Mehrere Dateien auf einmal',
   'help.up.several.d': 'Jede wird der Reihe nach analysiert. Standardmäßig wird jede Tour veröffentlicht, sobald sie fertig ist, sodass nichts verloren geht, wenn du die Seite schließt; entferne das Häkchen, um die Liste zuerst durchzusehen und gemeinsam zu veröffentlichen. Lass die Seite offen, bis die Liste abgearbeitet ist.',
   'help.up.multi': 'Eine Tour in mehreren Dateien',
@@ -251,27 +246,19 @@ export default {
   'help.col.dplus.d': 'Zu Fuß aufgestiegene Höhe in Metern: die Summe der Anstiege, auf einer über etwa eine Minute gemittelten Höhe. Ein Abfall von weniger als 15 m beendet einen Anstieg nicht, wodurch GPS-Rauschen draußen bleibt. Der Anstieg nach dem letzten Flug zählt ebenfalls (zurück zum Auto, hinauf zum Biwak); ein Anstieg, der vor einer Fahrt im Fahrzeug abgebrochen wurde, nicht.',
   'help.col.dminus.d': 'Im Flug verlorene Höhe in Metern: für jeden Flug die Höhe am Start minus die Höhe bei der Landung. Thermik wird ignoriert: Nur der Nettounterschied zählt, das Kreisen in einer Thermik fügt also nichts hinzu.',
   'help.col.hike.d': 'Zu Fuß zurückgelegte Strecke in Kilometern, über den ganzen Track. Fahrten im Fahrzeug (Auto, Bahn, Velo) werden nicht gezählt.',
-  'help.col.fly.d': 'Die freie Strecke der FAI in Kilometern: die längste geflogene Route von einem Startpunkt über höchstens drei Wendepunkte zu einem Ziel, summiert über alle Flüge der Tour. Sie ist die „Freie Strecke FAI“ auf der Seite einer Tour. Sie gehört nicht zu den Punkten.',
-  'help.col.score.d': 'D+ zu Fuß plus D− im Flug, in Metern (siehe unten).',
+  'help.col.fly.d': 'Die freie Strecke der FAI in Kilometern: die längste geflogene Route von einem Startpunkt über höchstens drei Wendepunkte zu einem Ziel, summiert über alle Flüge der Tour. Sie ist die „Freie Strecke FAI“ auf der Seite einer Tour.',
   'help.col.outings.d': 'Bei Piloten: die Anzahl der veröffentlichten Touren des Piloten. Die Summen folgen den Filtern für Jahr und Land.',
-  'help.score.h': 'Die Punkte',
-  'help.score.formula': 'Punkte = D+ zu Fuß + D− im Flug',
-  'help.score.intro': 'Die Punkte messen, wie viel Höhe eine Tour durch eigene Anstrengung und durch den Flug überwindet, mit einer Formel, die jeder nachrechnen kann. Die Strecke geht nicht in die Punkte ein: Es geht nicht darum, am weitesten zu fliegen.',
-  'help.score.ex': 'Eine Tour mit {a} m D+ und {b} m D− ergibt {c} Punkte.',
-  'help.score.one': 'Mehrere Wanderungen und Flüge in einem Track sind ein Abenteuer: D+ und D− werden addiert.',
-  'help.score.total': 'Die Gesamtpunkte eines Piloten (Seite Piloten) sind die Summe der Punkte aller seiner veröffentlichten Touren, für ein Jahr oder die gesamte Zeit. Jede Tour zählt, nicht nur die besten.',
-  'help.score.same': 'Die Punkte werden vom selben Code in deinem Browser und auf dem Server berechnet, daher stimmen Vorschau und Endergebnis überein.',
   'help.rules.h': 'Was als Tour zählt',
   'help.rules.climb': 'Mindestens ein Flug und mindestens 200 m Aufstieg zu Fuß, beides im aufgezeichneten Track, in beliebiger Reihenfolge (zum Beispiel zählt ein Flug, gefolgt von einer Wanderung zum nächsten Startplatz). Anstiege mit motorisierten Mitteln, etwa mit einer Bahn oder einem Fahrzeug, zählen nicht.',
   'help.rules.flight': 'Ein Flug muss mindestens 30 m Höhe verlieren und mit einer Gleitzahl von mindestens 4 gleiten (ein Speedriding-Schirm 4 bis 5, ein Gleitschirm 7 bis 9). Der Start muss nicht am Gipfel sein.',
   'help.rules.ground': 'Ein Abstieg, der langsamer als etwa 18 km/h ist oder dem Gelände folgt (Ski, Lauf, Velo), ist kein Flug. Die Tracks werden mit der Geländehöhe verglichen (Open-Meteo).',
   'help.rules.zero': 'Als 0 m aufgezeichnete Höhen werden mit einer Warnung ignoriert: Ein Empfänger ohne Höhenfix würde sonst Tausende Höhenmeter Aufstieg zählen.',
   'help.rules.gap': 'Eine Aufzeichnungslücke von mehr als 10 Minuten wird als gegangen oder gefahren beurteilt, nach dem, was um sie herum aufgezeichnet wurde, der verstrichenen Zeit und dem, was ein Wanderer leisten kann. Wurde sie wahrscheinlich gegangen, zählt sie; war es wahrscheinlich eine Fahrt, wird darüber nichts gezählt. Ein zweifelhafter Fall wird trotzdem entschieden und mit „zu prüfen“ markiert.',
-  'help.rules.rides': 'Fahrten im Fahrzeug werden markiert und aus den Punkten herausgelassen.',
+  'help.rules.rides': 'Fahrten im Fahrzeug werden markiert und aus dem D+ und den Strecken herausgelassen.',
   'help.pages.h': 'Die Seiten',
   'help.pages.home': 'Deine eigene Seite: deine Summen und deine Touren, mit Filtern nach Jahr und Land.',
   'help.pages.all': 'Die Touren aller, mit denselben Filtern und Sortierungen.',
-  'help.pages.ranking': 'Die Rangliste nach Gesamtpunkten, mit den Touren, D+, D− und den Strecken zu Fuß und im Flug jedes Piloten; Piloten lassen sich nach Namen suchen.',
+  'help.pages.ranking': 'Alle Piloten, nach Namen, mit ihren Touren, D+, D− und den Strecken zu Fuß und im Flug; Piloten lassen sich nach Namen suchen.',
   'help.pages.map': 'Die Startplätze und die Aufstiegswege zu Fuß. Herausgezoomt eine Heatmap der Startplätze, hineingezoomt der Anstiege. Klicke auf einen Startplatz, um die Routen dorthin und ihre Touren zu sehen; fahre über eine Routenlinie oder klicke sie an, um sie hervorzuheben.',
   'help.pages.upload': 'Einen oder mehrere Tracks senden (siehe oben).',
   'help.credits': 'Ortsnamen stammen von OpenStreetMap, das Startplatzverzeichnis aus den offenen Daten der FFVL (Licence Ouverte 2.0) und von OpenStreetMap (ODbL).',

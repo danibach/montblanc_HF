@@ -1,4 +1,4 @@
-// The Help page: how to upload, what the columns of the lists mean, how the score is computed.
+// The Help page: how to upload, what the columns of the lists mean, the rules of an outing.
 // The texts are in site/i18n/<language>.js (help.*): keep them in step with the rules in src/mbhf (the engine) and
 // with the Upload page.
 
@@ -23,7 +23,7 @@ export function buildHelp() {
     h('p', { class: 'sub' }, t('help.sub')),
     h('nav', { class: 'help-toc', 'aria-label': t('help.toc') },
       jump('help-upload', t('help.tocUpload')), jump('help-columns', t('help.tocColumns')),
-      jump('help-score', t('help.tocScore')), jump('help-rules', t('help.tocRules')),
+      jump('help-rules', t('help.tocRules')),
       jump('help-pages', t('help.tocPages'))),
 
     h('section', { id: 'help-upload' },
@@ -50,19 +50,8 @@ export function buildHelp() {
         [t('col.dminus'), t('help.col.dminus.d')],
         [t('col.hike'), t('help.col.hike.d')],
         [t('col.fly'), t('help.col.fly.d')],
-        [t('col.score'), t('help.col.score.d')],
         [t('col.outings'), t('help.col.outings.d')],
       ])),
-
-    h('section', { id: 'help-score' },
-      h('h2', null, t('help.score.h')),
-      h('p', { class: 'help-formula' }, t('help.score.formula')),
-      h('p', null, t('help.score.intro')),
-      h('ul', null,
-        h('li', null, t('help.score.ex', { a: 1200, b: 1100, c: 2300 })),
-        h('li', null, t('help.score.one')),
-        h('li', null, t('help.score.total')),
-        h('li', null, t('help.score.same')))),
 
     h('section', { id: 'help-rules' },
       h('h2', null, t('help.rules.h')),
