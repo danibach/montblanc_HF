@@ -141,7 +141,7 @@ export function buildHome({ latest, mapRows, sites, routes, flown, ffvl = [], lo
 
     shownLatest.length ? [
       h('div', { class: 'sec-head' }, h('h2', null, t('home.latest')), h('a', { href: '#/all' }, t('home.seeAll'))),
-      h('div', { class: 'climb-cards' }, shownLatest.map(outingCard)),
+      h('div', { class: 'climb-cards' }, shownLatest.map((o) => outingCard(o))),
     ] : null,
 
     chained.length ? h('section', { class: 'inspiration' },

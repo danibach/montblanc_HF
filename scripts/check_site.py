@@ -269,6 +269,7 @@ with sync_playwright() as p:
     check(page.locator(".map-card").count() == 1 and "Open the map" in page.inner_text(".map-card"), "home: the map card")
     latest = page.locator(".home > .climb-cards > .climb-card")
     check(latest.count() == 1, "home: the latest outing, only the verified one (%d)" % latest.count())
+    check("object" not in latest.first.inner_text().lower(), "home: a latest outing's card shows only its pilot, title and numbers")
     page.click("#nav-more summary")
     check(page.locator("#nav-more a[href='#/all']").is_visible() and page.locator("#nav-more a[href='#/ranking']").is_visible(), "menu: Explore opens on All outings and Pilots")
     page.click("#nav-more summary")
