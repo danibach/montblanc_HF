@@ -276,8 +276,6 @@ export default {
   'climbs.loading': 'Caricamento delle salite…',
   'climbs.partial': 'Alcune tracce non è stato possibile caricarle ({error}).',
 
-  'item.dplusClimb': 'D+ della salita',
-  'item.distance': 'Distanza della salita',
   'item.time': 'Durata della salita',
   'item.noClimb': 'Nessuna traccia di salita da disegnare.',
   'item.open': 'Apri l’uscita →',

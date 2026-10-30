@@ -276,8 +276,6 @@ export default {
   'climbs.loading': 'Aufstiege werden geladen…',
   'climbs.partial': 'Einige Tracks konnten nicht geladen werden ({error}).',
 
-  'item.dplusClimb': 'D+ des Aufstiegs',
-  'item.distance': 'Strecke des Aufstiegs',
   'item.time': 'Dauer des Aufstiegs',
   'item.noClimb': 'Kein Aufstiegstrack zum Zeichnen.',
   'item.open': 'Tour öffnen →',

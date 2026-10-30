@@ -277,8 +277,6 @@ export default {
   'climbs.loading': 'Loading the climbs…',
   'climbs.partial': 'Some tracks could not be loaded ({error}).',
 
-  'item.dplusClimb': 'D+ of the climb',
-  'item.distance': 'Distance of the climb',
   'item.time': 'Time of the climb',
   'item.noClimb': 'No climb track to draw.',
   'item.open': 'Open the outing →',

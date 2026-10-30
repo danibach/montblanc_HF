@@ -276,8 +276,6 @@ export default {
   'climbs.loading': 'Chargement des montées…',
   'climbs.partial': 'Certaines traces n’ont pas pu être chargées ({error}).',
 
-  'item.dplusClimb': 'D+ de la montée',
-  'item.distance': 'Distance de la montée',
   'item.time': 'Durée de la montée',
   'item.noClimb': 'Aucune trace de montée à dessiner.',
   'item.open': 'Ouvrir la sortie →',
