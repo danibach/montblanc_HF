@@ -271,9 +271,9 @@ with sync_playwright() as p:
     latest = page.locator(".home > .climb-cards > .climb-card")
     check(latest.count() == 1, "home: the latest outing, only the verified one (%d)" % latest.count())
     check("object" not in latest.first.inner_text().lower(), "home: a latest outing's card shows only its pilot, title and numbers")
-    page.click("#nav-more summary")
-    check(page.locator("#nav-more a[href='#/all']").is_visible() and page.locator("#nav-more a[href='#/ranking']").count() == 0, "menu: Explore opens on All outings; no Pilots for now")
-    page.click("#nav-more summary")
+    # no « Explore » any more (Sarah, 30 October 2026): All outings is in the menu itself; no Pilots for now
+    check(page.locator("#nav > a[href='#/all']").is_visible() and page.locator("#nav-more").count() == 0
+          and page.locator("#nav a[href='#/ranking']").count() == 0, "menu: All outings in the menu, no Explore, no Pilots for now")
     word = (ROW1.get("takeoff_name") or ROW1["title"])[:4]
     page.fill(".warm-search input", word)
     page.press(".warm-search input", "Enter")

@@ -416,7 +416,6 @@ export default {
 
   // warm design (Sarah, 30 October 2026): menu, home, map tools, help as questions and answers
   'nav.home': 'Start',
-  'nav.explore': 'Entdecken',
   'nav.all': 'Alle Touren',
   'nav.help': 'Hilfe',
   'nav.upload': 'Meinen Track hochladen',

@@ -88,10 +88,6 @@ function setNav(name) {
     if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  // « Explore » is lit when one of its entries is, and closes once an entry is picked
-  const more = $('#nav-more');
-  more.classList.toggle('on', !!more.querySelector('a[aria-current]'));
-  more.open = false;
 }
 
 function show(...nodes) {
