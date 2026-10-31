@@ -230,6 +230,8 @@ export default {
   'src.provisional': 'Decollo dedotto dalle uscite',
 
   'site.goodWinds': 'venti buoni {winds}',
+  'site.windsNear': 'venti buoni {winds} (decollo FFVL vicino)',
+  'site.windsSlope': 'rivolto a {winds} (stimato dal pendio)',
   'site.toConfirm': { one: '{n} uscita è decollata a 100–200 m di distanza: collegata a questo decollo, da confermare.', other: '{n} uscite sono decollate a 100–200 m di distanza: collegate a questo decollo, da confermare.' },
   'site.hikeFly': 'Note hike & fly (FFVL)',
 
@@ -427,6 +429,11 @@ export default {
   'map.allTracks': 'Tutte le tracce',
   'map.myTracks': 'Le mie tracce',
   'map.filters': 'Filtri',
+  'map.wind': 'Orientamento',
+  'map.windQ': 'Per quale vento? I decolli rivolti nella direzione scelta.',
+  'map.windHint': 'Scegli una o più direzioni.',
+  'map.windShown': '{n} decolli tenuti.',
+  'map.windUnknown': '{n} senza orientamento noto, nascosti.',
   'map.clearFilters': 'Azzera',
   'map.showOutings': { one: 'Mostra {n} uscita', other: 'Mostra {n} uscite' },
   'legend.route': 'Itinerario',

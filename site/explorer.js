@@ -4,7 +4,7 @@
 
 import { groupName, sectorOf } from './sectors.js';
 import { routeNumbers, routeSheet } from './routesheet.js';
-import { can3D, fullScreenButton, mapPanel, view3D } from './basemaps.js';
+import { can3D, fullScreenButton, mapPanel, terrainAltitudes, view3D } from './basemaps.js';
 import { h, s, fmtInt, fmtKm, fmtDur, fmtDate, outingTitle, placeName } from './util.js';
 import { fmtDay, t, tr } from './i18n.js';
 import { card as ffvlCard, ffvlLayer, windLabel } from './ffvl.js';
@@ -63,6 +63,7 @@ function segmented(id, label, options) {
   return box;
 }
 
+const compass = () => s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('circle', { cx: 12, cy: 12, r: 9 }), s('path', { d: 'M12 5l2.5 7-2.5 7-2.5-7z' }));
 const filterIcon = () => s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, s('path', { d: 'M4 6h16M7 12h10M10 18h4' }));
 
 // « 3 outings », « 1 pilot »: the plural forms of the language (key of site/i18n/*.js)
@@ -195,11 +196,38 @@ const SOURCES = {
   provisional: 'src.provisional',
 };
 
-/** The good winds of a take-off, in a few words (« Good winds: NW, W »), or null. The FFVL writes the winds as French
- *  letters (O for ouest): shown with the letters of the language. */
-function windsOf(sp) {
-  const site = sp.site;
-  return site && site.wind_ok ? t('site.goodWinds', { winds: site.wind_ok.split(/[;,\s]+/).filter(Boolean).map(windLabel).join(', ') }) : null;
+// ---- the orientation of a take-off, for the « Orientation » filter (Sarah, 30 October 2026). The winds a take-off
+// is good for, as the FFVL writes them (O for ouest), from: its register entry (FFVL, OSM); else an FFVL take-off
+// within NEAR_FFVL_M (the same one under another name); else the slope around it, read from the relief: the way the
+// ground goes down is the way the take-off faces, and the wind it wants, with the two directions beside it
+export const WIND_DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+const NEAR_FFVL_M = 400;
+const SLOPE_RING_M = 80;    // the relief is read at this distance around the take-off ...
+const SLOPE_MIN = 0.08;     // ... and a ground flatter than this (8 %, a summit, a meadow) has no orientation
+
+const parseWinds = (text) => [...new Set(String(text || '').toUpperCase().split(/[;,\s]+/).filter((d) => WIND_DIRS.includes(d)))];
+
+/** The winds of the slope at (lat, lon): [the direction it faces and the two beside it], or null (flat, no relief). */
+export async function slopeWinds(lat, lon) {
+  const dLat = SLOPE_RING_M / 110540;
+  const dLon = SLOPE_RING_M / (111320 * Math.cos((lat * Math.PI) / 180));
+  const ring = WIND_DIRS.map((_, i) => {
+    const a = (i * Math.PI) / 4; // 0 north, clockwise
+    return [Math.cos(a), Math.sin(a)];
+  });
+  const alts = await terrainAltitudes([[lat, lon], ...ring.map(([n, e]) => [lat + n * dLat, lon + e * dLon])]);
+  if (!alts || alts.some((z) => !Number.isFinite(z))) return null;
+  // the plane through the ring: its slope towards the east and the north, in metres per metre
+  let gx = 0;
+  let gy = 0;
+  ring.forEach(([n, e], i) => {
+    gx += ((alts[i + 1] - alts[0]) * e) / (SLOPE_RING_M * 4);
+    gy += ((alts[i + 1] - alts[0]) * n) / (SLOPE_RING_M * 4);
+  });
+  if (Math.hypot(gx, gy) < SLOPE_MIN) return null;
+  const facing = ((Math.atan2(-gx, -gy) * 180) / Math.PI + 360) % 360; // the way down
+  const k = Math.round(facing / 45) % 8;
+  return [WIND_DIRS[(k + 7) % 8], WIND_DIRS[k], WIND_DIRS[(k + 1) % 8]];
 }
 
 /** Where the take-off comes from, the FFVL's hike & fly notes, and the ties left to confirm. */
@@ -376,9 +404,81 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     'aria-controls': 'm-results', 'aria-expanded': 'false' });
   const results = h('ul', { class: 'search-results', id: 'm-results', role: 'listbox', hidden: true });
   const filtersWrap = h('div', { class: 'filters-wrap' }, filtersButton, filtersPop);
+
+  // ---- the orientation: a rose of 8 directions in a panel under its button; several can be picked
+  const windOf = new Map();       // spot key -> { dirs, how: 'site' | 'near' | 'slope' } or null (nothing known)
+  const windKey = (sp) => `${sp.lat.toFixed(4)},${sp.lon.toFixed(4)}`;
+  const knownWinds = (sp) => {
+    const own = parseWinds(sp.site && sp.site.wind_ok);
+    if (own.length) return { dirs: own, how: 'site' };
+    const near = ffvl.sites.filter((f) => f.kind.includes('T') && parseWinds(f.winds).length)
+      .map((f) => [Math.hypot((f.lat - sp.lat) * 110540, (f.lon - sp.lon) * 111320 * Math.cos((sp.lat * Math.PI) / 180)), f])
+      .filter(([d]) => d <= NEAR_FFVL_M).sort((a, b) => a[0] - b[0])[0];
+    return near ? { dirs: parseWinds(near[1].winds), how: 'near' } : null;
+  };
+  const windsFor = (sp) => knownWinds(sp) || windOf.get(windKey(sp)) || null;
+  let slopesAsked = false;
+  // the take-offs with no known winds: their slope, read once, then the filters are applied again
+  async function readSlopes() {
+    if (slopesAsked) return;
+    slopesAsked = true;
+    const todo = groupTakeoffs(rows, sites).filter((sp) => !knownWinds(sp) && !windOf.has(windKey(sp)));
+    for (let i = 0; i < todo.length; i += 6) {
+      await Promise.all(todo.slice(i, i + 6).map(async (sp) => {
+        const dirs = await slopeWinds(sp.lat, sp.lon);
+        windOf.set(windKey(sp), dirs ? { dirs, how: 'slope' } : null);
+      }));
+    }
+    applyFilters();
+  }
+  // a take-off's line in its panel: outings, pilots, and its winds, said with where they come from (the slope is
+  // read when the panel opens, if it was not already)
+  function windFacts(sp) {
+    const line = h('p', { class: 'hint' }, [plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot')].join(' · '));
+    const say = (w) => {
+      if (!w) return;
+      const winds = w.dirs.map(windLabel).join(', ');
+      line.append(` · ${t(w.how === 'site' ? 'site.goodWinds' : w.how === 'near' ? 'site.windsNear' : 'site.windsSlope', { winds })}`);
+    };
+    const known = windsFor(sp);
+    if (known || windOf.has(windKey(sp))) say(known);
+    else slopeWinds(sp.lat, sp.lon).then((dirs) => {
+      windOf.set(windKey(sp), dirs ? { dirs, how: 'slope' } : null);
+      if (line.isConnected) say(windOf.get(windKey(sp)));
+    });
+    return line;
+  }
+  const windPicked = new Set();
+  const windButton = h('button', { type: 'button', class: 'filters-btn', id: 'm-wind', 'aria-expanded': 'false', 'aria-controls': 'm-wind-pop' });
+  const roseButtons = WIND_DIRS.map((d) => {
+    const b = h('button', { type: 'button', class: `rose-${d}`, 'aria-pressed': 'false', 'data-dir': d }, windLabel(d));
+    b.addEventListener('click', () => {
+      if (windPicked.has(d)) windPicked.delete(d); else windPicked.add(d);
+      b.setAttribute('aria-pressed', String(windPicked.has(d)));
+      readSlopes();
+      applyFilters();
+    });
+    return b;
+  });
+  const windStatus = h('p', { class: 'hint' });
+  const windPop = h('div', { class: 'filters-pop wind-pop', id: 'm-wind-pop', hidden: true },
+    h('p', { class: 'wind-q' }, t('map.windQ')),
+    h('div', { class: 'rose', role: 'group', 'aria-label': t('map.wind') }, roseButtons, h('span', { class: 'rose-c', 'aria-hidden': 'true' })),
+    windStatus,
+    h('div', { class: 'fp-foot' },
+      h('button', { type: 'button', class: 'link', onclick: () => {
+        windPicked.clear();
+        for (const b of roseButtons) b.setAttribute('aria-pressed', 'false');
+        applyFilters();
+      } }, t('map.clearFilters')),
+      h('button', { type: 'button', class: 'primary', onclick: () => openWind(false) }, t('common.close'))));
+  const openWind = (open) => { windPop.hidden = !open; windButton.setAttribute('aria-expanded', String(open)); };
+  windButton.addEventListener('click', () => openWind(windPop.hidden));
+  const windWrap = h('div', { class: 'filters-wrap' }, windButton, windPop);
+
   const bar = h('div', { class: 'map-toolbar' },
     h('div', { class: 'field search' }, h('label', { for: 'm-search' }, t('map.search')), searchBox, results),
-    seasonPick, filtersWrap, whoPick);
+    seasonPick, windWrap, filtersWrap, whoPick);
   // the legend, above the map (Sarah, 30 October 2026): the heat map, the itineraries, the climbs, the take-offs
   const legendRow = h('div', { class: 'map-legend' });
   const element = h('div', null, bar, legendRow, h('div', { class: 'explorer' }, mapBox, side));
@@ -522,6 +622,18 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       && (!mineOnly || o.user_id === me)
       && Object.entries(CLIMB_FILTERS).every(([k, f]) => inBand(f.value(o), climbPicks[k].value)));
     spots = groupTakeoffs(shown, sites);
+    // the orientation: the take-offs good for one of the winds picked; those whose orientation is not known (yet)
+    // are left out, and counted below the rose
+    if (windPicked.size) {
+      const unknown = spots.filter((sp) => !windsFor(sp)).length;
+      spots = spots.filter((sp) => (windsFor(sp) || { dirs: [] }).dirs.some((d) => windPicked.has(d)));
+      shown = spots.flatMap((sp) => sp.outings);
+      windStatus.textContent = t('map.windShown', { n: spots.length }) + (unknown ? ` ${t('map.windUnknown', { n: unknown })}` : '');
+      windButton.replaceChildren(compass(), `${t('map.wind')} · ${[...windPicked].map(windLabel).join(', ')}`);
+    } else {
+      windStatus.textContent = t('map.windHint');
+      windButton.replaceChildren(compass(), t('map.wind'));
+    }
     setPoints(heatSpots, spots.map((sp) => [sp.lat, sp.lon, sp.pilots]));
     setPoints(heatRoutes, routePoints(spots));
     const active = Object.values(climbPicks).filter((p) => p.value).length + (y ? 1 : 0);
@@ -644,7 +756,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
           h('span', { class: 'side-kind' }, t('spot.kind')),
           h('h2', null, sp.name),
           h('p', { class: 'hint' }, [sectorOf(sp.lat, sp.lon), sp.alt != null ? t('search.takeoffAt', { alt: fmtInt(sp.alt) }) : null].filter(Boolean).join(' · ')),
-          h('p', { class: 'hint' }, [plural(sp.outings.length, 'unit.confirmedOuting'), plural(sp.pilots, 'unit.pilot'), windsOf(sp)].filter(Boolean).join(' · '))),
+          windFacts(sp)),
         h('button', { class: 'link close', 'aria-label': t('map.back'), onclick: overview }, '×')),
       // replaceChildren would write a null as the text « null »
       ...[moreAbout(sp), status, list].filter(Boolean));
@@ -992,7 +1104,10 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     seasonPick.addEventListener('change', () => { applyFilters(); backgrounds.followSeason(); });
     if (whoPick) whoPick.addEventListener('change', applyFilters);
     // the filters' panel closes on a click elsewhere
-    document.addEventListener('click', (ev) => { if (!filtersPop.hidden && !filtersWrap.contains(ev.target)) openFilters(false); });
+    document.addEventListener('click', (ev) => {
+      if (!filtersPop.hidden && !filtersWrap.contains(ev.target)) openFilters(false);
+      if (!windPop.hidden && !windWrap.contains(ev.target)) openWind(false);
+    });
     yearPick.addEventListener('change', applyFilters);
     for (const pick of Object.values(climbPicks)) pick.addEventListener('change', applyFilters);
     searchBox.addEventListener('input', () => (searchBox.value ? showResults() : hideResults()));

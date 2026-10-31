@@ -231,6 +231,8 @@ export default {
   'src.provisional': 'Take-off found from the outings',
 
   'site.goodWinds': 'good winds {winds}',
+  'site.windsNear': 'good winds {winds} (FFVL take-off next to it)',
+  'site.windsSlope': 'facing {winds} (estimated from the slope)',
   'site.toConfirm': { one: '{n} outing took off 100 to 200 m away: tied to this take-off, to be confirmed.', other: '{n} outings took off 100 to 200 m away: tied to this take-off, to be confirmed.' },
   'site.hikeFly': 'Hike & fly notes (FFVL)',
 
@@ -428,6 +430,11 @@ export default {
   'map.allTracks': 'All tracks',
   'map.myTracks': 'My tracks',
   'map.filters': 'Filters',
+  'map.wind': 'Orientation',
+  'map.windQ': 'For which wind? The take-offs facing the direction picked.',
+  'map.windHint': 'Pick one direction or more.',
+  'map.windShown': '{n} take-offs kept.',
+  'map.windUnknown': '{n} with no known orientation, hidden.',
   'map.clearFilters': 'Clear',
   'map.showOutings': { one: 'Show {n} outing', other: 'Show {n} outings' },
   'legend.route': 'Itinerary',

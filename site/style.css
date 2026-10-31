@@ -436,6 +436,18 @@ body.map-full-open { overflow: hidden; }
 .filters-pop { position: absolute; z-index: 1200; top: calc(100% + 8px); left: 0; width: min(26rem, 90vw); background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: .9rem 1rem; box-shadow: 0 12px 30px rgba(80, 60, 40, .16); }
 .filters-pop .filters { margin: 0 0 .8rem; }
 .fp-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--card-2); padding-top: .8rem; }
+/* the orientation: a rose of 8 buttons around a small compass (Sarah, 30 October 2026) */
+.wind-pop { width: min(19rem, 90vw); }
+.wind-q { margin: 0 0 .7rem; font-size: .9rem; color: var(--ink-2); }
+.rose { display: grid; grid-template-columns: repeat(3, 3.2rem); grid-template-rows: repeat(3, 2.6rem); gap: .35rem; justify-content: center; margin-bottom: .6rem;
+  grid-template-areas: "NO N NE" "O c E" "SO S SE"; }
+.rose button { border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: .82rem; font-weight: 600; color: var(--ink-2); padding: 0; cursor: pointer; }
+.rose button:hover { border-color: var(--field-line); }
+.rose button[aria-pressed=true] { background: var(--orange); border-color: var(--orange); color: #fff; }
+.rose .rose-N { grid-area: N; } .rose .rose-NE { grid-area: NE; } .rose .rose-E { grid-area: E; } .rose .rose-SE { grid-area: SE; }
+.rose .rose-S { grid-area: S; } .rose .rose-SO { grid-area: SO; } .rose .rose-O { grid-area: O; } .rose .rose-NO { grid-area: NO; }
+.rose-c { grid-area: c; align-self: center; justify-self: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 1.5px dashed var(--field-line); }
+.wind-pop .hint { margin: 0 0 .8rem; text-align: center; }
 .map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.2rem; font-size: .8rem; color: var(--ink-2); margin: 0 .1rem .5rem; }
 .map-legend .heat-legend { background: none; border: 0; padding: 0; width: auto; display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; }
 .map-legend .heat-legend .heat-bar { width: 6rem; margin: 0; }

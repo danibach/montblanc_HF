@@ -230,6 +230,8 @@ export default {
   'src.provisional': 'Aus den Touren abgeleiteter Startplatz',
 
   'site.goodWinds': 'gute Winde {winds}',
+  'site.windsNear': 'gute Winde {winds} (FFVL-Startplatz daneben)',
+  'site.windsSlope': 'Ausrichtung {winds} (aus dem Gelände geschätzt)',
   'site.toConfirm': { one: '{n} Tour ist 100 bis 200 m entfernt gestartet: diesem Startplatz zugeordnet, zu bestätigen.', other: '{n} Touren sind 100 bis 200 m entfernt gestartet: diesem Startplatz zugeordnet, zu bestätigen.' },
   'site.hikeFly': 'Hike-&-Fly-Hinweise (FFVL)',
 
@@ -427,6 +429,11 @@ export default {
   'map.allTracks': 'Alle Tracks',
   'map.myTracks': 'Meine Tracks',
   'map.filters': 'Filter',
+  'map.wind': 'Ausrichtung',
+  'map.windQ': 'Für welchen Wind? Die Startplätze in der gewählten Richtung.',
+  'map.windHint': 'Eine oder mehrere Richtungen wählen.',
+  'map.windShown': '{n} Startplätze behalten.',
+  'map.windUnknown': '{n} ohne bekannte Ausrichtung, ausgeblendet.',
   'map.clearFilters': 'Zurücksetzen',
   'map.showOutings': { one: '{n} Tour zeigen', other: '{n} Touren zeigen' },
   'legend.route': 'Route',
