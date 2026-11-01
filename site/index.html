@@ -31,5 +31,14 @@
   <main id="view" tabindex="-1"><p class="hint pad" data-i18n="common.loading">Loading…</p></main>
 
   <footer class="site" id="footer"></footer>
+
+  <!-- phone: the menu as an app's tab bar at the bottom of the screen (Sarah, 1 November 2026); hidden on a computer -->
+  <nav id="tabbar" class="tabbar" aria-label="Main" data-i18n-label="nav.label">
+    <a href="#/" data-route="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg><span data-i18n="nav.home">Home</span></a>
+    <a href="#/map" data-route="map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg><span data-i18n="nav.map">Map</span></a>
+    <a href="#/upload" data-route="upload" class="tab-up"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></b><span data-i18n="tab.upload">Upload</span></a>
+    <a href="#/all" data-route="all"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/></svg><span data-i18n="tab.all">Outings</span></a>
+    <a href="#/login" data-route="me" id="tab-account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span data-i18n="tab.account">Account</span></a>
+  </nav>
 </body>
 </html>

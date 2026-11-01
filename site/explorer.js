@@ -476,12 +476,72 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
   windButton.addEventListener('click', () => openWind(windPop.hidden));
   const windWrap = h('div', { class: 'filters-wrap' }, windButton, windPop);
 
+  // A phone (Sarah, 1 November 2026): the map fills the screen; above it only the search and one « Filters » button,
+  // which opens the season, the orientation, the other filters and « My tracks » in a sheet from the bottom. On a
+  // computer the same controls stay in one bar above the map (style.css: .map-more, .m-only).
+  const moreCount = h('span', { class: 'count', hidden: true });
+  const moreButton = h('button', { type: 'button', class: 'filters-btn m-only', id: 'm-more-btn', 'aria-expanded': 'false', 'aria-controls': 'm-more' },
+    filterIcon(), h('span', null, t('map.filters')), moreCount);
+  const showAll = h('button', { type: 'button', class: 'primary' });
+  const more = h('div', { class: 'map-more', id: 'm-more', role: 'group', 'aria-label': t('map.filters') },
+    h('div', { class: 'mm-head m-only' }, h('h2', null, t('map.filters')),
+      h('button', { type: 'button', class: 'link close', 'aria-label': t('common.close'), onclick: () => openMore(false) }, '×')),
+    seasonPick, windWrap, filtersWrap, whoPick,
+    h('div', { class: 'mm-foot m-only' },
+      h('button', { type: 'button', class: 'link', onclick: () => {
+        seasonPick.value = '';
+        windPicked.clear();
+        for (const b of roseButtons) b.setAttribute('aria-pressed', 'false');
+        yearPick.value = '';
+        for (const p of Object.values(climbPicks)) p.value = '';
+        if (whoPick) whoPick.value = '';
+        applyFilters();
+      } }, t('map.clearFilters')),
+      showAll));
+  const openMore = (open) => {
+    more.classList.toggle('open', open);
+    moreButton.setAttribute('aria-expanded', String(open));
+  };
+  moreButton.addEventListener('click', () => openMore(!more.classList.contains('open')));
+  showAll.addEventListener('click', () => openMore(false));
   const bar = h('div', { class: 'map-toolbar' },
     h('div', { class: 'field search' }, h('label', { for: 'm-search' }, t('map.search')), searchBox, results),
-    seasonPick, windWrap, filtersWrap, whoPick);
-  // the legend, above the map (Sarah, 30 October 2026): the heat map, the itineraries, the climbs, the take-offs
+    moreButton, more);
+  // the legend, above the map (Sarah, 30 October 2026): the heat map, the itineraries, the climbs, the take-offs;
+  // on a phone it opens from a « ? » button on the map
   const legendRow = h('div', { class: 'map-legend' });
-  const element = h('div', null, bar, legendRow, h('div', { class: 'explorer' }, mapBox, side));
+  // the panel beside the map; on a phone a sheet from the bottom, closed, half way or full, moved by its handle
+  const handle = h('button', { type: 'button', class: 'sheet-handle m-only', 'aria-controls': 'm-side' }, h('i'));
+  side.id = 'm-side';
+  const sheet = h('div', { class: 'sheet', 'data-pos': 'peek' }, handle, side);
+  const phone = () => window.matchMedia('(max-width: 640px)').matches;
+  function setSheet(pos) {
+    sheet.dataset.pos = pos;
+    handle.setAttribute('aria-label', t(pos === 'full' ? 'map.sheetDown' : 'map.sheetUp'));
+    if (pos !== 'full') side.scrollTop = 0;
+  }
+  setSheet('peek');
+  handle.addEventListener('click', () => {
+    const pos = sheet.dataset.pos;
+    setSheet(current ? (pos === 'full' ? 'half' : 'full') : (pos === 'peek' ? 'half' : 'peek'));
+  });
+  // a swipe on the handle: up opens the sheet a step, down closes it a step
+  let swipeFrom = null;
+  handle.addEventListener('pointerdown', (ev) => { swipeFrom = ev.clientY; });
+  handle.addEventListener('pointerup', (ev) => {
+    if (swipeFrom == null) return;
+    const dy = ev.clientY - swipeFrom;
+    swipeFrom = null;
+    if (Math.abs(dy) < 30) return;
+    const steps = ['peek', 'half', 'full'];
+    const i = steps.indexOf(sheet.dataset.pos) + (dy < 0 ? 1 : -1);
+    setSheet(steps[Math.max(current ? 1 : 0, Math.min(2, i))]);
+  });
+  // a frame on the map that stays clear of the controls above and the sheet below on a phone
+  const frame = (pad) => (phone()
+    ? { paddingTopLeft: [24, 90], paddingBottomRight: [24, Math.round(window.innerHeight * 0.5) + 24] }
+    : { padding: [pad, pad] });
+  const element = h('div', null, bar, legendRow, h('div', { class: 'explorer' }, mapBox, sheet));
   // from the home page: a search (#/map?q=…) or a sector (#/map?sector=…)
   const askedQuery = new URLSearchParams(location.hash.split('?')[1] || '');
   const L = window.L;
@@ -511,6 +571,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     request += 1;
     if (climbs) { climbs.eachLayer((l) => l.closeTooltip()); climbs.clearLayers(); }
     element.querySelector('.explorer').classList.remove('has-spot');
+    setSheet('peek');
     renderOverview();
     if (markers) draw();
   }
@@ -639,6 +700,12 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     const active = Object.values(climbPicks).filter((p) => p.value).length + (y ? 1 : 0);
     filtersButton.replaceChildren(filterIcon(), active ? `${t('map.filters')} (${active})` : t('map.filters'));
     shownButton.textContent = t('map.showOutings', { n: shown.length });
+    // the phone's « Filters » button counts every filter set, the season and the orientation with the others
+    const all = active + (s ? 1 : 0) + (windPicked.size ? 1 : 0) + (mineOnly ? 1 : 0);
+    moreCount.hidden = !all;
+    moreCount.textContent = String(all);
+    moreButton.setAttribute('aria-label', all ? `${t('map.filters')} (${all})` : t('map.filters'));
+    showAll.textContent = t('map.showOutings', { n: shown.length });
     if (searchBox.value) showResults(); // the results follow the filters
     overview();
   }
@@ -746,6 +813,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
     climbs.eachLayer((l) => l.closeTooltip()); // a line taken away under the pointer keeps its tooltip otherwise
     climbs.clearLayers();
     element.querySelector('.explorer').classList.add('has-spot');
+    setSheet('half');
     draw();
     const list = h('div', { class: 'start-groups' });
     const status = h('p', { class: 'hint' });
@@ -1027,7 +1095,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
         outings: h('ul', { class: 'out-list' }, outings.slice().sort((a, b) => SORTS.recent.by(a, b, climbOfId)).map(item)),
       }));
       side.scrollTop = 0;
-      map.fitBounds(L.latLngBounds(route.line), { padding: [30, 30], maxZoom: 15 });
+      map.fitBounds(L.latLngBounds(route.line), { ...frame(30), maxZoom: 15 });
     }
     sortPick.addEventListener('change', () => { pages.clear(); renderList(); });
     list.before(h('div', { class: 'row sort-row' }, h('label', { for: 'm-sort' }, t('sort.label')), sortPick));
@@ -1039,7 +1107,7 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       : crowded
         ? t('status.crowded', { n: climbOfId.size })
         : t('status.hover');
-    if (lines.size) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+    if (lines.size) map.fitBounds(bounds, { ...frame(30), maxZoom: 15 });
     if (crowded && map.getZoom() < ROUTES_ZOOM) map.setZoom(ROUTES_ZOOM); // close enough for the heat of the ways up
     if (routeId && siteRoutes.has(routeId)) showSheet(`route:${routeId}`);
   }
@@ -1080,6 +1148,19 @@ export function buildExplorer(rows, loadTraces, sites = [], routes = [], ffvl = 
       ffvl.sites.length ? h('span', { class: 'key' }, tri('ffvl', true), t('legend.ffvlLanding')) : null,
       h('span', { class: 'key' }, h('b', { class: 'k-parking' }, 'P'), t('legend.parking')));
     map.on('overlayadd overlayremove', (e) => { if (e.layer === heat) legendBox.hidden = e.type === 'overlayremove'; });
+    // phone: the legend opens from a « ? » on the map (style.css hides the button on a computer)
+    const legendControl = L.control({ position: 'topright' });
+    legendControl.onAdd = () => {
+      const btn = h('button', { type: 'button', class: 'legend-btn', 'aria-label': t('map.legend'), 'aria-expanded': 'false' }, '?');
+      L.DomEvent.disableClickPropagation(btn);
+      btn.addEventListener('click', () => {
+        const open = !legendRow.classList.contains('open');
+        legendRow.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', String(open));
+      });
+      return btn;
+    };
+    legendControl.addTo(map);
 
     map.on('zoomend', () => { pickHeat(); draw(); });
     map.on('moveend', () => { if (!current) renderOverview(); }); // the sectors in view follow the map
