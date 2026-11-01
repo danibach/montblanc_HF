@@ -52,6 +52,8 @@ function renderAccount() {
   } else {
     box.append(h('a', { href: '#/login' }, t('account.signIn')));
   }
+  // the « Account » tab of a phone: one's own page, else the sign-in page
+  $('#tab-account').setAttribute('href', api.state.user ? '#/me' : '#/login');
   renderLangPick();
 }
 
@@ -89,8 +91,8 @@ function renderFooter() {
 }
 
 function setNav(name) {
-  for (const a of document.querySelectorAll('#nav a, #cta')) {
-    if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
+  for (const a of document.querySelectorAll('#nav a, #cta, #tabbar a')) {
+    if (a.dataset.route === name || (a.id === 'tab-account' && name === 'login')) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
 }
@@ -411,7 +413,7 @@ function reportForm(outingId) {
 
 // A pilot's page. `path` is the address the filters and the order live in: "user/<id>", or "me" for My H&Fs.
 async function pageUser(token, id, opts = {}) {
-  setNav(null);   // one's own page is reached from the account bar, not the menu
+  setNav(opts.path === 'me' ? 'me' : null);   // one's own page: the « Account » tab of a phone; not in the menu
   const [profile, rows] = await Promise.all([api.getProfile(id), api.listUserOutings(id)]);
   if (token !== routeToken) return;
   if (!profile) return show(notice('error', h('p', null, t('user.missing'))));

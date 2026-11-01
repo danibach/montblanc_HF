@@ -368,6 +368,10 @@ with sync_playwright() as p:
     page.locator(".out-list li").first.click()
     check(page.locator(".out-list li.on").count() == 1 and page.locator(".leaflet-overlay-pane path.leaflet-interactive").count() == 1, "outing clicked: kept lit, its climb drawn, no flight")
     page.screenshot(path=f"{SHOTS}/3b-map.png")
+    # a computer keeps its bar of filters and its panel beside the map: none of the phone's tab bar, button or handle
+    check(not page.locator("#tabbar").is_visible() and not page.locator("#m-more-btn").is_visible()
+          and not page.locator(".sheet-handle").is_visible() and page.locator("#m-wind").is_visible() and page.locator("#m-side").is_visible(),
+          "computer map: filters in the bar, the panel beside the map, no tab bar")
 
     page.goto(BASE + f"#/user/{UID}")
     page.wait_for_selector(".stats", timeout=15000)
@@ -541,11 +545,28 @@ with sync_playwright() as p:
     page.goto(BASE)
     page.wait_for_selector(".warm-hero", timeout=30000)
     check(page.evaluate("document.documentElement.scrollWidth") <= 390, "phone: home page has no sideways scroll")
+    # a phone has an app's tab bar at the bottom instead of the menu (Sarah, 1 November 2026)
+    check(page.locator("#tabbar").is_visible() and not page.locator("#nav").is_visible()
+          and page.locator("#tabbar a[aria-current=page]").inner_text().strip() == "Home", "phone: the tab bar, Home lit, no menu in the header")
     page.screenshot(path=f"{SHOTS}/7a-phone-home.png", full_page=True)
     page.goto(BASE + "#/map")
     page.wait_for_selector(".map-wide canvas.leaflet-heatmap-layer", timeout=15000)
     check(page.evaluate("document.documentElement.scrollWidth") <= 390, "phone: map page has no sideways scroll")
+    # the map over the whole screen: no header, the search and one « Filters » button, a sheet from the bottom
+    check(not page.locator("header.site").is_visible() and page.locator("#m-more-btn").is_visible()
+          and not page.locator("#m-more").is_visible(), "phone map: no header, a Filters button, its sheet closed")
     page.screenshot(path=f"{SHOTS}/8-phone-map.png")
+    page.click("#m-more-btn")
+    check(page.locator("#m-more").is_visible() and page.locator("#m-more .rose button").count() == 8
+          and page.locator("#m-more #m-season").is_visible(), "phone map: Filters opens the season, the orientation and the others")
+    page.screenshot(path=f"{SHOTS}/8a-phone-filters.png")
+    page.click("#m-more .mm-head .close")
+    check(not page.locator("#m-more").is_visible(), "phone map: the Filters sheet closes")
+    check(page.locator(".sheet").get_attribute("data-pos") == "peek", "phone map: the panel starts closed")
+    page.click(".sheet-handle")
+    check(page.locator(".sheet").get_attribute("data-pos") == "half", "phone map: its handle opens it half way")
+    page.click(".legend-btn")
+    check(page.locator(".map-legend.open").is_visible(), "phone map: « ? » opens the legend")
     b.close()
 
 print("\nRESULT:", "all good" if not problems else f"{len(problems)} problem(s): " + "; ".join(problems))
